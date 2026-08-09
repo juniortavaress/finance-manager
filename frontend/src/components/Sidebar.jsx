@@ -34,9 +34,12 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: 'Análise',
+    label: 'Investimentos',
+    items: [{ to: '/investimentos', label: 'Investimentos', icon: IconTrendUp }],
+  },
+  {
+    label: 'Outros',
     items: [
-      { to: '/investimentos', label: 'Investimentos', icon: IconTrendUp },
       { to: '/relatorios', label: 'Relatórios', icon: IconChart },
       { to: '/configuracoes', label: 'Configurações', icon: IconGear },
     ],
