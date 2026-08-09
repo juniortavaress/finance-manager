@@ -5,12 +5,14 @@ import { useData } from '../context/DataContext';
 import { fmt, fmtDateShort } from '../utils/format';
 import AdvanceInstallmentModal from '../components/modals/AdvanceInstallmentModal';
 import CancelInstallmentModal from '../components/modals/CancelInstallmentModal';
+import TransactionModal from '../components/modals/TransactionModal';
 
 export default function Installments() {
   const { data, loading, reload } = useFetch(() => installmentsApi.list({ status: 'active' }), []);
   const { categoryById } = useData();
   const [advancePlan, setAdvancePlan] = useState(null);
   const [cancelPlan, setCancelPlan] = useState(null);
+  const [newModalOpen, setNewModalOpen] = useState(false);
 
   const plans = data?.installment_plans || [];
 
@@ -32,6 +34,13 @@ export default function Installments() {
     <div className="screen active">
       <div className="topbar">
         <h1>Parcelas</h1>
+        <div
+          className="period"
+          style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
+          onClick={() => setNewModalOpen(true)}
+        >
+          + nova parcela
+        </div>
       </div>
       <div className="grid grid-3" style={{ marginBottom: 20 }}>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
@@ -137,6 +146,16 @@ export default function Installments() {
         onClose={() => setCancelPlan(null)}
         onDone={() => {
           setCancelPlan(null);
+          reload();
+        }}
+      />
+
+      <TransactionModal
+        open={newModalOpen}
+        installmentOnly
+        onClose={() => setNewModalOpen(false)}
+        onCreated={() => {
+          setNewModalOpen(false);
           reload();
         }}
       />

@@ -3,17 +3,20 @@ import { useData } from '../../context/DataContext';
 import { transactionsApi, recurringApi, installmentsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
+import { maskToNumber, numberToMasked } from '../../utils/currency';
 import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import CurrencyInput from '../CurrencyInput';
 
-const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 6, 10, 12];
+const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const INSTALLMENT_CUSTOM = 'custom';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function TransactionModal({ open, onClose, onCreated, onDeleted, transaction }) {
+export default function TransactionModal({ open, onClose, onCreated, onDeleted, transaction, installmentOnly = false }) {
   const { checkingAccounts, creditCardAccounts, expenseCategories, incomeCategories } = useData();
   const { showSuccess, showError } = useToast();
   const isEditing = !!transaction;
@@ -25,6 +28,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   const [categoryId, setCategoryId] = useState('');
   const [accountRef, setAccountRef] = useState(''); // "checking:<id>" ou "credit:<id>"
   const [installments, setInstallments] = useState(1);
+  const [customInstallments, setCustomInstallments] = useState(false);
   const [recorrente, setRecorrente] = useState(false);
   const [autoDebit, setAutoDebit] = useState(true);
   const [endDate, setEndDate] = useState('');
@@ -40,13 +44,14 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
     if (isEditing) {
       setTipo(transaction.type === 'income' ? 'receita' : 'despesa');
       setDescription(transaction.description);
-      setAmount(String(transaction.amount));
+      setAmount(numberToMasked(transaction.amount));
       setDate(transaction.date);
       setCategoryId(transaction.category_id);
       setAccountRef(
         transaction.payment_method === 'credit' ? `credit:${transaction.account_id}` : `checking:${transaction.account_id}`
       );
       setInstallments(1);
+      setCustomInstallments(false);
       setRecorrente(false);
       setAutoDebit(true);
       setEndDate('');
@@ -56,13 +61,22 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
       setAmount('');
       setDate(todayIso());
       setInstallments(1);
+      setCustomInstallments(false);
       setRecorrente(false);
       setAutoDebit(true);
       setEndDate('');
-      setAccountRef(checkingAccounts[0] ? `checking:${checkingAccounts[0].id}` : '');
+      setAccountRef(
+        installmentOnly
+          ? creditCardAccounts[0]
+            ? `credit:${creditCardAccounts[0].id}`
+            : ''
+          : checkingAccounts[0]
+          ? `checking:${checkingAccounts[0].id}`
+          : ''
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isEditing, transaction]);
+  }, [open, isEditing, transaction, installmentOnly]);
 
   useEffect(() => {
     if (isEditing) return;
@@ -70,10 +84,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipo, categories.length]);
 
-  const numericAmount = useMemo(() => {
-    const cleaned = (amount || '').toString().replace(/[^\d,.-]/g, '').replace(',', '.');
-    return parseFloat(cleaned) || 0;
-  }, [amount]);
+  const numericAmount = useMemo(() => maskToNumber(amount), [amount]);
 
   if (!open) return null;
 
@@ -101,6 +112,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
     if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
     if (!categoryId) return setError('Selecione uma categoria.');
     if (!accountRef) return setError('Selecione uma conta ou cartão.');
+    if (customInstallments && installments < 13) return setError('Informe a quantidade de parcelas.');
 
     setSubmitting(true);
     try {
@@ -154,15 +166,13 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   }
 
   const parcelaPreview =
-    installments > 1 && numericAmount > 0
-      ? `${installments}x de ${fmt(numericAmount / installments)} · aparece como um novo parcelamento na aba Parcelas.`
-      : 'Cobrado integralmente na próxima fatura.';
+    installments > 1 && numericAmount > 0 ? `${installments}x de ${fmt(numericAmount / installments)}` : '';
 
   return (
     <ModalShell open={open} onClose={onClose}>
       <div className="modal">
         <div className="modal-head">
-          <h2>{isEditing ? 'Editar transação' : 'Nova transação'}</h2>
+          <h2>{isEditing ? 'Editar transação' : installmentOnly ? 'Nova compra parcelada' : 'Nova transação'}</h2>
           <div className="modal-head-actions">
             {isEditing && (
               <button
@@ -183,7 +193,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
         <form className="modal-body" onSubmit={handleSubmit}>
           {error && <div className="form-error-banner">{error}</div>}
 
-          {!isEditing && (
+          {!isEditing && !installmentOnly && (
             <div className="field">
               <div className="seg">
                 <div
@@ -215,12 +225,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
           <div className="field-row">
             <div className="field">
               <label>Valor</label>
-              <input
-                type="text"
-                placeholder="R$ 0,00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
+              <CurrencyInput value={amount} onChange={setAmount} />
             </div>
             <div className="field">
               <label>Data</label>
@@ -241,16 +246,18 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
 
           {!isEditing && (
             <div className="field">
-              <label>Conta / Cartão</label>
+              <label>{installmentOnly ? 'Cartão' : 'Conta / Cartão'}</label>
               <select value={accountRef} onChange={(e) => setAccountRef(e.target.value)}>
-                <optgroup label="Contas correntes">
-                  {checkingAccounts.map((a) => (
-                    <option key={a.id} value={`checking:${a.id}`}>
-                      {a.name}
-                    </option>
-                  ))}
-                </optgroup>
-                {tipo === 'despesa' && (
+                {!installmentOnly && (
+                  <optgroup label="Contas correntes">
+                    {checkingAccounts.map((a) => (
+                      <option key={a.id} value={`checking:${a.id}`}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {(installmentOnly || tipo === 'despesa') && (
                   <optgroup label="Cartões de crédito">
                     {creditCardAccounts.map((a) => (
                       <option key={a.id} value={`credit:${a.id}`}>
@@ -265,25 +272,61 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
 
           {!isEditing && isCreditAccountSelected && tipo === 'despesa' && (
             <div className="field">
-              <div className="fatura-note show">
-                Esta despesa será somada à fatura do cartão selecionado.
-              </div>
-              <div style={{ marginTop: 14 }}>
-                <label>Parcelar em</label>
-                <select value={installments} onChange={(e) => setInstallments(Number(e.target.value))}>
+              <label>Parcelar em</label>
+              {customInstallments ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoFocus
+                    placeholder="Quantidade"
+                    value={installments === 1 ? '' : installments}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, '');
+                      setInstallments(v === '' ? 1 : Math.min(999, Number(v)));
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}
+                    onClick={() => {
+                      setCustomInstallments(false);
+                      setInstallments(1);
+                    }}
+                  >
+                    Usar lista
+                  </button>
+                </div>
+              ) : (
+                <select
+                  value={installments}
+                  onChange={(e) => {
+                    if (e.target.value === INSTALLMENT_CUSTOM) {
+                      setCustomInstallments(true);
+                      setInstallments(13);
+                      return;
+                    }
+                    setInstallments(Number(e.target.value));
+                  }}
+                >
                   {INSTALLMENT_OPTIONS.map((n) => (
                     <option key={n} value={n}>
                       {n === 1 ? '1x (à vista)' : `${n}x`}
                     </option>
                   ))}
+                  <option value={INSTALLMENT_CUSTOM}>+ parcela (mais de 12x)</option>
                 </select>
+              )}
+              {parcelaPreview && (
                 <div
                   className="fatura-note show"
                   style={{ background: 'var(--teal-soft)', color: 'var(--teal)', marginTop: 8 }}
                 >
                   {parcelaPreview}
                 </div>
-              </div>
+              )}
             </div>
           )}
 
