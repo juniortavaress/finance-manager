@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './context/ToastContext';
@@ -11,7 +11,6 @@ import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
 import Transactions from './pages/Transactions';
 import RecurringTransactions from './pages/RecurringTransactions';
-import BillReminders from './pages/BillReminders';
 import Installments from './pages/Installments';
 import Categories from './pages/Categories';
 import Investments from './pages/Investments';
@@ -43,7 +42,7 @@ export default function App() {
               <Route path="transacoes" element={<Transactions />} />
               <Route path="recorrentes" element={<RecurringTransactions />} />
               <Route path="parcelas" element={<Installments />} />
-              <Route path="lembretes" element={<BillReminders />} />
+              <Route path="lembretes" element={<Navigate to="/recorrentes" replace />} />
               <Route path="categorias" element={<Categories />} />
               <Route path="investimentos" element={<Investments />} />
               <Route path="relatorios" element={<Reports />} />
