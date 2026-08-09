@@ -5,7 +5,7 @@ import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
 
-export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, bankName }) {
+export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, bankName, bankId }) {
   const { checkingAccounts } = useData();
   const { showSuccess, showError } = useToast();
 
@@ -16,7 +16,8 @@ export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, 
   useEffect(() => {
     if (!open) return;
     setError('');
-    setAccountId(checkingAccounts[0]?.id || '');
+    const sameBank = checkingAccounts.find((a) => a.bank_id === bankId);
+    setAccountId(sameBank?.id || checkingAccounts[0]?.id || '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, invoice]);
 
