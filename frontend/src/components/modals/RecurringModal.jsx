@@ -163,16 +163,6 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
         <form className="modal-body" onSubmit={handleSubmit}>
           {error && <div className="form-error-banner">{error}</div>}
 
-          <div className="recorrente-row">
-            <div className={`toggle${autoDebit ? ' on' : ''}`} onClick={() => setAutoDebit((v) => !v)} />
-            <span>Descontar automaticamente</span>
-          </div>
-          <div className="fatura-note show" style={{ marginBottom: 4 }}>
-            {autoDebit
-              ? 'A transação é lançada sozinha todo período, sem precisar de ação sua.'
-              : 'Funciona como um lembrete: você marca como pago manualmente quando quitar (ex.: boleto do aluguel).'}
-          </div>
-
           <div className="field">
             <label>Descrição</label>
             <input
@@ -298,6 +288,11 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
               </div>
             </div>
           )}
+
+          <div className="recorrente-row">
+            <div className={`toggle${autoDebit ? ' on' : ''}`} onClick={() => setAutoDebit((v) => !v)} />
+            <span>Descontar automaticamente</span>
+          </div>
 
           <div className="modal-actions">
             <div className="btn btn-ghost" onClick={onClose}>
