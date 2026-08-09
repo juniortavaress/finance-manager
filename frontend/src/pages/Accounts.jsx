@@ -48,13 +48,20 @@ export default function Accounts() {
       setInvoicesByCard(map);
       setInvoiceIndexByCard((prev) => {
         const next = { ...prev };
+        const currentMonthPrefix = todayIso().slice(0, 7);
         creditCardAccounts.forEach((a) => {
           const cardId = a.credit_card.id;
           if (next[cardId] === undefined) {
-            // invoices vem ordenado do mais recente pro mais antigo; comeca na mais recente com saldo, senao a mais recente
+            // invoices vem ordenado do mais recente pro mais antigo.
+            // Prioridade: mes atual do calendario; senao a mais recente com saldo; senao a mais recente disponivel.
             const invoices = map[cardId] || [];
-            const outstandingIdx = invoices.findIndex((inv) => inv.outstanding_amount > 0);
-            next[cardId] = outstandingIdx >= 0 ? outstandingIdx : 0;
+            const currentMonthIdx = invoices.findIndex((inv) => inv.reference_month.slice(0, 7) === currentMonthPrefix);
+            if (currentMonthIdx >= 0) {
+              next[cardId] = currentMonthIdx;
+            } else {
+              const outstandingIdx = invoices.findIndex((inv) => inv.outstanding_amount > 0);
+              next[cardId] = outstandingIdx >= 0 ? outstandingIdx : 0;
+            }
           }
         });
         return next;
@@ -265,7 +272,7 @@ export default function Accounts() {
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
                       }}
-                      onClick={() => setPayingCard({ card: creditCard.credit_card, invoice: viewedInvoice, bankName: bank.name })}
+                      onClick={() => setPayingCard({ card: creditCard.credit_card, invoice: viewedInvoice, bankName: bank.name, bankId: bank.id })}
                     >
                       Pagar fatura
                     </button>
@@ -323,6 +330,7 @@ export default function Accounts() {
         card={payingCard?.card}
         invoice={payingCard?.invoice}
         bankName={payingCard?.bankName}
+        bankId={payingCard?.bankId}
         onClose={() => setPayingCard(null)}
         onPaid={() => {
           setPayingCard(null);
