@@ -35,7 +35,7 @@ export default function Accounts() {
       return;
     }
     let cancelled = false;
-    Promise.all(creditCardAccounts.map((a) => creditCardsApi.invoices(a.credit_card.id, 6))).then((results) => {
+    Promise.all(creditCardAccounts.map((a) => creditCardsApi.invoices(a.credit_card.id))).then((results) => {
       if (cancelled) return;
       const map = {};
       creditCardAccounts.forEach((a, idx) => {
@@ -84,13 +84,13 @@ export default function Accounts() {
     return banks.find((b) => b.id === account.bank_id)?.color_hex || FALLBACK_COLOR;
   }
 
-  // Pivo: agrupa por mes, uma barra por cartao dentro de cada grupo.
+  // Pivo: agrupa por mes, uma barra por cartao dentro de cada grupo. Grafico mostra so os ultimos 6 meses.
   const monthGroups = useMemo(() => {
     const months = new Set();
     Object.values(invoicesByCard).forEach((invoices) => {
       invoices.forEach((inv) => months.add(inv.reference_month));
     });
-    const sortedMonths = [...months].sort();
+    const sortedMonths = [...months].sort().slice(-6);
 
     return sortedMonths.map((referenceMonth) => ({
       referenceMonth,
@@ -175,6 +175,41 @@ export default function Accounts() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span className="chip" style={{ background: bank.color_hex }} />
                 <span className="name">{bank.name}</span>
+                {creditCard?.credit_card && cardInvoices.length > 0 && (
+                  <div className="period" style={{ padding: '3px 8px', fontSize: 11.5 }}>
+                    <button
+                      onClick={() => shiftInvoice(creditCard.credit_card.id, 1)}
+                      disabled={cardInvoiceIdx >= cardInvoices.length - 1}
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        cursor: cardInvoiceIdx >= cardInvoices.length - 1 ? 'default' : 'pointer',
+                        color: 'inherit',
+                        fontFamily: 'inherit',
+                        opacity: cardInvoiceIdx >= cardInvoices.length - 1 ? 0.35 : 1,
+                        padding: 0,
+                      }}
+                    >
+                      ◀
+                    </button>{' '}
+                    {monthLabel(Number(viewedInvoice.reference_month.slice(5, 7)))} {viewedInvoice.reference_month.slice(0, 4)}{' '}
+                    <button
+                      onClick={() => shiftInvoice(creditCard.credit_card.id, -1)}
+                      disabled={cardInvoiceIdx <= 0}
+                      style={{
+                        border: 'none',
+                        background: 'none',
+                        cursor: cardInvoiceIdx <= 0 ? 'default' : 'pointer',
+                        color: 'inherit',
+                        fontFamily: 'inherit',
+                        opacity: cardInvoiceIdx <= 0 ? 0.35 : 1,
+                        padding: 0,
+                      }}
+                    >
+                      ▶
+                    </button>
+                  </div>
+                )}
               </div>
               <button
                 title="Editar banco"
@@ -234,43 +269,8 @@ export default function Accounts() {
                 </div>
                 {creditCard?.credit_card && cardInvoices.length > 0 ? (
                   <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                      <button
-                        type="button"
-                        disabled={cardInvoiceIdx >= cardInvoices.length - 1}
-                        onClick={() => shiftInvoice(creditCard.credit_card.id, 1)}
-                        style={{
-                          border: 'none',
-                          background: 'none',
-                          cursor: cardInvoiceIdx >= cardInvoices.length - 1 ? 'default' : 'pointer',
-                          color: cardInvoiceIdx >= cardInvoices.length - 1 ? 'var(--ink-faint)' : 'var(--ink-soft)',
-                          padding: 0,
-                          fontSize: 13,
-                        }}
-                        title="Fatura anterior"
-                      >
-                        ◀
-                      </button>
-                      <div className="t-val num">{fmt(viewedInvoice?.total_amount || 0)}</div>
-                      <button
-                        type="button"
-                        disabled={cardInvoiceIdx <= 0}
-                        onClick={() => shiftInvoice(creditCard.credit_card.id, -1)}
-                        style={{
-                          border: 'none',
-                          background: 'none',
-                          cursor: cardInvoiceIdx <= 0 ? 'default' : 'pointer',
-                          color: cardInvoiceIdx <= 0 ? 'var(--ink-faint)' : 'var(--ink-soft)',
-                          padding: 0,
-                          fontSize: 13,
-                        }}
-                        title="Próxima fatura"
-                      >
-                        ▶
-                      </button>
-                    </div>
+                    <div className="t-val num">{fmt(viewedInvoice?.total_amount || 0)}</div>
                     <div className="t-sub">
-                      {monthLabel(Number(viewedInvoice.reference_month.slice(5, 7)))}/{viewedInvoice.reference_month.slice(0, 4)} ·{' '}
                       {viewedInvoice.status === 'paid'
                         ? 'paga'
                         : viewedInvoice.outstanding_amount > 0

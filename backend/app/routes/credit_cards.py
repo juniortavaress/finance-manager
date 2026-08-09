@@ -44,12 +44,13 @@ def list_invoices(card_id):
     if card is None:
         raise ApiError("Cartao nao encontrado", 404)
 
-    invoices = (
-        CreditCardInvoice.query.filter_by(credit_card_id=card.id)
-        .order_by(CreditCardInvoice.reference_month.desc())
-        .limit(int(request.args.get("limit", 12)))
-        .all()
+    query = CreditCardInvoice.query.filter_by(credit_card_id=card.id).order_by(
+        CreditCardInvoice.reference_month.desc()
     )
+    limit = request.args.get("limit")
+    if limit:
+        query = query.limit(int(limit))
+    invoices = query.all()
     return {"invoices": [i.to_dict() for i in invoices]}
 
 
