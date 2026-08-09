@@ -8,6 +8,10 @@ import { IconPencil } from '../components/icons';
 
 const FALLBACK_COLOR = '#0F5C5C';
 
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function Accounts() {
   const { banks, accounts, reloadAll } = useData();
   const [modalOpen, setModalOpen] = useState(false);
@@ -276,7 +280,14 @@ export default function Accounts() {
                         : viewedInvoice.outstanding_amount > 0
                         ? `${fmt(viewedInvoice.outstanding_amount)} em aberto`
                         : 'quitada'}{' '}
-                      · fecha dia {creditCard.credit_card.closing_day} · vence dia {creditCard.credit_card.due_day}
+                      ·{' '}
+                      {viewedInvoice.outstanding_amount > 0 && viewedInvoice.due_date < todayIso() ? (
+                        <span style={{ color: 'var(--brick)', fontWeight: 600 }}>vencida</span>
+                      ) : (
+                        <>
+                          fecha dia {creditCard.credit_card.closing_day} · vence dia {creditCard.credit_card.due_day}
+                        </>
+                      )}
                     </div>
                   </>
                 ) : (
