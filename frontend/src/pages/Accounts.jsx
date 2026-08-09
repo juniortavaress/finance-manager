@@ -28,6 +28,7 @@ export default function Accounts() {
   }
 
   const [invoicesByCard, setInvoicesByCard] = useState({});
+  const [invoiceIndexByCard, setInvoiceIndexByCard] = useState({});
   useEffect(() => {
     if (creditCardAccounts.length === 0) {
       setInvoicesByCard({});
@@ -41,11 +42,39 @@ export default function Accounts() {
         map[a.credit_card.id] = results[idx]?.invoices || [];
       });
       setInvoicesByCard(map);
+      setInvoiceIndexByCard((prev) => {
+        const next = { ...prev };
+        creditCardAccounts.forEach((a) => {
+          const cardId = a.credit_card.id;
+          if (next[cardId] === undefined) {
+            // invoices vem ordenado do mais recente pro mais antigo; comeca na mais recente com saldo, senao a mais recente
+            const invoices = map[cardId] || [];
+            const outstandingIdx = invoices.findIndex((inv) => inv.outstanding_amount > 0);
+            next[cardId] = outstandingIdx >= 0 ? outstandingIdx : 0;
+          }
+        });
+        return next;
+      });
     });
     return () => {
       cancelled = true;
     };
   }, [creditCardAccounts]);
+
+  function shiftInvoice(cardId, delta) {
+    setInvoiceIndexByCard((prev) => {
+      const invoices = invoicesByCard[cardId] || [];
+      const current = prev[cardId] ?? 0;
+      const next = Math.min(Math.max(current + delta, 0), Math.max(invoices.length - 1, 0));
+      return { ...prev, [cardId]: next };
+    });
+  }
+
+  function selectedInvoice(cardId) {
+    const invoices = invoicesByCard[cardId] || [];
+    const idx = invoiceIndexByCard[cardId] ?? 0;
+    return invoices[idx] || null;
+  }
 
   function toggleHighlight(cardId) {
     setHighlightedCardId((prev) => (prev === cardId ? null : cardId));
@@ -53,11 +82,6 @@ export default function Accounts() {
 
   function colorForAccount(account) {
     return banks.find((b) => b.id === account.bank_id)?.color_hex || FALLBACK_COLOR;
-  }
-
-  function latestOutstandingInvoice(cardId) {
-    const invoices = invoicesByCard[cardId] || [];
-    return invoices.find((inv) => inv.outstanding_amount > 0) || null;
   }
 
   // Pivo: agrupa por mes, uma barra por cartao dentro de cada grupo.
@@ -141,7 +165,9 @@ export default function Accounts() {
         const checking = bankAccounts.find((a) => a.type === 'checking');
         const creditCard = bankAccounts.find((a) => a.type === 'credit_card');
         const investment = bankAccounts.find((a) => a.type === 'investment');
-        const outstandingInvoice = creditCard?.credit_card ? latestOutstandingInvoice(creditCard.credit_card.id) : null;
+        const cardInvoices = creditCard?.credit_card ? invoicesByCard[creditCard.credit_card.id] || [] : [];
+        const cardInvoiceIdx = creditCard?.credit_card ? invoiceIndexByCard[creditCard.credit_card.id] ?? 0 : 0;
+        const viewedInvoice = creditCard?.credit_card ? selectedInvoice(creditCard.credit_card.id) : null;
 
         return (
           <div className="acct-block" key={bank.id}>
@@ -186,7 +212,7 @@ export default function Accounts() {
               <div className="acct-type-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <div className="t-label">Cartão de crédito</div>
-                  {outstandingInvoice && (
+                  {viewedInvoice && viewedInvoice.outstanding_amount > 0 && (
                     <button
                       type="button"
                       style={{
@@ -200,20 +226,65 @@ export default function Accounts() {
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
                       }}
-                      onClick={() => setPayingCard({ card: creditCard.credit_card, invoice: outstandingInvoice, bankName: bank.name })}
+                      onClick={() => setPayingCard({ card: creditCard.credit_card, invoice: viewedInvoice, bankName: bank.name })}
                     >
                       Pagar fatura
                     </button>
                   )}
                 </div>
-                <div className="t-val num">
-                  {creditCard?.credit_card ? fmt(creditCard.credit_card.used_amount) : '—'}
-                </div>
-                <div className="t-sub">
-                  {creditCard?.credit_card
-                    ? `de ${fmt(creditCard.credit_card.credit_limit)} · fecha dia ${creditCard.credit_card.closing_day} · vence dia ${creditCard.credit_card.due_day}`
-                    : 'sem cartão'}
-                </div>
+                {creditCard?.credit_card && cardInvoices.length > 0 ? (
+                  <>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                      <button
+                        type="button"
+                        disabled={cardInvoiceIdx >= cardInvoices.length - 1}
+                        onClick={() => shiftInvoice(creditCard.credit_card.id, 1)}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          cursor: cardInvoiceIdx >= cardInvoices.length - 1 ? 'default' : 'pointer',
+                          color: cardInvoiceIdx >= cardInvoices.length - 1 ? 'var(--ink-faint)' : 'var(--ink-soft)',
+                          padding: 0,
+                          fontSize: 13,
+                        }}
+                        title="Fatura anterior"
+                      >
+                        ◀
+                      </button>
+                      <div className="t-val num">{fmt(viewedInvoice?.total_amount || 0)}</div>
+                      <button
+                        type="button"
+                        disabled={cardInvoiceIdx <= 0}
+                        onClick={() => shiftInvoice(creditCard.credit_card.id, -1)}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          cursor: cardInvoiceIdx <= 0 ? 'default' : 'pointer',
+                          color: cardInvoiceIdx <= 0 ? 'var(--ink-faint)' : 'var(--ink-soft)',
+                          padding: 0,
+                          fontSize: 13,
+                        }}
+                        title="Próxima fatura"
+                      >
+                        ▶
+                      </button>
+                    </div>
+                    <div className="t-sub">
+                      {monthLabel(Number(viewedInvoice.reference_month.slice(5, 7)))}/{viewedInvoice.reference_month.slice(0, 4)} ·{' '}
+                      {viewedInvoice.status === 'paid'
+                        ? 'paga'
+                        : viewedInvoice.outstanding_amount > 0
+                        ? `${fmt(viewedInvoice.outstanding_amount)} em aberto`
+                        : 'quitada'}{' '}
+                      · fecha dia {creditCard.credit_card.closing_day} · vence dia {creditCard.credit_card.due_day}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="t-val num">—</div>
+                    <div className="t-sub">sem cartão</div>
+                  </>
+                )}
               </div>
               <div className="acct-type-card">
                 <div className="t-label">Investimento</div>
