@@ -29,9 +29,9 @@ def upgrade():
         )
         SELECT
             br.id, br.user_id, br.account_id, br.category_id, br.description,
-            br.amount, 'expense',
-            CASE WHEN a.type = 'credit_card' THEN 'credit' ELSE 'debit' END,
-            'monthly', br.day_of_month,
+            br.amount, 'expense'::transaction_type_recurring,
+            (CASE WHEN a.type = 'credit_card' THEN 'credit' ELSE 'debit' END)::recurring_payment_method,
+            'monthly'::recurring_frequency, br.day_of_month,
             COALESCE(br.paid_at, br.current_due_date),
             NULL, true, NULL, br.active,
             false, br.current_due_date, br.paid_at, br.last_transaction_id,
