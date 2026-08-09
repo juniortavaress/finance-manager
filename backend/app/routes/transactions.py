@@ -11,10 +11,12 @@ from app.models.transaction import TRANSACTION_STATUSES
 from app.services.finance_service import (
     add_months,
     apply_transaction_side_effects,
+    day_after_closing,
     get_or_create_invoice,
     invoice_month_for_date,
     recalc_account_balance,
     recalc_credit_card_used_amount,
+    recalc_installment_plan_total,
     recalc_invoice_total,
 )
 
@@ -130,9 +132,10 @@ def create_transaction():
 
             created = []
             remaining = amount
+            first_ref_month = invoice_month_for_date(credit_card, purchase_date)
             for n in range(1, installments_count + 1):
-                installment_date = purchase_date if n == 1 else add_months(purchase_date, n - 1)
-                ref_month = invoice_month_for_date(credit_card, installment_date)
+                ref_month = first_ref_month if n == 1 else add_months(first_ref_month, n - 1)
+                installment_date = purchase_date if n == 1 else day_after_closing(credit_card, ref_month)
                 invoice = get_or_create_invoice(credit_card, ref_month)
 
                 value = installment_amount if n < installments_count else remaining
@@ -217,8 +220,15 @@ def update_transaction(transaction_id):
             setattr(tx, field, data[field])
     if "amount" in data:
         tx.amount = Decimal(str(data["amount"])).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    old_invoice = tx.credit_card_invoice
+
     if "date" in data:
         tx.date = dt.date.fromisoformat(data["date"])
+        if tx.payment_method == "credit" and tx.account.credit_card:
+            ref_month = invoice_month_for_date(tx.account.credit_card, tx.date)
+            new_invoice = get_or_create_invoice(tx.account.credit_card, ref_month)
+            tx.credit_card_invoice_id = new_invoice.id
     if "category_id" in data:
         category = Category.query.filter_by(
             id=data["category_id"], user_id=g.current_user.id, archived=False
@@ -229,6 +239,11 @@ def update_transaction(transaction_id):
 
     db.session.flush()
     apply_transaction_side_effects(tx, tx.account)
+    if old_invoice and old_invoice.id != tx.credit_card_invoice_id:
+        recalc_invoice_total(old_invoice)
+        recalc_credit_card_used_amount(old_invoice.credit_card)
+    if "amount" in data and tx.installment_plan_id:
+        recalc_installment_plan_total(tx.installment_plan)
     db.session.commit()
     return {"transaction": tx.to_dict()}
 

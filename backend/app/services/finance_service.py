@@ -19,6 +19,22 @@ def add_months(base: dt.date, months: int) -> dt.date:
     return dt.date(year, month, day)
 
 
+def day_after_closing(credit_card, reference_month: dt.date) -> dt.date:
+    """Primeiro dia apos o fechamento da fatura do mes de referencia."""
+    ref = reference_month.replace(day=1)
+    closing_date = dt.date(ref.year, ref.month, safe_day(ref.year, ref.month, credit_card.closing_day))
+    return closing_date + dt.timedelta(days=1)
+
+
+def recalc_installment_plan_total(plan: InstallmentPlan):
+    total = (
+        db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
+        .filter(Transaction.installment_plan_id == plan.id)
+        .scalar()
+    ) or Decimal("0")
+    plan.total_amount = total
+
+
 def recalc_account_balance(account: Account):
     total = (
         db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))

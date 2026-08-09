@@ -7,7 +7,11 @@ from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
 from app.models import CreditCardInvoice, InstallmentPlan, Transaction
-from app.services.finance_service import recalc_credit_card_used_amount, recalc_invoice_total
+from app.services.finance_service import (
+    recalc_credit_card_used_amount,
+    recalc_installment_plan_total,
+    recalc_invoice_total,
+)
 
 installments_bp = Blueprint("installments", __name__)
 
@@ -99,6 +103,7 @@ def advance_installments(plan_id):
         recalc_invoice_total(invoice)
 
     _mark_completed_if_done(plan)
+    recalc_installment_plan_total(plan)
     db.session.flush()
     recalc_credit_card_used_amount(plan.credit_card)
     db.session.commit()
@@ -132,6 +137,7 @@ def cancel_installments_from(plan_id, installment_number):
             recalc_invoice_total(invoice)
 
     _mark_completed_if_done(plan)
+    recalc_installment_plan_total(plan)
     db.session.flush()
     recalc_credit_card_used_amount(plan.credit_card)
     db.session.commit()
