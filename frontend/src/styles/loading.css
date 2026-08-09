@@ -1,0 +1,109 @@
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: var(--ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.load-mark {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  margin-bottom: 22px;
+}
+.load-mark svg {
+  width: 100%;
+  height: 100%;
+}
+.load-ring {
+  fill: none;
+  stroke: rgba(238, 242, 240, 0.15);
+  stroke-width: 2.5;
+}
+.load-ring-progress {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  transform-origin: 42px 42px;
+  transform: rotate(-90deg);
+  animation: ringfill 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.load-needle {
+  transform-origin: 42px 42px;
+  animation: spin 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+.load-dot {
+  fill: var(--gold);
+}
+
+@keyframes ringfill {
+  0% {
+    stroke-dashoffset: 220;
+  }
+  55% {
+    stroke-dashoffset: 30;
+  }
+  100% {
+    stroke-dashoffset: 220;
+  }
+}
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  55% {
+    transform: rotate(320deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.load-word {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 22px;
+  color: #ffffff;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+.load-tagline {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: rgba(238, 242, 240, 0.45);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 26px;
+}
+.load-bar-track {
+  width: 180px;
+  height: 3px;
+  background: rgba(238, 242, 240, 0.12);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.load-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--gold);
+  border-radius: 3px;
+  animation: loadbar 1.8s ease forwards;
+}
+@keyframes loadbar {
+  0% {
+    width: 0%;
+  }
+  70% {
+    width: 78%;
+  }
+  100% {
+    width: 100%;
+  }
+}

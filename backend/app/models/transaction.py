@@ -1,0 +1,105 @@
+from sqlalchemy.dialects.postgresql import UUID
+
+from app.extensions import db
+from app.models.base import BaseModel
+
+TRANSACTION_TYPES = ("income", "expense")
+PAYMENT_METHODS = ("debit", "credit", "pix", "other")
+RECURRING_PAYMENT_METHODS = ("debit", "pix", "other", "credit")
+TRANSACTION_STATUSES = ("confirmed", "scheduled")
+FREQUENCIES = ("monthly", "weekly", "yearly")
+
+
+class Transaction(BaseModel):
+    __tablename__ = "transactions"
+
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False, index=True)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("accounts.id"), nullable=False, index=True)
+    category_id = db.Column(UUID(as_uuid=True), db.ForeignKey("categories.id"), nullable=False, index=True)
+    description = db.Column(db.Text, nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    type = db.Column(db.Enum(*TRANSACTION_TYPES, name="transaction_type"), nullable=False)
+    date = db.Column(db.Date, nullable=False, index=True)
+    payment_method = db.Column(db.Enum(*PAYMENT_METHODS, name="payment_method"), nullable=False)
+    status = db.Column(db.Enum(*TRANSACTION_STATUSES, name="transaction_status"), nullable=False, default="confirmed")
+    credit_card_invoice_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("credit_card_invoices.id"), nullable=True, index=True
+    )
+    recurring_transaction_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("recurring_transactions.id"), nullable=True, index=True
+    )
+    installment_plan_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("installment_plans.id"), nullable=True, index=True
+    )
+    installment_number = db.Column(db.SmallInteger, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+
+    account = db.relationship("Account", backref="transactions")
+    category = db.relationship("Category", backref="transactions")
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "account_id": str(self.account_id),
+            "category_id": str(self.category_id),
+            "description": self.description,
+            "amount": float(self.amount),
+            "type": self.type,
+            "date": self.date.isoformat(),
+            "payment_method": self.payment_method,
+            "status": self.status,
+            "credit_card_invoice_id": str(self.credit_card_invoice_id) if self.credit_card_invoice_id else None,
+            "recurring_transaction_id": str(self.recurring_transaction_id) if self.recurring_transaction_id else None,
+            "installment_plan_id": str(self.installment_plan_id) if self.installment_plan_id else None,
+            "installment_number": self.installment_number,
+            "notes": self.notes,
+            "category": self.category.to_dict() if self.category else None,
+            "account": self.account.to_dict() if self.account else None,
+        }
+
+
+class RecurringTransaction(BaseModel):
+    __tablename__ = "recurring_transactions"
+
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False, index=True)
+    account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("accounts.id"), nullable=False, index=True)
+    category_id = db.Column(UUID(as_uuid=True), db.ForeignKey("categories.id"), nullable=False, index=True)
+    description = db.Column(db.Text, nullable=False)
+    amount = db.Column(db.Numeric(14, 2), nullable=False)
+    type = db.Column(db.Enum(*TRANSACTION_TYPES, name="transaction_type_recurring"), nullable=False)
+    payment_method = db.Column(
+        db.Enum(*RECURRING_PAYMENT_METHODS, name="recurring_payment_method"), nullable=False, default="debit"
+    )
+    frequency = db.Column(db.Enum(*FREQUENCIES, name="recurring_frequency"), nullable=False, default="monthly")
+    day_of_month = db.Column(db.SmallInteger, nullable=True)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=True)
+    auto_confirm = db.Column(db.Boolean, nullable=False, default=True)
+    next_run_date = db.Column(db.Date, nullable=True)
+    active = db.Column(db.Boolean, nullable=False, default=True)
+
+    account = db.relationship("Account", backref="recurring_transactions")
+    category = db.relationship("Category", backref="recurring_transactions")
+    generated_transactions = db.relationship(
+        "Transaction", backref="recurring_transaction", foreign_keys=[Transaction.recurring_transaction_id]
+    )
+
+    def to_dict(self):
+        return {
+            "id": str(self.id),
+            "account_id": str(self.account_id),
+            "category_id": str(self.category_id),
+            "description": self.description,
+            "amount": float(self.amount),
+            "type": self.type,
+            "payment_method": self.payment_method,
+            "frequency": self.frequency,
+            "day_of_month": self.day_of_month,
+            "start_date": self.start_date.isoformat(),
+            "end_date": self.end_date.isoformat() if self.end_date else None,
+            "auto_confirm": self.auto_confirm,
+            "next_run_date": self.next_run_date.isoformat() if self.next_run_date else None,
+            "active": self.active,
+            "category": self.category.to_dict() if self.category else None,
+            "account": self.account.to_dict() if self.account else None,
+        }

@@ -1,0 +1,323 @@
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+}
+.card h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-faint);
+  font-weight: 500;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.card h3 .action {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--teal);
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 12.5px;
+  font-family: inherit;
+}
+
+/* stat card w/ ledger stripe */
+.stat-card {
+  position: relative;
+  padding-left: 26px;
+  overflow: hidden;
+}
+.stat-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  background: var(--stripe, var(--teal));
+}
+.stat-card .label {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+.stat-card .value {
+  font-size: 24px;
+  font-weight: 600;
+}
+.stat-card .delta {
+  font-size: 12px;
+  margin-top: 6px;
+  color: var(--ink-faint);
+}
+.stat-card .delta.up {
+  color: var(--teal);
+}
+.stat-card .delta.down {
+  color: var(--brick);
+}
+
+/* bank mini card */
+.bank-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.bank-row:last-child {
+  border-bottom: none;
+}
+.bank-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.bank-chip {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.bank-name {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.bank-sub {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.bank-val {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* horizontal bar chart — categorias */
+.hbar-row {
+  margin-bottom: 13px;
+}
+.hbar-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  margin-bottom: 5px;
+}
+.hbar-top .cat {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+}
+.hbar-top .catdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.hbar-top .val {
+  color: var(--ink-soft);
+}
+.hbar-track {
+  height: 8px;
+  background: var(--bg);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.hbar-fill {
+  height: 100%;
+  border-radius: 5px;
+}
+
+/* receitas x despesas mini bars */
+.rd-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  height: 150px;
+  padding-top: 10px;
+}
+.rd-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.rd-bars {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+  height: 110px;
+}
+.rd-bar {
+  width: 9px;
+  border-radius: 2px 2px 0 0;
+}
+.rd-month {
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* linha evolução saldo */
+.line-wrap {
+  position: relative;
+}
+.line-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--ink-faint);
+  font-family: 'IBM Plex Mono', monospace;
+  margin-top: 4px;
+}
+
+/* faturas list */
+.fat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.fat-row:last-child {
+  border-bottom: none;
+}
+.fat-bank {
+  font-size: 13px;
+  font-weight: 500;
+}
+.fat-due {
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.fat-val {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.badge.warn {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+.badge.ok {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+/* categories screen chips */
+.cat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.cat-tile {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.cat-tile .ico {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+.cat-tile .name {
+  font-weight: 500;
+  font-size: 13.5px;
+}
+.cat-tile .amt {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+}
+.add-cat {
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ink-faint);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 16px;
+  background: none;
+}
+.add-cat:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
+/* cards accounts screen */
+.acct-block {
+  margin-bottom: 26px;
+}
+.acct-bank-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.acct-bank-head .chip {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.acct-bank-head .name {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 17px;
+}
+.acct-types {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.acct-type-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.acct-type-card .t-label {
+  font-size: 11px;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.acct-type-card .t-val {
+  font-size: 19px;
+  font-weight: 600;
+}
+.acct-type-card .t-sub {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
+@media (max-width: 720px) {
+  .cat-grid,
+  .acct-types {
+    grid-template-columns: 1fr 1fr;
+  }
+}

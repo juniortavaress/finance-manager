@@ -1,0 +1,60 @@
+:root {
+  --bg: #f1f3ef;
+  --surface: #ffffff;
+  --ink: #1c2b29;
+  --ink-soft: #5c6d6a;
+  --ink-faint: #8b9a97;
+  --teal: #0f5c5c;
+  --teal-soft: #e4eeec;
+  --gold: #c0912f;
+  --gold-soft: #f6ecd6;
+  --brick: #a6432c;
+  --brick-soft: #f5e4df;
+  --line: #dde3dc;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'IBM Plex Sans', sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+.num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 8px;
+}
+
+h2.screen-title {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 24px;
+  margin-bottom: 20px;
+}
