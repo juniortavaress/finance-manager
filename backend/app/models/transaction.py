@@ -77,6 +77,10 @@ class RecurringTransaction(BaseModel):
     auto_confirm = db.Column(db.Boolean, nullable=False, default=True)
     next_run_date = db.Column(db.Date, nullable=True)
     active = db.Column(db.Boolean, nullable=False, default=True)
+    auto_debit = db.Column(db.Boolean, nullable=False, default=True)
+    current_due_date = db.Column(db.Date, nullable=True)
+    paid_at = db.Column(db.Date, nullable=True)
+    last_transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"), nullable=True, index=True)
 
     account = db.relationship("Account", backref="recurring_transactions")
     category = db.relationship("Category", backref="recurring_transactions")
@@ -100,6 +104,10 @@ class RecurringTransaction(BaseModel):
             "auto_confirm": self.auto_confirm,
             "next_run_date": self.next_run_date.isoformat() if self.next_run_date else None,
             "active": self.active,
+            "auto_debit": self.auto_debit,
+            "current_due_date": self.current_due_date.isoformat() if self.current_due_date else None,
+            "paid_at": self.paid_at.isoformat() if self.paid_at else None,
+            "last_transaction_id": str(self.last_transaction_id) if self.last_transaction_id else None,
             "category": self.category.to_dict() if self.category else None,
             "account": self.account.to_dict() if self.account else None,
         }

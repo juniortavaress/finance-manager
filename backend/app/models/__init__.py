@@ -6,7 +6,6 @@ from app.models.credit_card_invoice import CreditCardInvoice
 from app.models.installment import InstallmentPlan
 from app.models.investment import Investment, InvestmentSnapshot
 from app.models.budget import Budget
-from app.models.bill_reminder import BillReminder
 
 __all__ = [
     "User",
@@ -24,5 +23,4 @@ __all__ = [
     "Investment",
     "InvestmentSnapshot",
     "Budget",
-    "BillReminder",
 ]
