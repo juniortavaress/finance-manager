@@ -42,6 +42,7 @@ export const recurringApi = {
   create: (data) => api.post('/recurring/', data),
   update: (id, data) => api.patch(`/recurring/${id}`, data),
   remove: (id) => api.delete(`/recurring/${id}`),
+  markPaid: (id) => api.post(`/recurring/${id}/mark-paid`),
 };
 
 export const installmentsApi = {
@@ -74,12 +75,4 @@ export const dashboardApi = {
 
 export const reportsApi = {
   monthlyComparison: (months) => api.get('/reports/monthly-comparison', { months }),
-};
-
-export const remindersApi = {
-  list: () => api.get('/reminders/'),
-  create: (data) => api.post('/reminders/', data),
-  update: (id, data) => api.patch(`/reminders/${id}`, data),
-  remove: (id) => api.delete(`/reminders/${id}`),
-  markPaid: (id) => api.post(`/reminders/${id}/mark-paid`),
 };
