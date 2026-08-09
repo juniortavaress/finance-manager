@@ -300,13 +300,6 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
             </div>
           )}
 
-          {isEditing && transaction.installment_plan_id && (
-            <div className="fatura-note show" style={{ background: 'var(--bg)', color: 'var(--ink-faint)' }}>
-              Esta transação faz parte de um parcelamento. Conta, cartão e parcelamento não podem ser alterados aqui —
-              use a aba Parcelas para adiantar ou cancelar parcelas.
-            </div>
-          )}
-
           <div className="modal-actions">
             <div className="btn btn-ghost" onClick={onClose}>
               Cancelar
