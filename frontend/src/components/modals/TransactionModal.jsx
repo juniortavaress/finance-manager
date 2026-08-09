@@ -26,6 +26,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   const [accountRef, setAccountRef] = useState(''); // "checking:<id>" ou "credit:<id>"
   const [installments, setInstallments] = useState(1);
   const [recorrente, setRecorrente] = useState(false);
+  const [autoDebit, setAutoDebit] = useState(true);
   const [endDate, setEndDate] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +48,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
       );
       setInstallments(1);
       setRecorrente(false);
+      setAutoDebit(true);
       setEndDate('');
     } else {
       setTipo('despesa');
@@ -55,6 +57,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
       setDate(todayIso());
       setInstallments(1);
       setRecorrente(false);
+      setAutoDebit(true);
       setEndDate('');
       setAccountRef(checkingAccounts[0] ? `checking:${checkingAccounts[0].id}` : '');
     }
@@ -118,12 +121,13 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
           account_id: accId,
           category_id: categoryId,
           payment_method: 'debit',
+          auto_debit: autoDebit,
           frequency: 'monthly',
           start_date: date,
-          end_date: endDate || null,
+          end_date: autoDebit ? endDate || null : null,
           auto_confirm: true,
         });
-        showSuccess('Débito automático criado com sucesso.');
+        showSuccess(autoDebit ? 'Débito automático criado com sucesso.' : 'Lembrete criado com sucesso.');
       } else {
         const [, accId] = accountRef.split(':');
         const paymentMethod = isCreditAccountSelected ? 'credit' : 'debit';
@@ -294,6 +298,13 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
           )}
 
           {!isEditing && recorrente && !isCreditAccountSelected && (
+            <div className="recorrente-row">
+              <div className={`toggle${autoDebit ? ' on' : ''}`} onClick={() => setAutoDebit((v) => !v)} />
+              <span>Descontar automaticamente</span>
+            </div>
+          )}
+
+          {!isEditing && recorrente && !isCreditAccountSelected && autoDebit && (
             <div className="field">
               <label>Repetir até (opcional)</label>
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
