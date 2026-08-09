@@ -45,6 +45,7 @@ export default function Transactions() {
   const { banks, categories, categoryById, accountById } = useData();
   const [search, setSearch] = useState('');
   const [bankFilter, setBankFilter] = useState('');
+  const [accountTypeFilter, setAccountTypeFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -68,21 +69,31 @@ export default function Transactions() {
 
   const transactions = txData?.transactions || [];
   const filteredByBank = useMemo(() => {
-    if (!bankFilter) return transactions;
     return transactions.filter((t) => {
       const account = accountById(t.account_id) || t.account;
-      return account?.bank_id === bankFilter;
+      if (bankFilter && account?.bank_id !== bankFilter) return false;
+      if (accountTypeFilter && account?.type !== accountTypeFilter) return false;
+      return true;
     });
-  }, [transactions, bankFilter, accountById]);
+  }, [transactions, bankFilter, accountTypeFilter, accountById]);
 
   const entradas = filteredByBank.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const saidas = filteredByBank.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
-  const hasActiveFilters = !!(search || bankFilter || categoryFilter || typeFilter || dateFrom || dateTo);
+  const hasActiveFilters = !!(
+    search ||
+    bankFilter ||
+    accountTypeFilter ||
+    categoryFilter ||
+    typeFilter ||
+    dateFrom ||
+    dateTo
+  );
 
   function clearFilters() {
     setSearch('');
     setBankFilter('');
+    setAccountTypeFilter('');
     setCategoryFilter('');
     setTypeFilter('');
     setDateFrom('');
@@ -165,6 +176,13 @@ export default function Transactions() {
                     {b.name}
                   </option>
                 ))}
+              </select>
+            </div>
+            <div className="filter-select">
+              <select value={accountTypeFilter} onChange={(e) => setAccountTypeFilter(e.target.value)}>
+                <option value="">Contas e cartões</option>
+                <option value="checking">Conta corrente</option>
+                <option value="credit_card">Cartão de crédito</option>
               </select>
             </div>
             <div className="filter-select">
