@@ -90,6 +90,50 @@ export default function Accounts() {
         </div>
       </div>
 
+      {monthGroups.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h3>Histórico de faturas por mês</h3>
+          <div className="rd-chart" style={{ height: 150 }}>
+            {monthGroups.map((group) => (
+              <div className="rd-col" key={group.referenceMonth}>
+                <div className="rd-bars">
+                  {group.bars.map(({ account, amount }) => {
+                    const cardId = account.credit_card.id;
+                    const dimmed = highlightedCardId && highlightedCardId !== cardId;
+                    return (
+                      <div
+                        key={cardId}
+                        className="rd-bar"
+                        style={{
+                          height: `${Math.max((amount / globalMax) * 100, amount > 0 ? 3 : 0)}px`,
+                          background: colorForAccount(account),
+                          width: 12,
+                          opacity: dimmed ? 0.3 : 1,
+                          transition: 'opacity 0.15s ease',
+                          cursor: 'pointer',
+                        }}
+                        title={`${account.name}: ${fmt(amount)}`}
+                        onClick={() => toggleHighlight(cardId)}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="rd-month">{monthLabel(Number(group.referenceMonth.slice(5, 7)))}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+            {creditCardAccounts.map((account) => (
+              <div key={account.credit_card.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--ink-soft)' }}>
+                <span style={{ width: 10, height: 10, borderRadius: 3, background: colorForAccount(account), display: 'inline-block' }} />
+                {account.name}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {banks.length === 0 && <div className="empty-state">Nenhum banco cadastrado ainda.</div>}
 
       {banks.map((bank) => {
@@ -180,50 +224,6 @@ export default function Accounts() {
           </div>
         );
       })}
-
-      {monthGroups.length > 0 && (
-        <div className="card" style={{ marginTop: 20 }}>
-          <h3>Histórico de faturas por mês</h3>
-          <div className="rd-chart" style={{ height: 150 }}>
-            {monthGroups.map((group) => (
-              <div className="rd-col" key={group.referenceMonth}>
-                <div className="rd-bars">
-                  {group.bars.map(({ account, amount }) => {
-                    const cardId = account.credit_card.id;
-                    const dimmed = highlightedCardId && highlightedCardId !== cardId;
-                    return (
-                      <div
-                        key={cardId}
-                        className="rd-bar"
-                        style={{
-                          height: `${Math.max((amount / globalMax) * 100, amount > 0 ? 3 : 0)}px`,
-                          background: colorForAccount(account),
-                          width: 12,
-                          opacity: dimmed ? 0.3 : 1,
-                          transition: 'opacity 0.15s ease',
-                          cursor: 'pointer',
-                        }}
-                        title={`${account.name}: ${fmt(amount)}`}
-                        onClick={() => toggleHighlight(cardId)}
-                      />
-                    );
-                  })}
-                </div>
-                <div className="rd-month">{monthLabel(Number(group.referenceMonth.slice(5, 7)))}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
-            {creditCardAccounts.map((account) => (
-              <div key={account.credit_card.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--ink-soft)' }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: colorForAccount(account), display: 'inline-block' }} />
-                {account.name}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <BankConfigModal
         open={modalOpen}
