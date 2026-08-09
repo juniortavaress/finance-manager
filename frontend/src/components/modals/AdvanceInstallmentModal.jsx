@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { installmentsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
+import { maskToNumber } from '../../utils/currency';
 import ModalShell from './ModalShell';
+import CurrencyInput from '../CurrencyInput';
 
 export default function AdvanceInstallmentModal({ open, onClose, onDone, plan, scheduledCount }) {
   const { showSuccess, showError } = useToast();
@@ -23,7 +25,7 @@ export default function AdvanceInstallmentModal({ open, onClose, onDone, plan, s
   async function handleAdvance(e) {
     e.preventDefault();
     setError('');
-    const numericTotal = parseFloat((totalAmount || '').toString().replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+    const numericTotal = maskToNumber(totalAmount);
     if (count <= 0 || count > scheduledCount) return setError('Quantidade de parcelas inválida.');
     if (numericTotal <= 0) return setError('Informe o valor total a pagar.');
 
@@ -68,12 +70,7 @@ export default function AdvanceInstallmentModal({ open, onClose, onDone, plan, s
             </div>
             <div className="field">
               <label>Valor total a pagar</label>
-              <input
-                type="text"
-                placeholder="R$ 0,00"
-                value={totalAmount}
-                onChange={(e) => setTotalAmount(e.target.value)}
-              />
+              <CurrencyInput value={totalAmount} onChange={setTotalAmount} />
             </div>
           </div>
 

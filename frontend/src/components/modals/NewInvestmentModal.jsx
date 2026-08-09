@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { investmentsApi } from '../../api/resources';
+import { maskToNumber } from '../../utils/currency';
 import ModalShell from './ModalShell';
+import CurrencyInput from '../CurrencyInput';
 
 const TYPE_OPTIONS = [
   { value: 'renda_fixa', label: 'Renda fixa' },
@@ -40,8 +42,8 @@ export default function NewInvestmentModal({ open, onClose, onCreated, banks, in
     e.preventDefault();
     setError('');
 
-    const invested = parseFloat((investedAmount || '0').toString().replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
-    const current = parseFloat((currentAmount || investedAmount || '0').toString().replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+    const invested = maskToNumber(investedAmount);
+    const current = currentAmount ? maskToNumber(currentAmount) : invested;
 
     if (!name.trim()) return setError('Informe o nome do investimento.');
     if (!investmentAccountId) return setError('Selecione um banco/corretora.');
@@ -111,20 +113,14 @@ export default function NewInvestmentModal({ open, onClose, onCreated, banks, in
           <div className="field-row">
             <div className="field">
               <label>Valor investido</label>
-              <input
-                type="text"
-                placeholder="R$ 0,00"
-                value={investedAmount}
-                onChange={(e) => setInvestedAmount(e.target.value)}
-              />
+              <CurrencyInput value={investedAmount} onChange={setInvestedAmount} />
             </div>
             <div className="field">
               <label>Valor atual</label>
-              <input
-                type="text"
-                placeholder="igual ao investido"
+              <CurrencyInput
                 value={currentAmount}
-                onChange={(e) => setCurrentAmount(e.target.value)}
+                onChange={setCurrentAmount}
+                placeholder="igual ao investido"
               />
             </div>
           </div>
