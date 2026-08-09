@@ -3,7 +3,7 @@ import { useData } from '../context/DataContext';
 import { transactionsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { fmt, fmtDateShort } from '../utils/format';
-import { IconSearch, IconPencil } from '../components/icons';
+import { IconSearch, IconPencil, IconChevronDown } from '../components/icons';
 import TransactionModal from '../components/modals/TransactionModal';
 
 function todayIso() {
@@ -47,6 +47,9 @@ export default function Transactions() {
   const [bankFilter, setBankFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState(null);
 
@@ -56,10 +59,11 @@ export default function Transactions() {
         search: search || undefined,
         category_id: categoryFilter || undefined,
         type: typeFilter || undefined,
-        date_to: todayIso(),
+        date_from: dateFrom || undefined,
+        date_to: dateTo || todayIso(),
         page_size: 100,
       }),
-    [search, categoryFilter, typeFilter]
+    [search, categoryFilter, typeFilter, dateFrom, dateTo]
   );
 
   const transactions = txData?.transactions || [];
@@ -74,11 +78,15 @@ export default function Transactions() {
   const entradas = filteredByBank.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const saidas = filteredByBank.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
 
+  const hasActiveFilters = !!(search || bankFilter || categoryFilter || typeFilter || dateFrom || dateTo);
+
   function clearFilters() {
     setSearch('');
     setBankFilter('');
     setCategoryFilter('');
     setTypeFilter('');
+    setDateFrom('');
+    setDateTo('');
   }
 
   return (
@@ -105,37 +113,107 @@ export default function Transactions() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="filter-select">
-            <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)}>
-              <option value="">Todos os bancos</option>
-              {banks.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-select">
-            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-              <option value="">Todas as categorias</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-select">
-            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
-              <option value="">Receitas e despesas</option>
-              <option value="income">Só receitas</option>
-              <option value="expense">Só despesas</option>
-            </select>
-          </div>
-          <span className="filter-clear" onClick={clearFilters}>
-            Limpar filtros
-          </span>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'var(--bg)',
+              border: '1px solid var(--line)',
+              borderRadius: 8,
+              padding: '8px 12px',
+              fontSize: 12.5,
+              color: 'var(--ink-soft)',
+              cursor: 'pointer',
+            }}
+          >
+            Filtros
+            <IconChevronDown
+              style={{ width: 12, height: 12, transition: 'transform 0.15s ease', transform: filtersOpen ? 'rotate(180deg)' : 'none' }}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={clearFilters}
+            disabled={!hasActiveFilters}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              background: 'none',
+              border: 'none',
+              fontSize: 12,
+              fontWeight: 500,
+              color: hasActiveFilters ? 'var(--teal)' : 'var(--ink-faint)',
+              cursor: hasActiveFilters ? 'pointer' : 'default',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ✕ Limpar
+          </button>
         </div>
+
+        {filtersOpen && (
+          <div className="filter-bar" style={{ paddingTop: 0 }}>
+            <div className="filter-select">
+              <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)}>
+                <option value="">Todos os bancos</option>
+                {banks.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="filter-select">
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                <option value="">Todas as categorias</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="filter-select">
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+                <option value="">Receitas e despesas</option>
+                <option value="income">Só receitas</option>
+                <option value="expense">Só despesas</option>
+              </select>
+            </div>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              style={{
+                background: 'var(--bg)',
+                border: '1px solid var(--line)',
+                borderRadius: 8,
+                padding: '8px 12px',
+                fontSize: 12.5,
+                color: 'var(--ink-soft)',
+                fontFamily: 'inherit',
+              }}
+            />
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={{
+                background: 'var(--bg)',
+                border: '1px solid var(--line)',
+                borderRadius: 8,
+                padding: '8px 12px',
+                fontSize: 12.5,
+                color: 'var(--ink-soft)',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+        )}
       </div>
       <div className="card">
         <h3>
