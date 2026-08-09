@@ -10,6 +10,24 @@ from app.services.finance_service import recalc_account_balance, recalc_credit_c
 
 credit_cards_bp = Blueprint("credit_cards", __name__)
 
+PAYMENT_CATEGORY_NAME = "Pagamento de fatura"
+
+
+def _get_or_create_payment_category(user_id):
+    category = Category.query.filter_by(user_id=user_id, name=PAYMENT_CATEGORY_NAME, archived=True).first()
+    if category is None:
+        category = Category(
+            user_id=user_id,
+            name=PAYMENT_CATEGORY_NAME,
+            icon="\U0001F4B3",
+            color_hex="#8B9A97",
+            kind="expense",
+            archived=True,
+        )
+        db.session.add(category)
+        db.session.flush()
+    return category
+
 
 def _get_owned_card(card_id):
     return (
@@ -83,16 +101,13 @@ def pay_invoice(card_id, invoice_id):
 
     data = request.get_json(silent=True) or {}
     account_id = data.get("account_id")
-    category_id = data.get("category_id")
 
     account = Account.query.filter_by(
         id=account_id, user_id=g.current_user.id, type="checking", archived=False
     ).first()
     if account is None:
         raise ApiError("Conta corrente nao encontrada", 404)
-    category = Category.query.filter_by(id=category_id, user_id=g.current_user.id, archived=False).first()
-    if category is None:
-        raise ApiError("Categoria nao encontrada", 404)
+    category = _get_or_create_payment_category(g.current_user.id)
 
     outstanding = invoice.total_amount - invoice.paid_amount
     if outstanding <= 0:

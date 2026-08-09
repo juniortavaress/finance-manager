@@ -6,11 +6,10 @@ import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
 
 export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, bankName }) {
-  const { checkingAccounts, expenseCategories } = useData();
+  const { checkingAccounts } = useData();
   const { showSuccess, showError } = useToast();
 
   const [accountId, setAccountId] = useState('');
-  const [categoryId, setCategoryId] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -18,7 +17,6 @@ export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, 
     if (!open) return;
     setError('');
     setAccountId(checkingAccounts[0]?.id || '');
-    setCategoryId(expenseCategories[0]?.id || '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, invoice]);
 
@@ -30,11 +28,10 @@ export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, 
     e.preventDefault();
     setError('');
     if (!accountId) return setError('Selecione a conta de origem.');
-    if (!categoryId) return setError('Selecione uma categoria.');
 
     setSubmitting(true);
     try {
-      await creditCardsApi.payInvoice(card.id, invoice.id, { account_id: accountId, category_id: categoryId });
+      await creditCardsApi.payInvoice(card.id, invoice.id, { account_id: accountId });
       showSuccess('Fatura paga com sucesso.');
       onPaid?.();
     } catch (err) {
@@ -69,17 +66,6 @@ export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, 
               {checkingAccounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field">
-            <label>Categoria</label>
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              {expenseCategories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.icon} {c.name}
                 </option>
               ))}
             </select>
