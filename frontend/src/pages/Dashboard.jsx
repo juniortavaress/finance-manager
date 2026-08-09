@@ -115,7 +115,7 @@ export default function Dashboard() {
         <div className="card stat-card" style={{ '--stripe': '#5C6D6A' }}>
           <div className="label">Faturas em aberto</div>
           <div className="value num">{fmt(summary?.faturas_abertas_total ?? 0)}</div>
-          <div className="delta">{summary?.faturas_abertas_qtd ?? 0} cartões</div>
+          <div className="delta">{summary?.faturas_abertas_qtd ?? 0} faturas</div>
         </div>
       </div>
 
