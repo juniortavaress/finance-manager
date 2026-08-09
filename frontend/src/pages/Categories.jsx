@@ -6,7 +6,7 @@ import { fmt } from '../utils/format';
 import { IconPencil } from '../components/icons';
 import CategoryConfigModal from '../components/modals/CategoryConfigModal';
 
-function CategoryGrid({ title, items, totalsById, onEdit, onAdd }) {
+function CategoryGrid({ title, items, totalsById, onEdit }) {
   return (
     <div style={{ marginBottom: 28 }}>
       <h3 style={{ marginBottom: 12 }}>{title}</h3>
@@ -51,9 +51,6 @@ function CategoryGrid({ title, items, totalsById, onEdit, onAdd }) {
             </button>
           </div>
         ))}
-        <button className="add-cat" onClick={onAdd}>
-          + nova categoria
-        </button>
       </div>
     </div>
   );
@@ -76,9 +73,9 @@ export default function Categories() {
     return map;
   }, [catData]);
 
-  function openNewCategory(kind) {
+  function openNewCategory() {
     setEditingCategory(null);
-    setNewCategoryKind(kind);
+    setNewCategoryKind('expense');
     setModalOpen(true);
   }
 
@@ -91,6 +88,13 @@ export default function Categories() {
     <div className="screen active">
       <div className="topbar">
         <h1>Categorias</h1>
+        <div
+          className="period"
+          style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
+          onClick={openNewCategory}
+        >
+          + categoria
+        </div>
       </div>
 
       <CategoryGrid
@@ -98,7 +102,6 @@ export default function Categories() {
         items={expenseCategories}
         totalsById={totalsById}
         onEdit={openEditCategory}
-        onAdd={() => openNewCategory('expense')}
       />
 
       <CategoryGrid
@@ -106,7 +109,6 @@ export default function Categories() {
         items={incomeCategories}
         totalsById={totalsById}
         onEdit={openEditCategory}
-        onAdd={() => openNewCategory('income')}
       />
 
       <CategoryConfigModal
