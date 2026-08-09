@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { banksApi, accountsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
+import { maskToNumber, numberToMasked } from '../../utils/currency';
 import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import CurrencyInput from '../CurrencyInput';
 
 const COLOR_OPTIONS = [
   '#0F5C5C',
@@ -47,7 +49,9 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
     if (isEditing) {
       setName(bank.name);
       setColor(bank.color_hex);
-      setCreditLimit(creditCardAccount?.credit_card ? String(creditCardAccount.credit_card.credit_limit) : '');
+      setCreditLimit(
+        creditCardAccount?.credit_card ? numberToMasked(creditCardAccount.credit_card.credit_limit) : ''
+      );
       setClosingDay(creditCardAccount?.credit_card?.closing_day ?? 5);
       setDueDay(creditCardAccount?.credit_card?.due_day ?? 15);
       setOpeningBalance('');
@@ -68,6 +72,7 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
     setError('');
 
     if (!name.trim()) return setError('Informe o nome do banco.');
+    if (!closingDay || !dueDay) return setError('Informe os dias de fechamento e vencimento.');
     if (Number(closingDay) === Number(dueDay)) {
       return setError('Dia de fechamento e vencimento devem ser diferentes.');
     }
@@ -79,7 +84,7 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
         if (creditCardAccount) {
           await accountsApi.update(creditCardAccount.id, {
             credit_card: {
-              credit_limit: parseFloat((creditLimit || '0').toString().replace(/[^\d,.-]/g, '').replace(',', '.')) || 0,
+              credit_limit: maskToNumber(creditLimit),
               closing_day: Number(closingDay),
               due_day: Number(dueDay),
             },
@@ -88,8 +93,8 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
       } else {
         const { bank: newBank } = await banksApi.create({ name: name.trim(), color_hex: color });
 
-        const balance = parseFloat((openingBalance || '0').toString().replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
-        const limit = parseFloat((creditLimit || '0').toString().replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+        const balance = maskToNumber(openingBalance);
+        const limit = maskToNumber(creditLimit);
 
         await accountsApi.create({
           bank_id: newBank.id,
@@ -193,40 +198,42 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
           {!isEditing && (
             <div className="field">
               <label>Saldo inicial da conta corrente</label>
-              <input
-                type="text"
-                placeholder="R$ 0,00"
-                value={openingBalance}
-                onChange={(e) => setOpeningBalance(e.target.value)}
-              />
+              <CurrencyInput value={openingBalance} onChange={setOpeningBalance} />
             </div>
           )}
 
           <div className="field-row">
             <div className="field">
               <label>Limite do cartão</label>
-              <input
-                type="text"
-                placeholder="R$ 0,00"
-                value={creditLimit}
-                onChange={(e) => setCreditLimit(e.target.value)}
-              />
+              <CurrencyInput value={creditLimit} onChange={setCreditLimit} />
             </div>
           </div>
           <div className="field-row">
             <div className="field">
               <label>Fechamento da fatura (dia)</label>
               <input
-                type="number"
-                min="1"
-                max="31"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={closingDay}
-                onChange={(e) => setClosingDay(e.target.value)}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, '');
+                  setClosingDay(v === '' ? '' : String(Math.min(31, Number(v))));
+                }}
               />
             </div>
             <div className="field">
               <label>Vencimento da fatura (dia)</label>
-              <input type="number" min="1" max="31" value={dueDay} onChange={(e) => setDueDay(e.target.value)} />
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={dueDay}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, '');
+                  setDueDay(v === '' ? '' : String(Math.min(31, Number(v))));
+                }}
+              />
             </div>
           </div>
 
