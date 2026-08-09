@@ -14,9 +14,24 @@ from app.services.finance_service import (
     recalc_account_balance,
     recalc_credit_card_used_amount,
     recalc_invoice_total,
+    safe_day,
 )
 
 recurring_bp = Blueprint("recurring", __name__)
+
+
+def _due_date_for(day_of_month, reference=None):
+    reference = reference or dt.date.today()
+    return dt.date(reference.year, reference.month, safe_day(reference.year, reference.month, day_of_month))
+
+
+def _advance_if_needed(recurring):
+    """Se o periodo atual ja foi pago e a data de vencimento ja passou, abre o proximo periodo."""
+    today = dt.date.today()
+    if recurring.paid_at is not None and recurring.current_due_date < today:
+        next_due = add_months(recurring.current_due_date, 1)
+        recurring.current_due_date = _due_date_for(recurring.day_of_month, next_due)
+        recurring.paid_at = None
 
 
 def _generate_occurrences(recurring: RecurringTransaction) -> list[dt.date]:
@@ -102,10 +117,13 @@ def _materialize_transactions(recurring: RecurringTransaction):
         recalc_credit_card_used_amount(credit_card)
 
 
-def _materialize_all_active(user_id):
+def _sync_all_active(user_id):
     active = RecurringTransaction.query.filter_by(user_id=user_id, active=True).all()
     for recurring in active:
-        _materialize_transactions(recurring)
+        if recurring.auto_debit:
+            _materialize_transactions(recurring)
+        else:
+            _advance_if_needed(recurring)
 
 
 @recurring_bp.get("/")
@@ -113,7 +131,7 @@ def _materialize_all_active(user_id):
 def list_recurring():
     active_only = request.args.get("active_only") == "1"
 
-    _materialize_all_active(g.current_user.id)
+    _sync_all_active(g.current_user.id)
     db.session.commit()
 
     query = RecurringTransaction.query.filter_by(user_id=g.current_user.id)
@@ -134,9 +152,11 @@ def create_recurring():
     account_id = data.get("account_id")
     category_id = data.get("category_id")
     payment_method = data.get("payment_method") or "debit"
+    auto_debit = bool(data.get("auto_debit", True))
     frequency = data.get("frequency") or "monthly"
     start_date_raw = data.get("start_date")
     end_date_raw = data.get("end_date")
+    day_of_month = data.get("day_of_month")
 
     if not description:
         raise ApiError("Descricao e obrigatoria", 400)
@@ -144,12 +164,22 @@ def create_recurring():
         raise ApiError("Forma de pagamento invalida", 400)
     if tx_type not in ("income", "expense"):
         raise ApiError("Tipo invalido", 400)
-    if frequency not in ("monthly", "weekly", "yearly"):
-        raise ApiError("Frequencia invalida", 400)
     if not amount or Decimal(str(amount)) <= 0:
         raise ApiError("Valor deve ser maior que zero", 400)
-    if not start_date_raw:
-        raise ApiError("Data de inicio e obrigatoria", 400)
+
+    if not auto_debit:
+        if payment_method == "credit":
+            raise ApiError("Lancamento manual nao pode ser no cartao de credito", 400)
+        if tx_type != "expense":
+            raise ApiError("Lancamento manual deve ser uma despesa", 400)
+        if not day_of_month or not (1 <= int(day_of_month) <= 31):
+            raise ApiError("Dia de vencimento invalido", 400)
+        frequency = "monthly"
+    else:
+        if frequency not in ("monthly", "weekly", "yearly"):
+            raise ApiError("Frequencia invalida", 400)
+        if not start_date_raw:
+            raise ApiError("Data de inicio e obrigatoria", 400)
 
     if payment_method == "credit":
         account = Account.query.filter_by(id=account_id, user_id=g.current_user.id, type="credit_card").first()
@@ -164,6 +194,30 @@ def create_recurring():
     if category is None:
         raise ApiError("Categoria nao encontrada", 404)
 
+    amount_decimal = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    if not auto_debit:
+        recurring = RecurringTransaction(
+            user_id=g.current_user.id,
+            account_id=account.id,
+            category_id=category.id,
+            description=description,
+            amount=amount_decimal,
+            type="expense",
+            payment_method=payment_method,
+            frequency="monthly",
+            day_of_month=int(day_of_month),
+            start_date=dt.date.today(),
+            auto_confirm=True,
+            active=True,
+            auto_debit=False,
+            current_due_date=_due_date_for(int(day_of_month)),
+            paid_at=None,
+        )
+        db.session.add(recurring)
+        db.session.commit()
+        return {"recurring_transaction": recurring.to_dict()}, 201
+
     start_date = dt.date.fromisoformat(start_date_raw)
     end_date = dt.date.fromisoformat(end_date_raw) if end_date_raw else None
     if end_date and end_date < start_date:
@@ -174,15 +228,16 @@ def create_recurring():
         account_id=account.id,
         category_id=category.id,
         description=description,
-        amount=Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+        amount=amount_decimal,
         type=tx_type,
         payment_method=payment_method,
         frequency=frequency,
-        day_of_month=data.get("day_of_month") or start_date.day,
+        day_of_month=day_of_month or start_date.day,
         start_date=start_date,
         end_date=end_date,
         auto_confirm=bool(data.get("auto_confirm", True)),
         active=True,
+        auto_debit=True,
     )
     db.session.add(recurring)
     db.session.flush()
@@ -255,6 +310,30 @@ def update_recurring(recurring_id):
     if edit_scope not in ("current_and_future", "future_only"):
         raise ApiError("Escopo de edicao invalido", 400)
 
+    if "auto_debit" in data:
+        new_auto_debit = bool(data["auto_debit"])
+        if new_auto_debit != recurring.auto_debit:
+            if new_auto_debit:
+                recurring.auto_debit = True
+                recurring.current_due_date = None
+                recurring.paid_at = None
+                if not recurring.start_date:
+                    recurring.start_date = dt.date.today()
+                _materialize_transactions(recurring)
+            else:
+                if recurring.payment_method == "credit":
+                    raise ApiError("Lancamento manual nao pode ser no cartao de credito", 400)
+                Transaction.query.filter_by(recurring_transaction_id=recurring.id, status="scheduled").delete(
+                    synchronize_session=False
+                )
+                recurring.auto_debit = False
+                recurring.frequency = "monthly"
+                recurring.next_run_date = None
+                if not recurring.day_of_month or not (1 <= recurring.day_of_month <= 31):
+                    raise ApiError("Dia de vencimento invalido", 400)
+                recurring.current_due_date = _due_date_for(recurring.day_of_month)
+                recurring.paid_at = None
+
     editable_fields_changed = False
     if "description" in data:
         description = (data["description"] or "").strip()
@@ -277,7 +356,12 @@ def update_recurring(recurring_id):
         recurring.category_id = category.id
         editable_fields_changed = True
     if "day_of_month" in data:
-        recurring.day_of_month = data["day_of_month"]
+        day_of_month = data["day_of_month"]
+        if not recurring.auto_debit and (not day_of_month or not (1 <= int(day_of_month) <= 31)):
+            raise ApiError("Dia de vencimento invalido", 400)
+        recurring.day_of_month = day_of_month
+        if not recurring.auto_debit and recurring.paid_at is None:
+            recurring.current_due_date = _due_date_for(recurring.day_of_month, recurring.current_due_date)
         editable_fields_changed = True
     if "end_date" in data:
         end_date = dt.date.fromisoformat(data["end_date"]) if data["end_date"] else None
@@ -294,6 +378,8 @@ def update_recurring(recurring_id):
     if "account_id" in data or "payment_method" in data:
         payment_method = data.get("payment_method", recurring.payment_method)
         account_id = data.get("account_id", recurring.account_id)
+        if payment_method == "credit" and not recurring.auto_debit:
+            raise ApiError("Lancamento manual nao pode ser no cartao de credito", 400)
         if payment_method == "credit":
             new_account = Account.query.filter_by(id=account_id, user_id=g.current_user.id, type="credit_card").first()
             if new_account is None or not new_account.credit_card:
@@ -303,22 +389,22 @@ def update_recurring(recurring_id):
             if new_account is None:
                 raise ApiError("Conta corrente nao encontrada", 404)
 
-        if edit_scope == "current_and_future":
+        if edit_scope == "current_and_future" and recurring.auto_debit:
             _move_current_occurrence(recurring, new_account, payment_method)
 
         recurring.account_id = new_account.id
         recurring.payment_method = payment_method
         structural_fields_changed = True
-    if "frequency" in data:
+    if "frequency" in data and recurring.auto_debit:
         if data["frequency"] not in ("monthly", "weekly", "yearly"):
             raise ApiError("Frequencia invalida", 400)
         recurring.frequency = data["frequency"]
         structural_fields_changed = True
-    if "start_date" in data and edit_scope == "current_and_future":
+    if "start_date" in data and edit_scope == "current_and_future" and recurring.auto_debit:
         recurring.start_date = dt.date.fromisoformat(data["start_date"])
         structural_fields_changed = True
 
-    if (editable_fields_changed or structural_fields_changed) and recurring.active:
+    if recurring.auto_debit and (editable_fields_changed or structural_fields_changed) and recurring.active:
         Transaction.query.filter_by(recurring_transaction_id=recurring.id, status="scheduled").delete(
             synchronize_session=False
         )
@@ -327,14 +413,15 @@ def update_recurring(recurring_id):
     if "active" in data:
         was_active = recurring.active
         recurring.active = bool(data["active"])
-        if not recurring.active and was_active:
-            Transaction.query.filter_by(
-                recurring_transaction_id=recurring.id, status="scheduled"
-            ).delete(synchronize_session=False)
-        elif recurring.active and not was_active:
-            _materialize_transactions(recurring)
+        if recurring.auto_debit:
+            if not recurring.active and was_active:
+                Transaction.query.filter_by(
+                    recurring_transaction_id=recurring.id, status="scheduled"
+                ).delete(synchronize_session=False)
+            elif recurring.active and not was_active:
+                _materialize_transactions(recurring)
 
-    if editable_fields_changed or structural_fields_changed or "active" in data:
+    if editable_fields_changed or structural_fields_changed or "active" in data or "auto_debit" in data:
         db.session.flush()
         if recurring.payment_method != "credit":
             recalc_account_balance(recurring.account)
@@ -385,3 +472,56 @@ def delete_recurring(recurring_id):
 
     db.session.commit()
     return {"ok": True}
+
+
+@recurring_bp.post("/<uuid:recurring_id>/mark-paid")
+@login_required
+def mark_paid(recurring_id):
+    recurring = RecurringTransaction.query.filter_by(id=recurring_id, user_id=g.current_user.id).first()
+    if recurring is None:
+        raise ApiError("Lancamento nao encontrado", 404)
+    if recurring.auto_debit:
+        raise ApiError("Este lancamento e automatico e nao precisa ser marcado como pago", 400)
+    if recurring.paid_at is not None:
+        raise ApiError("Este lancamento ja foi marcado como pago neste periodo", 400)
+
+    today = dt.date.today()
+    account = recurring.account
+    is_credit = account.type == "credit_card" and account.credit_card
+
+    tx_kwargs = dict(
+        user_id=g.current_user.id,
+        account_id=account.id,
+        category_id=recurring.category_id,
+        description=recurring.description,
+        amount=recurring.amount,
+        type="expense",
+        date=today,
+        status="confirmed",
+        recurring_transaction_id=recurring.id,
+    )
+
+    if is_credit:
+        credit_card = account.credit_card
+        ref_month = invoice_month_for_date(credit_card, today)
+        invoice = get_or_create_invoice(credit_card, ref_month)
+        tx_kwargs["payment_method"] = "credit"
+        tx_kwargs["credit_card_invoice_id"] = invoice.id
+    else:
+        tx_kwargs["payment_method"] = "debit"
+
+    tx = Transaction(**tx_kwargs)
+    db.session.add(tx)
+    db.session.flush()
+
+    if is_credit:
+        recalc_invoice_total(invoice)
+        recalc_credit_card_used_amount(account.credit_card)
+    else:
+        recalc_account_balance(account)
+
+    recurring.paid_at = today
+    recurring.last_transaction_id = tx.id
+
+    db.session.commit()
+    return {"recurring_transaction": recurring.to_dict(), "transaction": tx.to_dict()}
