@@ -66,10 +66,12 @@ def summary():
         .filter(Account.user_id == g.current_user.id, Account.archived.is_(False))
         .all()
     )
+    current_month_start = dt.date(today.year, today.month, 1)
     unpaid_invoices = (
         CreditCardInvoice.query.filter(
             CreditCardInvoice.credit_card_id.in_([c.id for c in cards]),
             CreditCardInvoice.status.in_(("open", "closed")),
+            CreditCardInvoice.reference_month <= current_month_start,
         ).all()
         if cards
         else []
