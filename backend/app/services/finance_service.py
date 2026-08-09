@@ -94,7 +94,11 @@ def recalc_credit_card_used_amount(credit_card):
         db.session.query(
             db.func.coalesce(db.func.sum(CreditCardInvoice.total_amount - CreditCardInvoice.paid_amount), 0)
         )
-        .filter(CreditCardInvoice.credit_card_id == credit_card.id, CreditCardInvoice.status == "open")
+        .filter(
+            CreditCardInvoice.credit_card_id == credit_card.id,
+            CreditCardInvoice.status.in_(("open", "closed")),
+            CreditCardInvoice.total_amount > CreditCardInvoice.paid_amount,
+        )
         .scalar()
     ) or Decimal("0")
 

@@ -66,14 +66,15 @@ def summary():
         .filter(Account.user_id == g.current_user.id, Account.archived.is_(False))
         .all()
     )
-    open_invoices = (
+    unpaid_invoices = (
         CreditCardInvoice.query.filter(
-            CreditCardInvoice.credit_card_id.in_([c.id for c in cards]), CreditCardInvoice.status == "open"
+            CreditCardInvoice.credit_card_id.in_([c.id for c in cards]),
+            CreditCardInvoice.status.in_(("open", "closed")),
         ).all()
         if cards
         else []
     )
-    outstanding_invoices = [i for i in open_invoices if (i.total_amount - i.paid_amount) > 0]
+    outstanding_invoices = [i for i in unpaid_invoices if (i.total_amount - i.paid_amount) > 0]
     faturas_abertas_total = sum((i.total_amount - i.paid_amount for i in outstanding_invoices), Decimal("0"))
 
     def pct_change(curr, prev):
