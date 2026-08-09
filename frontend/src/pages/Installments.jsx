@@ -3,6 +3,7 @@ import { installmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, fmtDateShort } from '../utils/format';
+import { IconPencil, IconChevronDown } from '../components/icons';
 import AdvanceInstallmentModal from '../components/modals/AdvanceInstallmentModal';
 import CancelInstallmentModal from '../components/modals/CancelInstallmentModal';
 import TransactionModal from '../components/modals/TransactionModal';
@@ -13,6 +14,8 @@ export default function Installments() {
   const [advancePlan, setAdvancePlan] = useState(null);
   const [cancelPlan, setCancelPlan] = useState(null);
   const [newModalOpen, setNewModalOpen] = useState(false);
+  const [expandedPlan, setExpandedPlan] = useState(null);
+  const [editingTx, setEditingTx] = useState(null);
 
   const plans = data?.installment_plans || [];
 
@@ -69,6 +72,8 @@ export default function Installments() {
             .filter((t) => t.status === 'scheduled')
             .sort((a, b) => a.installment_number - b.installment_number);
           const nextTx = scheduledTxs[0];
+          const allTxs = [...p.transactions].sort((a, b) => a.installment_number - b.installment_number);
+          const isExpanded = expandedPlan === p.id;
 
           return (
             <div className="parc-item" key={p.id}>
@@ -103,24 +108,81 @@ export default function Installments() {
                 </span>
               </div>
 
-              {scheduledTxs.length > 0 && (
-                <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
-                  <button
-                    type="button"
-                    className="filter-clear"
-                    style={{ color: 'var(--teal)' }}
-                    onClick={() => setAdvancePlan(p)}
-                  >
-                    Adiantar parcelas
-                  </button>
-                  <button
-                    type="button"
-                    className="filter-clear"
-                    style={{ color: 'var(--brick)' }}
-                    onClick={() => setCancelPlan(p)}
-                  >
-                    Cancelar parcelas
-                  </button>
+              <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
+                {scheduledTxs.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="filter-clear"
+                      style={{ color: 'var(--teal)' }}
+                      onClick={() => setAdvancePlan(p)}
+                    >
+                      Adiantar parcelas
+                    </button>
+                    <button
+                      type="button"
+                      className="filter-clear"
+                      style={{ color: 'var(--brick)' }}
+                      onClick={() => setCancelPlan(p)}
+                    >
+                      Cancelar parcelas
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="filter-clear"
+                  style={{ color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', gap: 4 }}
+                  onClick={() => setExpandedPlan(isExpanded ? null : p.id)}
+                >
+                  {isExpanded ? 'Ocultar parcelas' : 'Ver parcelas'}
+                  <IconChevronDown
+                    style={{ width: 12, height: 12, transform: isExpanded ? 'rotate(180deg)' : 'none' }}
+                  />
+                </button>
+              </div>
+
+              {isExpanded && (
+                <div style={{ marginTop: 10, borderTop: '1px solid var(--line)', paddingTop: 10 }}>
+                  {allTxs.map((tx) => (
+                    <div
+                      key={tx.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 0',
+                        fontSize: 13,
+                      }}
+                    >
+                      <span style={{ color: 'var(--ink-soft)' }}>
+                        {tx.installment_number}/{p.installments_count} · {fmtDateShort(tx.date)}
+                        {tx.status === 'confirmed' ? ' · paga' : ''}
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span className="num">{fmt(tx.amount)}</span>
+                        <button
+                          type="button"
+                          title="Editar parcela"
+                          onClick={() => setEditingTx(tx)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: 24,
+                            height: 24,
+                            borderRadius: 6,
+                            border: 'none',
+                            background: 'transparent',
+                            color: 'var(--ink-faint)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <IconPencil style={{ width: 13, height: 13 }} />
+                        </button>
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -156,6 +218,20 @@ export default function Installments() {
         onClose={() => setNewModalOpen(false)}
         onCreated={() => {
           setNewModalOpen(false);
+          reload();
+        }}
+      />
+
+      <TransactionModal
+        open={!!editingTx}
+        transaction={editingTx}
+        onClose={() => setEditingTx(null)}
+        onCreated={() => {
+          setEditingTx(null);
+          reload();
+        }}
+        onDeleted={() => {
+          setEditingTx(null);
           reload();
         }}
       />
