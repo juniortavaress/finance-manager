@@ -88,13 +88,13 @@ export default function Accounts() {
     return banks.find((b) => b.id === account.bank_id)?.color_hex || FALLBACK_COLOR;
   }
 
-  // Pivo: agrupa por mes, uma barra por cartao dentro de cada grupo. Grafico mostra so os ultimos 6 meses.
+  // Pivo: agrupa por mes, uma barra por cartao dentro de cada grupo.
   const monthGroups = useMemo(() => {
     const months = new Set();
     Object.values(invoicesByCard).forEach((invoices) => {
       invoices.forEach((inv) => months.add(inv.reference_month));
     });
-    const sortedMonths = [...months].sort().slice(-6);
+    const sortedMonths = [...months].sort();
 
     return sortedMonths.map((referenceMonth) => ({
       referenceMonth,
