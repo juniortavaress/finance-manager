@@ -140,7 +140,28 @@ export default function Accounts() {
                 <div className="t-sub">disponível</div>
               </div>
               <div className="acct-type-card">
-                <div className="t-label">Cartão de crédito</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div className="t-label">Cartão de crédito</div>
+                  {outstandingInvoice && (
+                    <button
+                      type="button"
+                      style={{
+                        border: 'none',
+                        borderRadius: 6,
+                        background: 'var(--teal-soft)',
+                        color: 'var(--teal)',
+                        fontWeight: 700,
+                        fontSize: 11.5,
+                        padding: '4px 9px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}
+                      onClick={() => setPayingCard({ card: creditCard.credit_card, invoice: outstandingInvoice, bankName: bank.name })}
+                    >
+                      Pagar fatura
+                    </button>
+                  )}
+                </div>
                 <div className="t-val num">
                   {creditCard?.credit_card ? fmt(creditCard.credit_card.used_amount) : '—'}
                 </div>
@@ -149,16 +170,6 @@ export default function Accounts() {
                     ? `de ${fmt(creditCard.credit_card.credit_limit)} · fecha dia ${creditCard.credit_card.closing_day} · vence dia ${creditCard.credit_card.due_day}`
                     : 'sem cartão'}
                 </div>
-                {outstandingInvoice && (
-                  <button
-                    type="button"
-                    className="filter-clear"
-                    style={{ color: 'var(--teal)', fontWeight: 700, marginTop: 8, padding: 0 }}
-                    onClick={() => setPayingCard({ card: creditCard.credit_card, invoice: outstandingInvoice, bankName: bank.name })}
-                  >
-                    Pagar fatura
-                  </button>
-                )}
               </div>
               <div className="acct-type-card">
                 <div className="t-label">Investimento</div>
