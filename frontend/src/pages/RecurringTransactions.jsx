@@ -29,7 +29,6 @@ export default function RecurringTransactions() {
   const manualActive = activeRecurring.filter((r) => !r.auto_debit);
   const overdue = manualActive.filter((r) => !r.paid_at && r.current_due_date < today);
   const dueToday = manualActive.filter((r) => !r.paid_at && r.current_due_date === today);
-  const paidThisPeriod = manualActive.filter((r) => r.paid_at);
 
   async function toggleRecurring(recurring) {
     try {
@@ -67,13 +66,12 @@ export default function RecurringTransactions() {
         </div>
       </div>
 
-      <div className="card stat-card" style={{ '--stripe': '#C0912F', marginBottom: 16 }}>
-        <div className="label">Total comprometido por mês</div>
-        <div className="value num">{fmt(totalCommitted)}</div>
-        <div className="delta">{activeRecurring.length} recorrentes ativos</div>
-      </div>
-
       <div className="grid grid-3" style={{ marginBottom: 20 }}>
+        <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
+          <div className="label">Total comprometido por mês</div>
+          <div className="value num">{fmt(totalCommitted)}</div>
+          <div className="delta">{activeRecurring.length} recorrentes ativos</div>
+        </div>
         <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
           <div className="label">Vencendo hoje</div>
           <div className="value num">{dueToday.length}</div>
@@ -81,10 +79,6 @@ export default function RecurringTransactions() {
         <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
           <div className="label">Atrasados</div>
           <div className="value num">{overdue.length}</div>
-        </div>
-        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
-          <div className="label">Pagos este período</div>
-          <div className="value num">{paidThisPeriod.length}</div>
         </div>
       </div>
 
