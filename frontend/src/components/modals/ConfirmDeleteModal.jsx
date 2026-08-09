@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ModalShell from './ModalShell';
+import { useToast } from '../../context/ToastContext';
 
 /**
  * Modal de confirmacao generico para exclusao. Usado por todos os modais com
@@ -15,23 +16,22 @@ export default function ConfirmDeleteModal({
   confirmLabel = 'Excluir',
   confirmingLabel = 'Excluindo...',
   confirmVariant = 'danger',
-  errorFallback = 'Não foi possível concluir a exclusão.',
+  errorFallback = 'Erro ao excluir. Tente novamente.',
   loading = false,
   confirmDisabled = false,
   children,
 }) {
+  const { showError } = useToast();
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
 
   if (!open) return null;
 
   async function handleConfirm() {
     setSubmitting(true);
-    setError('');
     try {
       await onConfirm();
     } catch (err) {
-      setError(err.message || errorFallback);
+      showError(errorFallback);
     } finally {
       setSubmitting(false);
     }
@@ -47,8 +47,6 @@ export default function ConfirmDeleteModal({
           </button>
         </div>
         <div className="modal-body">
-          {error && <div className="form-error-banner">{error}</div>}
-
           {loading ? (
             <p style={{ fontSize: 13.5, color: 'var(--ink-soft)' }}>Verificando...</p>
           ) : (
