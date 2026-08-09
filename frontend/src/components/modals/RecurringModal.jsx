@@ -23,6 +23,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
   const [frequency, setFrequency] = useState('monthly');
   const [startDate, setStartDate] = useState(todayIso());
   const [endDate, setEndDate] = useState('');
+  const [autoDebit, setAutoDebit] = useState(true);
   const [editScope, setEditScope] = useState('current_and_future');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -42,6 +43,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
       setStartDate(recurring.start_date);
       setEndDate(recurring.end_date || '');
       setCategoryId(recurring.category_id);
+      setAutoDebit(recurring.auto_debit !== false);
       setAccountRef(
         recurring.payment_method === 'credit' ? `credit:${recurring.account_id}` : `checking:${recurring.account_id}`
       );
@@ -52,6 +54,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
       setFrequency('monthly');
       setStartDate(todayIso());
       setEndDate('');
+      setAutoDebit(true);
       setCategoryId(expenseCategories[0]?.id || '');
       setAccountRef(checkingAccounts[0] ? `checking:${checkingAccounts[0].id}` : '');
     }
@@ -66,7 +69,9 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
       : `checking:${recurring.account_id}`
     : null;
   const structuralFieldsChanged =
-    isEditing && (accountRef !== originalAccountRef || frequency !== recurring.frequency || startDate !== recurring.start_date);
+    isEditing &&
+    autoDebit &&
+    (accountRef !== originalAccountRef || frequency !== recurring.frequency || startDate !== recurring.start_date);
 
   async function handleDelete() {
     await recurringApi.remove(recurring.id);
@@ -85,6 +90,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
     if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
     if (!categoryId) return setError('Selecione uma categoria.');
     if (!accountRef) return setError('Selecione uma conta ou cartão.');
+    if (!autoDebit && isCreditSelected) return setError('Descontar manual não pode ser no cartão de crédito.');
 
     setSubmitting(true);
     try {
@@ -94,8 +100,11 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
           amount: numericAmount,
           category_id: categoryId,
           day_of_month: dayOfMonth,
-          end_date: endDate || null,
+          auto_debit: autoDebit,
         };
+        if (autoDebit) {
+          payload.end_date = endDate || null;
+        }
         if (structuralFieldsChanged) {
           const [, accId] = accountRef.split(':');
           payload.account_id = accId;
@@ -117,10 +126,11 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
           account_id: accId,
           category_id: categoryId,
           payment_method: isCreditSelected ? 'credit' : 'debit',
-          frequency,
+          auto_debit: autoDebit,
+          frequency: autoDebit ? frequency : 'monthly',
           day_of_month: dayOfMonth,
           start_date: startDate,
-          end_date: endDate || null,
+          end_date: autoDebit ? endDate || null : null,
         });
         showSuccess('Recorrente criado com sucesso.');
       }
@@ -153,6 +163,16 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
         <form className="modal-body" onSubmit={handleSubmit}>
           {error && <div className="form-error-banner">{error}</div>}
 
+          <div className="recorrente-row">
+            <div className={`toggle${autoDebit ? ' on' : ''}`} onClick={() => setAutoDebit((v) => !v)} />
+            <span>Descontar automaticamente</span>
+          </div>
+          <div className="fatura-note show" style={{ marginBottom: 4 }}>
+            {autoDebit
+              ? 'A transação é lançada sozinha todo período, sem precisar de ação sua.'
+              : 'Funciona como um lembrete: você marca como pago manualmente quando quitar (ex.: boleto do aluguel).'}
+          </div>
+
           <div className="field">
             <label>Descrição</label>
             <input
@@ -174,7 +194,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
               />
             </div>
             <div className="field">
-              <label>Dia da cobrança</label>
+              <label>{autoDebit ? 'Dia da cobrança' : 'Dia de vencimento'}</label>
               <input
                 type="number"
                 min="1"
@@ -206,13 +226,15 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
                   </option>
                 ))}
               </optgroup>
-              <optgroup label="Cartões de crédito">
-                {creditCardAccounts.map((a) => (
-                  <option key={a.id} value={`credit:${a.id}`}>
-                    {a.name}
-                  </option>
-                ))}
-              </optgroup>
+              {autoDebit && (
+                <optgroup label="Cartões de crédito">
+                  {creditCardAccounts.map((a) => (
+                    <option key={a.id} value={`credit:${a.id}`}>
+                      {a.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
             {isCreditSelected && (
               <div className="fatura-note show" style={{ marginTop: 8 }}>
@@ -221,32 +243,36 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
             )}
           </div>
 
-          <div className="field">
-            <label>Frequência</label>
-            <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-              <option value="monthly">Mensal</option>
-              <option value="weekly">Semanal</option>
-              <option value="yearly">Anual</option>
-            </select>
-          </div>
-
-          <div className="field-row">
-            {(!isEditing || editScope === 'current_and_future') && (
-              <div className="field">
-                <label>Início</label>
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              </div>
-            )}
+          {autoDebit && (
             <div className="field">
-              <label>Fim (opcional)</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                placeholder="sem data final"
-              />
+              <label>Frequência</label>
+              <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
+                <option value="monthly">Mensal</option>
+                <option value="weekly">Semanal</option>
+                <option value="yearly">Anual</option>
+              </select>
             </div>
-          </div>
+          )}
+
+          {autoDebit && (
+            <div className="field-row">
+              {(!isEditing || editScope === 'current_and_future') && (
+                <div className="field">
+                  <label>Início</label>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                </div>
+              )}
+              <div className="field">
+                <label>Fim (opcional)</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  placeholder="sem data final"
+                />
+              </div>
+            </div>
+          )}
 
           {isEditing && structuralFieldsChanged && (
             <div className="field">
