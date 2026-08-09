@@ -92,7 +92,7 @@ export default function Register() {
             <input
               id="password"
               type="password"
-              placeholder="••••••••"
+              placeholder="Digite sua senha"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -104,7 +104,7 @@ export default function Register() {
             <input
               id="confirmPassword"
               type="password"
-              placeholder="••••••••"
+              placeholder="Confirme sua senha"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
