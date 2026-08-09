@@ -80,7 +80,9 @@ class RecurringTransaction(BaseModel):
     auto_debit = db.Column(db.Boolean, nullable=False, default=True)
     current_due_date = db.Column(db.Date, nullable=True)
     paid_at = db.Column(db.Date, nullable=True)
-    last_transaction_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"), nullable=True, index=True)
+    last_transaction_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     account = db.relationship("Account", backref="recurring_transactions")
     category = db.relationship("Category", backref="recurring_transactions")

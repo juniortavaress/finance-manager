@@ -1,4 +1,4 @@
-from flask import jsonify
+from flask import current_app, jsonify
 
 
 class ApiError(Exception):
@@ -29,4 +29,5 @@ def register_error_handlers(app):
 
     @app.errorhandler(500)
     def handle_500(err):
+        current_app.logger.exception(err)
         return jsonify({"error": "Erro interno do servidor"}), 500
