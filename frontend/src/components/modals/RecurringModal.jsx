@@ -228,11 +228,6 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
                 </optgroup>
               )}
             </select>
-            {isCreditSelected && (
-              <div className="fatura-note show" style={{ marginTop: 8 }}>
-                Todo mês, na data da cobrança, será lançado na fatura aberta do cartão selecionado.
-              </div>
-            )}
           </div>
 
           <div className="field">
