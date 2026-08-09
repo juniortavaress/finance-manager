@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { recurringApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
+import { maskToNumber, numberToMasked } from '../../utils/currency';
 import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import CurrencyInput from '../CurrencyInput';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -37,7 +39,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
     setEditScope('current_and_future');
     if (isEditing) {
       setDescription(recurring.description);
-      setAmount(String(recurring.amount));
+      setAmount(numberToMasked(recurring.amount));
       setDayOfMonth(recurring.day_of_month || 5);
       setFrequency(recurring.frequency);
       setStartDate(recurring.start_date);
@@ -84,13 +86,16 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
     e.preventDefault();
     setError('');
 
-    const numericAmount = parseFloat((amount || '').toString().replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+    const numericAmount = maskToNumber(amount);
+
+    const numericDay = Number(dayOfMonth);
 
     if (!description.trim()) return setError('Informe uma descrição.');
     if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
     if (!categoryId) return setError('Selecione uma categoria.');
     if (!accountRef) return setError('Selecione uma conta ou cartão.');
     if (!autoDebit && isCreditSelected) return setError('Descontar manual não pode ser no cartão de crédito.');
+    if (!dayOfMonth || numericDay < 1 || numericDay > 31) return setError('Informe um dia válido (1 a 31).');
 
     setSubmitting(true);
     try {
@@ -99,12 +104,10 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
           description: description.trim(),
           amount: numericAmount,
           category_id: categoryId,
-          day_of_month: dayOfMonth,
+          day_of_month: numericDay,
           auto_debit: autoDebit,
         };
-        if (autoDebit) {
-          payload.end_date = endDate || null;
-        }
+        payload.end_date = endDate || null;
         if (structuralFieldsChanged) {
           const [, accId] = accountRef.split(':');
           payload.account_id = accId;
@@ -127,10 +130,10 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
           category_id: categoryId,
           payment_method: isCreditSelected ? 'credit' : 'debit',
           auto_debit: autoDebit,
-          frequency: autoDebit ? frequency : 'monthly',
-          day_of_month: dayOfMonth,
+          frequency,
+          day_of_month: numericDay,
           start_date: startDate,
-          end_date: autoDebit ? endDate || null : null,
+          end_date: endDate || null,
         });
         showSuccess('Recorrente criado com sucesso.');
       }
@@ -176,21 +179,20 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
           <div className="field-row">
             <div className="field">
               <label>Valor</label>
-              <input
-                type="text"
-                placeholder="R$ 0,00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
+              <CurrencyInput value={amount} onChange={setAmount} />
             </div>
             <div className="field">
               <label>{autoDebit ? 'Dia da cobrança' : 'Dia de vencimento'}</label>
               <input
-                type="number"
-                min="1"
-                max="31"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={dayOfMonth}
-                onChange={(e) => setDayOfMonth(Number(e.target.value))}
+                onChange={(e) => {
+                  const v = e.target.value.replace(/\D/g, '');
+                  if (v === '') return setDayOfMonth('');
+                  setDayOfMonth(Math.min(31, Number(v)));
+                }}
               />
             </div>
           </div>
@@ -233,36 +235,32 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
             )}
           </div>
 
-          {autoDebit && (
-            <div className="field">
-              <label>Frequência</label>
-              <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-                <option value="monthly">Mensal</option>
-                <option value="weekly">Semanal</option>
-                <option value="yearly">Anual</option>
-              </select>
-            </div>
-          )}
+          <div className="field">
+            <label>Frequência</label>
+            <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
+              <option value="monthly">Mensal</option>
+              <option value="weekly">Semanal</option>
+              <option value="yearly">Anual</option>
+            </select>
+          </div>
 
-          {autoDebit && (
-            <div className="field-row">
-              {(!isEditing || editScope === 'current_and_future') && (
-                <div className="field">
-                  <label>Início</label>
-                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                </div>
-              )}
+          <div className="field-row">
+            {(!isEditing || editScope === 'current_and_future') && (
               <div className="field">
-                <label>Fim (opcional)</label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  placeholder="sem data final"
-                />
+                <label>Início</label>
+                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
+            )}
+            <div className="field">
+              <label>Fim (opcional)</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                placeholder="sem data final"
+              />
             </div>
-          )}
+          </div>
 
           {isEditing && structuralFieldsChanged && (
             <div className="field">
