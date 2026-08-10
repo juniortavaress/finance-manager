@@ -140,78 +140,127 @@ def balance_by_bank():
     return {"banks": result}
 
 
+def _first_transaction_date(user_id):
+    return db.session.query(db.func.min(Transaction.date)).filter(Transaction.user_id == user_id).scalar()
+
+
 @dashboard_bp.get("/income-vs-expense")
 @login_required
 def income_vs_expense():
-    months = int(request.args.get("months", 6))
+    granularity = request.args.get("granularity", "monthly")
+    if granularity not in ("monthly", "yearly"):
+        granularity = "monthly"
     today = dt.date.today()
-    result = []
-    cursor = dt.date(today.year, today.month, 1)
-    periods = []
-    for i in range(months - 1, -1, -1):
-        periods.append(add_months(cursor, -i))
+    earliest = _first_transaction_date(g.current_user.id)
+    start_date = earliest or today
 
-    for period in periods:
-        start, end = _month_bounds(period.year, period.month)
-        rows = (
-            db.session.query(Transaction.type, db.func.coalesce(db.func.sum(Transaction.amount), 0))
-            .filter(
-                Transaction.user_id == g.current_user.id,
-                Transaction.date >= start,
-                Transaction.date <= end,
-                Transaction.status == "confirmed",
-                Transaction.is_invoice_payment.is_(False),
-            )
-            .group_by(Transaction.type)
-            .all()
+    rows = (
+        db.session.query(
+            db.func.extract("year", Transaction.date),
+            db.func.extract("month", Transaction.date),
+            Transaction.type,
+            db.func.coalesce(db.func.sum(Transaction.amount), 0),
         )
-        totals = {"income": Decimal("0"), "expense": Decimal("0")}
-        for t, v in rows:
-            totals[t] = v
-        result.append(
+        .filter(
+            Transaction.user_id == g.current_user.id,
+            Transaction.date >= start_date,
+            Transaction.status == "confirmed",
+            Transaction.is_invoice_payment.is_(False),
+        )
+        .group_by(
+            db.func.extract("year", Transaction.date),
+            db.func.extract("month", Transaction.date),
+            Transaction.type,
+        )
+        .all()
+    )
+
+    if granularity == "yearly":
+        totals = {}
+        for y, _m, t, v in rows:
+            totals.setdefault(int(y), {"income": Decimal("0"), "expense": Decimal("0")})[t] = v
+        years = list(range(start_date.year, today.year + 1))
+        result = [
             {
-                "year": period.year,
-                "month": period.month,
-                "income": float(totals["income"]),
-                "expense": float(totals["expense"]),
+                "year": year,
+                "income": float(totals.get(year, {}).get("income", Decimal("0"))),
+                "expense": float(totals.get(year, {}).get("expense", Decimal("0"))),
             }
-        )
-    return {"months": result}
+            for year in years
+        ]
+        return {"periods": result, "granularity": "yearly"}
+
+    totals = {}
+    for y, m, t, v in rows:
+        totals.setdefault((int(y), int(m)), {"income": Decimal("0"), "expense": Decimal("0")})[t] = v
+    start_cursor = dt.date(start_date.year, start_date.month, 1)
+    total_months = (today.year - start_cursor.year) * 12 + (today.month - start_cursor.month) + 1
+    periods = [add_months(start_cursor, i) for i in range(total_months)]
+    result = [
+        {
+            "year": period.year,
+            "month": period.month,
+            "income": float(totals.get((period.year, period.month), {}).get("income", Decimal("0"))),
+            "expense": float(totals.get((period.year, period.month), {}).get("expense", Decimal("0"))),
+        }
+        for period in periods
+    ]
+    return {"periods": result, "granularity": "monthly"}
 
 
 @dashboard_bp.get("/balance-evolution")
 @login_required
 def balance_evolution():
-    months = int(request.args.get("months", 6))
+    granularity = request.args.get("granularity", "monthly")
+    if granularity not in ("monthly", "yearly"):
+        granularity = "monthly"
     today = dt.date.today()
     accounts = Account.query.filter_by(user_id=g.current_user.id, type="checking").all()
 
-    cursor = dt.date(today.year, today.month, 1)
-    periods = [add_months(cursor, -i) for i in range(months - 1, -1, -1)]
+    earliest_tx = _first_transaction_date(g.current_user.id)
+    candidates = [a.opening_balance_date for a in accounts if a.opening_balance_date] + (
+        [earliest_tx] if earliest_tx else []
+    )
+    start_date = min(candidates) if candidates else today
 
-    result = []
-    for period in periods:
-        _, end = _month_bounds(period.year, period.month)
-        total = Decimal("0")
-        for account in accounts:
-            rows = (
-                db.session.query(Transaction.type, db.func.coalesce(db.func.sum(Transaction.amount), 0))
-                .filter(
-                    Transaction.account_id == account.id,
-                    Transaction.payment_method == "debit",
-                    Transaction.status == "confirmed",
-                    Transaction.date >= account.opening_balance_date,
-                    Transaction.date <= end,
-                )
-                .group_by(Transaction.type)
-                .all()
+    if granularity == "yearly":
+        period_ends = [dt.date(year, 12, 31) for year in range(start_date.year, today.year + 1)]
+    else:
+        start_cursor = dt.date(start_date.year, start_date.month, 1)
+        total_months = (today.year - start_cursor.year) * 12 + (today.month - start_cursor.month) + 1
+        month_periods = [add_months(start_cursor, i) for i in range(total_months)]
+        period_ends = [_month_bounds(p.year, p.month)[1] for p in month_periods]
+
+    balance_by_end = {end: Decimal("0") for end in period_ends}
+    for account in accounts:
+        txs = (
+            Transaction.query.filter(
+                Transaction.account_id == account.id,
+                Transaction.payment_method == "debit",
+                Transaction.status == "confirmed",
+                Transaction.date >= account.opening_balance_date,
             )
-            totals = {"income": Decimal("0"), "expense": Decimal("0")}
-            for t, v in rows:
-                totals[t] = v
-            total += account.opening_balance + totals["income"] - totals["expense"]
-        result.append({"year": period.year, "month": period.month, "balance": float(total)})
-    return {"months": result}
+            .order_by(Transaction.date.asc())
+            .all()
+        )
+        running = account.opening_balance
+        tx_idx = 0
+        for end in period_ends:
+            while tx_idx < len(txs) and txs[tx_idx].date <= end:
+                tx = txs[tx_idx]
+                running += tx.amount if tx.type == "income" else -tx.amount
+                tx_idx += 1
+            balance_by_end[end] += running
+
+    if granularity == "yearly":
+        result = [
+            {"year": end.year, "balance": float(balance_by_end[end])} for end in period_ends
+        ]
+    else:
+        result = [
+            {"year": end.year, "month": end.month, "balance": float(balance_by_end[end])} for end in period_ends
+        ]
+    return {"periods": result, "granularity": granularity}
 
 
 @dashboard_bp.get("/upcoming-invoices")

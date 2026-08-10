@@ -4,6 +4,9 @@ import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, monthLabel, monthLabelFull, fmtDateShort } from '../utils/format';
 import TransactionModal from '../components/modals/TransactionModal';
+import IncomeExpenseChart from '../components/charts/IncomeExpenseChart';
+import BalanceEvolutionChart from '../components/charts/BalanceEvolutionChart';
+import PeriodGranularitySelect from '../components/PeriodGranularitySelect';
 
 function todayPeriod() {
   const now = new Date();
@@ -14,6 +17,8 @@ export default function Dashboard() {
   const { categoryById } = useData();
   const [period, setPeriod] = useState(todayPeriod());
   const [modalOpen, setModalOpen] = useState(false);
+  const [rdGranularity, setRdGranularity] = useState('monthly');
+  const [evoGranularity, setEvoGranularity] = useState('monthly');
 
   const { data: summary, reload: reloadSummary } = useFetch(
     () => dashboardApi.summary(period.year, period.month),
@@ -24,8 +29,8 @@ export default function Dashboard() {
     [period.year, period.month]
   );
   const { data: bankData, reload: reloadBanks } = useFetch(() => dashboardApi.balanceByBank(), []);
-  const { data: rdData } = useFetch(() => dashboardApi.incomeVsExpense(6), []);
-  const { data: evoData } = useFetch(() => dashboardApi.balanceEvolution(6), []);
+  const { data: rdData } = useFetch(() => dashboardApi.incomeVsExpense(rdGranularity), [rdGranularity]);
+  const { data: evoData } = useFetch(() => dashboardApi.balanceEvolution(evoGranularity), [evoGranularity]);
   const { data: txData, reload: reloadTx } = useFetch(() => dashboardApi.recentTransactions(5), []);
   const { data: invData, reload: reloadInvoices } = useFetch(() => dashboardApi.upcomingInvoices(), []);
 
@@ -55,21 +60,8 @@ export default function Dashboard() {
   const categories = catData?.categories || [];
   const catMax = Math.max(1, ...categories.map((c) => c.total));
 
-  const months = rdData?.months || [];
-  const rdScale = 110 / Math.max(1, ...months.flatMap((m) => [m.income, m.expense]));
-
-  const evoMonths = evoData?.months || [];
-  const evoValues = evoMonths.map((m) => m.balance);
-  const evoMin = Math.min(0, ...evoValues);
-  const evoMax = Math.max(1, ...evoValues);
-  const evoRange = evoMax - evoMin || 1;
-  const evoPoints = evoMonths
-    .map((m, i) => {
-      const x = (i / Math.max(1, evoMonths.length - 1)) * 300;
-      const y = 130 - ((m.balance - evoMin) / evoRange) * 120 - 5;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
+  const rdPeriods = rdData?.periods || [];
+  const evoPeriods = evoData?.periods || [];
 
   return (
     <div className="screen active">
@@ -93,17 +85,17 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-4" style={{ marginBottom: 20 }}>
-        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
+        <div className="card stat-card" style={{ '--stripe': 'var(--teal)' }}>
           <div className="label">Saldo total</div>
           <div className="value num">{fmt(summary?.saldo_total ?? 0)}</div>
           <div className="delta">contas correntes</div>
         </div>
-        <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
+        <div className="card stat-card" style={{ '--stripe': 'var(--gold)' }}>
           <div className="label">Receitas do mês</div>
           <div className="value num">{fmt(summary?.receitas_mes ?? 0)}</div>
           <div className="delta">{summary?.receitas_mes_qtd ?? 0} entradas</div>
         </div>
-        <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
+        <div className="card stat-card" style={{ '--stripe': 'var(--brick)' }}>
           <div className="label">Despesas do mês</div>
           <div className="value num">{fmt(summary?.despesas_mes ?? 0)}</div>
           <div className="delta">
@@ -112,7 +104,7 @@ export default function Dashboard() {
               : 'sem dado do mês anterior'}
           </div>
         </div>
-        <div className="card stat-card" style={{ '--stripe': '#5C6D6A' }}>
+        <div className="card stat-card" style={{ '--stripe': 'var(--ink-soft)' }}>
           <div className="label">Faturas em aberto</div>
           <div className="value num">{fmt(summary?.faturas_abertas_total ?? 0)}</div>
           <div className="delta">{summary?.faturas_abertas_qtd ?? 0} faturas</div>
@@ -161,32 +153,26 @@ export default function Dashboard() {
 
       <div className="grid grid-2" style={{ marginBottom: 20 }}>
         <div className="card">
-          <h3>Receitas x Despesas — últimos 6 meses</h3>
-          <div className="rd-chart">
-            {months.map((m) => (
-              <div className="rd-col" key={`${m.year}-${m.month}`}>
-                <div className="rd-bars">
-                  <div className="rd-bar" style={{ height: `${m.income * rdScale}px`, background: '#0F5C5C' }} />
-                  <div className="rd-bar" style={{ height: `${m.expense * rdScale}px`, background: '#A6432C' }} />
-                </div>
-                <div className="rd-month">{monthLabel(m.month)}</div>
-              </div>
-            ))}
-          </div>
+          <h3>
+            Receitas x Despesas
+            <PeriodGranularitySelect value={rdGranularity} onChange={setRdGranularity} />
+          </h3>
+          <IncomeExpenseChart
+            periods={rdPeriods}
+            granularity={rdGranularity}
+            onSelectPeriod={(p) => setPeriod(p)}
+          />
         </div>
         <div className="card">
-          <h3>Evolução do saldo</h3>
-          <div className="line-wrap">
-            <svg viewBox="0 0 300 130" width="100%" height="130" preserveAspectRatio="none">
-              <polyline points={evoPoints} fill="none" stroke="#0F5C5C" strokeWidth="2.5" />
-              <polygon points={`0,130 ${evoPoints} 300,130`} fill="#0F5C5C" opacity="0.08" />
-            </svg>
-            <div className="line-labels">
-              {evoMonths.map((m) => (
-                <span key={`${m.year}-${m.month}`}>{monthLabel(m.month)}</span>
-              ))}
-            </div>
-          </div>
+          <h3>
+            Evolução do saldo
+            <PeriodGranularitySelect value={evoGranularity} onChange={setEvoGranularity} />
+          </h3>
+          <BalanceEvolutionChart
+            periods={evoPeriods}
+            granularity={evoGranularity}
+            onSelectPeriod={(p) => setPeriod(p)}
+          />
         </div>
       </div>
 

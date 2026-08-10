@@ -67,8 +67,8 @@ export const dashboardApi = {
   summary: (year, month) => api.get('/dashboard/summary', { year, month }),
   spendingByCategory: (year, month) => api.get('/dashboard/spending-by-category', { year, month }),
   balanceByBank: () => api.get('/dashboard/balance-by-bank'),
-  incomeVsExpense: (months) => api.get('/dashboard/income-vs-expense', { months }),
-  balanceEvolution: (months) => api.get('/dashboard/balance-evolution', { months }),
+  incomeVsExpense: (granularity = 'monthly') => api.get('/dashboard/income-vs-expense', { granularity }),
+  balanceEvolution: (granularity = 'monthly') => api.get('/dashboard/balance-evolution', { granularity }),
   upcomingInvoices: () => api.get('/dashboard/upcoming-invoices'),
   recentTransactions: (limit) => api.get('/dashboard/recent-transactions', { limit }),
 };
