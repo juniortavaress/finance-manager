@@ -3,6 +3,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 20px 22px;
+  min-width: 0;
 }
 .card h3 {
   font-size: 12px;
@@ -161,6 +162,8 @@
   overflow-x: auto;
   overflow-y: hidden;
   cursor: grab;
+  min-width: 0;
+  max-width: 100%;
 }
 .chart-scroll.dragging {
   cursor: grabbing;

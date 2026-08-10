@@ -5,7 +5,7 @@ export default function ChartScrollContainer({ width, height, children }) {
 
   return (
     <div className="chart-scroll" ref={scrollRef}>
-      <div style={{ width, height }}>{children}</div>
+      <div style={{ width, minWidth: '100%', height }}>{children}</div>
     </div>
   );
 }

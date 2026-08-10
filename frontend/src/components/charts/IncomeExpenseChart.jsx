@@ -48,8 +48,8 @@ export default function IncomeExpenseChart({ periods, granularity, onSelectPerio
             />
             <YAxis hide />
             <Tooltip content={<ChartTooltip formatter={fmt} />} cursor={{ fill: CHART_COLORS.bg }} />
-            <Bar dataKey="income" name="Receita" fill={CHART_COLORS.teal} radius={[2, 2, 0, 0]} />
-            <Bar dataKey="expense" name="Despesa" fill={CHART_COLORS.brick} radius={[2, 2, 0, 0]} />
+            <Bar dataKey="income" name="Receita" fill={CHART_COLORS.teal} radius={[2, 2, 0, 0]} barSize={9} />
+            <Bar dataKey="expense" name="Despesa" fill={CHART_COLORS.brick} radius={[2, 2, 0, 0]} barSize={9} />
           </BarChart>
         </ResponsiveContainer>
       </ChartScrollContainer>
