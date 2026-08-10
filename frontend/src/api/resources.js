@@ -71,6 +71,7 @@ export const dashboardApi = {
   balanceEvolution: (granularity = 'monthly') => api.get('/dashboard/balance-evolution', { granularity }),
   upcomingInvoices: () => api.get('/dashboard/upcoming-invoices'),
   recentTransactions: (limit) => api.get('/dashboard/recent-transactions', { limit }),
+  periodInvoices: () => api.get('/dashboard/period-invoices'),
 };
 
 export const reportsApi = {

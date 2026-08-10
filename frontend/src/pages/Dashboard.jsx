@@ -4,9 +4,12 @@ import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, monthLabel, monthLabelFull, fmtDateShort } from '../utils/format';
 import TransactionModal from '../components/modals/TransactionModal';
+import TransactionsDrilldownModal from '../components/modals/TransactionsDrilldownModal';
+import InvoicesDrilldownModal from '../components/modals/InvoicesDrilldownModal';
 import IncomeExpenseChart from '../components/charts/IncomeExpenseChart';
 import BalanceEvolutionChart from '../components/charts/BalanceEvolutionChart';
 import PeriodGranularitySelect from '../components/PeriodGranularitySelect';
+import { IconChevronDown } from '../components/icons';
 
 function todayPeriod() {
   const now = new Date();
@@ -19,6 +22,7 @@ export default function Dashboard() {
   const [modalOpen, setModalOpen] = useState(false);
   const [rdGranularity, setRdGranularity] = useState('monthly');
   const [evoGranularity, setEvoGranularity] = useState('monthly');
+  const [drilldown, setDrilldown] = useState(null);
 
   const { data: summary, reload: reloadSummary } = useFetch(
     () => dashboardApi.summary(period.year, period.month),
@@ -94,6 +98,14 @@ export default function Dashboard() {
           <div className="label">Receitas do mês</div>
           <div className="value num">{fmt(summary?.receitas_mes ?? 0)}</div>
           <div className="delta">{summary?.receitas_mes_qtd ?? 0} entradas</div>
+          <button
+            type="button"
+            className="stat-card-expand"
+            title="Ver transações"
+            onClick={() => setDrilldown({ kind: 'income' })}
+          >
+            <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+          </button>
         </div>
         <div className="card stat-card" style={{ '--stripe': 'var(--brick)' }}>
           <div className="label">Despesas do mês</div>
@@ -103,11 +115,27 @@ export default function Dashboard() {
               ? `${summary.despesas_variacao_pct >= 0 ? '↑' : '↓'} ${Math.abs(summary.despesas_variacao_pct).toFixed(1)}% vs mês anterior`
               : 'sem dado do mês anterior'}
           </div>
+          <button
+            type="button"
+            className="stat-card-expand"
+            title="Ver transações"
+            onClick={() => setDrilldown({ kind: 'expense' })}
+          >
+            <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+          </button>
         </div>
         <div className="card stat-card" style={{ '--stripe': 'var(--ink-soft)' }}>
           <div className="label">Faturas em aberto</div>
           <div className="value num">{fmt(summary?.faturas_abertas_total ?? 0)}</div>
           <div className="delta">{summary?.faturas_abertas_qtd ?? 0} faturas</div>
+          <button
+            type="button"
+            className="stat-card-expand"
+            title="Ver faturas"
+            onClick={() => setDrilldown({ kind: 'invoices' })}
+          >
+            <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+          </button>
         </div>
       </div>
 
@@ -237,6 +265,30 @@ export default function Dashboard() {
           handleCreated();
         }}
       />
+
+      {drilldown?.kind === 'income' && (
+        <TransactionsDrilldownModal
+          open
+          onClose={() => setDrilldown(null)}
+          title="Receitas do mês"
+          year={period.year}
+          month={period.month}
+          type="income"
+        />
+      )}
+      {drilldown?.kind === 'expense' && (
+        <TransactionsDrilldownModal
+          open
+          onClose={() => setDrilldown(null)}
+          title="Despesas do mês"
+          year={period.year}
+          month={period.month}
+          type="expense"
+        />
+      )}
+      {drilldown?.kind === 'invoices' && (
+        <InvoicesDrilldownModal open onClose={() => setDrilldown(null)} />
+      )}
     </div>
   );
 }

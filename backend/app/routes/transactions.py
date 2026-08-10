@@ -33,6 +33,7 @@ def _parse_filters():
     date_from = request.args.get("date_from")
     date_to = request.args.get("date_to")
     status = request.args.get("status")
+    is_invoice_payment = request.args.get("is_invoice_payment")
 
     if account_id:
         filters.append(Transaction.account_id == account_id)
@@ -48,6 +49,8 @@ def _parse_filters():
         filters.append(Transaction.date >= dt.date.fromisoformat(date_from))
     if date_to:
         filters.append(Transaction.date <= dt.date.fromisoformat(date_to))
+    if is_invoice_payment is not None:
+        filters.append(Transaction.is_invoice_payment.is_(is_invoice_payment.lower() == "true"))
     return filters
 
 

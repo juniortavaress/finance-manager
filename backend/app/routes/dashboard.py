@@ -18,6 +18,25 @@ def _month_bounds(year: int, month: int):
     return start, end
 
 
+def _outstanding_invoices(user_id, year, month):
+    cards = (
+        CreditCard.query.join(Account, Account.id == CreditCard.account_id)
+        .filter(Account.user_id == user_id, Account.archived.is_(False))
+        .all()
+    )
+    if not cards:
+        return [], {}
+    current_month_start = dt.date(year, month, 1)
+    unpaid_invoices = CreditCardInvoice.query.filter(
+        CreditCardInvoice.credit_card_id.in_([c.id for c in cards]),
+        CreditCardInvoice.status.in_(("open", "closed")),
+        CreditCardInvoice.reference_month <= current_month_start,
+        CreditCardInvoice.total_amount > CreditCardInvoice.paid_amount,
+    ).all()
+    card_by_id = {c.id: c for c in cards}
+    return unpaid_invoices, card_by_id
+
+
 @dashboard_bp.get("/summary")
 @login_required
 def summary():
@@ -62,22 +81,7 @@ def summary():
         ).count()
     )
 
-    cards = (
-        CreditCard.query.join(Account, Account.id == CreditCard.account_id)
-        .filter(Account.user_id == g.current_user.id, Account.archived.is_(False))
-        .all()
-    )
-    current_month_start = dt.date(today.year, today.month, 1)
-    unpaid_invoices = (
-        CreditCardInvoice.query.filter(
-            CreditCardInvoice.credit_card_id.in_([c.id for c in cards]),
-            CreditCardInvoice.status.in_(("open", "closed")),
-            CreditCardInvoice.reference_month <= current_month_start,
-        ).all()
-        if cards
-        else []
-    )
-    outstanding_invoices = [i for i in unpaid_invoices if (i.total_amount - i.paid_amount) > 0]
+    outstanding_invoices, _ = _outstanding_invoices(g.current_user.id, today.year, today.month)
     faturas_abertas_total = sum((i.total_amount - i.paid_amount for i in outstanding_invoices), Decimal("0"))
 
     def pct_change(curr, prev):
@@ -261,6 +265,22 @@ def balance_evolution():
             {"year": end.year, "month": end.month, "balance": float(balance_by_end[end])} for end in period_ends
         ]
     return {"periods": result, "granularity": granularity}
+
+
+@dashboard_bp.get("/period-invoices")
+@login_required
+def period_invoices():
+    today = dt.date.today()
+    invoices, card_by_id = _outstanding_invoices(g.current_user.id, today.year, today.month)
+    invoices = sorted(invoices, key=lambda i: i.due_date)
+    result = []
+    for invoice in invoices:
+        card = card_by_id[invoice.credit_card_id]
+        data = invoice.to_dict()
+        data["bank_name"] = card.account.bank.name
+        data["bank_color"] = card.account.bank.color_hex
+        result.append(data)
+    return {"invoices": result}
 
 
 @dashboard_bp.get("/upcoming-invoices")
