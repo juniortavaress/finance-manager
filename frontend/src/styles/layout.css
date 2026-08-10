@@ -89,6 +89,26 @@ nav {
 .navitem.active svg {
   opacity: 1;
 }
+.navitem.disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.navitem.disabled:hover {
+  background: transparent;
+  color: rgba(238, 242, 240, 0.72);
+}
+.navitem-soon {
+  margin-left: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: rgba(238, 242, 240, 0.45);
+  border: 1px solid rgba(238, 242, 240, 0.2);
+  border-radius: 999px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
 
 .sidebar-foot {
   margin-top: auto;

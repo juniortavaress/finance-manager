@@ -142,6 +142,13 @@ export const IconAlert = (props) => (
   </svg>
 );
 
+export const IconClock = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 3" />
+  </svg>
+);
+
 export const IconRepeat = (props) => (
   <svg viewBox="0 0 24 24" {...base} {...props}>
     <path d="M17 2l4 4-4 4" />

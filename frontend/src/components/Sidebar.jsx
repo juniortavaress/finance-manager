@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import {
   IconDashboard,
   IconBank,
@@ -35,12 +36,17 @@ const NAV_GROUPS = [
   },
   {
     label: 'Investimentos',
-    items: [{ to: '/investimentos', label: 'Investimentos', icon: IconTrendUp }],
+    items: [
+      { to: '/investimentos', label: 'Visão geral', icon: IconTrendUp, disabled: true },
+      { to: '/investimentos/carteira', label: 'Carteira', icon: IconTrendUp, disabled: true },
+      { to: '/investimentos/compras-vendas', label: 'Compras e vendas', icon: IconTrendUp, disabled: true },
+      { to: '/investimentos/dividendos', label: 'Dividendos', icon: IconTrendUp, disabled: true },
+    ],
   },
   {
     label: 'Outros',
     items: [
-      { to: '/relatorios', label: 'Relatórios', icon: IconChart },
+      { to: '/relatorios', label: 'Relatórios', icon: IconChart, disabled: true },
       { to: '/configuracoes', label: 'Configurações', icon: IconGear },
     ],
   },
@@ -60,6 +66,7 @@ export default function Sidebar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { showInfo } = useToast();
 
   function handleLogout() {
     logout();
@@ -86,17 +93,29 @@ export default function Sidebar() {
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
             <div className="navgroup-label">{group.label}</div>
-            {group.items.map(({ to, label, icon: Icon, end }) => (
-              <NavLink
-                key={to}
-                to={to}
-                end={end}
-                className={({ isActive }) => `navitem${isActive ? ' active' : ''}`}
-              >
-                <Icon />
-                {label}
-              </NavLink>
-            ))}
+            {group.items.map(({ to, label, icon: Icon, end, disabled }) =>
+              disabled ? (
+                <div
+                  key={to}
+                  className="navitem disabled"
+                  onClick={() => showInfo(`${label} em breve.`)}
+                >
+                  <Icon />
+                  {label}
+                  <span className="navitem-soon">em breve</span>
+                </div>
+              ) : (
+                <NavLink
+                  key={to}
+                  to={to}
+                  end={end}
+                  className={({ isActive }) => `navitem${isActive ? ' active' : ''}`}
+                >
+                  <Icon />
+                  {label}
+                </NavLink>
+              )
+            )}
           </div>
         ))}
       </nav>

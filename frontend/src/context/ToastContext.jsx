@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState } from 'react';
-import { IconCheck, IconAlert } from '../components/icons';
+import { IconCheck, IconAlert, IconClock } from '../components/icons';
 
 const ToastContext = createContext(null);
 
@@ -24,14 +24,17 @@ export function ToastProvider({ children }) {
 
   const showSuccess = useCallback((message) => push('success', message), [push]);
   const showError = useCallback((message) => push('error', message), [push]);
+  const showInfo = useCallback((message) => push('info', message), [push]);
+
+  const icons = { success: <IconCheck />, error: <IconAlert />, info: <IconClock /> };
 
   return (
-    <ToastContext.Provider value={{ showSuccess, showError }}>
+    <ToastContext.Provider value={{ showSuccess, showError, showInfo }}>
       {children}
       <div className="toast-stack">
         {toasts.map((t) => (
           <div key={t.id} className={`toast toast-${t.type}`}>
-            <span className="toast-icon">{t.type === 'success' ? <IconCheck /> : <IconAlert />}</span>
+            <span className="toast-icon">{icons[t.type]}</span>
             <span className="toast-message">{t.message}</span>
             <button className="toast-close" onClick={() => dismiss(t.id)} aria-label="Fechar">
               ✕

@@ -58,6 +58,11 @@
   color: var(--brick);
 }
 
+.toast-info {
+  background: var(--gold-soft);
+  color: var(--gold);
+}
+
 .toast-close {
   background: transparent;
   border: none;
