@@ -124,6 +124,8 @@ def pay_invoice(card_id, invoice_id):
         date=dt.date.today(),
         payment_method="debit",
         status="confirmed",
+        is_invoice_payment=True,
+        invoice_payment_for_id=invoice.id,
     )
     db.session.add(tx)
     db.session.flush()

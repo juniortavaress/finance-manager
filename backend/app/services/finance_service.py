@@ -105,6 +105,28 @@ def recalc_invoice_total(invoice: CreditCardInvoice):
         invoice.status = "closed"
 
 
+def recalc_invoice_paid_amount(invoice: CreditCardInvoice):
+    paid = (
+        db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
+        .filter(
+            Transaction.invoice_payment_for_id == invoice.id,
+            Transaction.is_invoice_payment.is_(True),
+            Transaction.status == "confirmed",
+        )
+        .scalar()
+    ) or Decimal("0")
+
+    invoice.paid_amount = paid
+    if paid >= invoice.total_amount and invoice.total_amount > 0:
+        if invoice.status != "paid":
+            invoice.status = "paid"
+        if invoice.paid_at is None:
+            invoice.paid_at = dt.datetime.now(dt.timezone.utc)
+    else:
+        invoice.status = "closed" if dt.date.today() > invoice.closing_date else "open"
+        invoice.paid_at = None
+
+
 def recalc_credit_card_used_amount(credit_card):
     open_invoices_total = (
         db.session.query(
@@ -140,4 +162,10 @@ def apply_transaction_side_effects(transaction: Transaction, account: Account):
         invoice = CreditCardInvoice.query.get(transaction.credit_card_invoice_id)
         if invoice:
             recalc_invoice_total(invoice)
+            recalc_credit_card_used_amount(invoice.credit_card)
+
+    if transaction.is_invoice_payment and transaction.invoice_payment_for_id:
+        invoice = CreditCardInvoice.query.get(transaction.invoice_payment_for_id)
+        if invoice:
+            recalc_invoice_paid_amount(invoice)
             recalc_credit_card_used_amount(invoice.credit_card)

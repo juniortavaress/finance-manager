@@ -31,6 +31,7 @@ def monthly_comparison():
                 Transaction.date >= start,
                 Transaction.date <= end,
                 Transaction.status == "confirmed",
+                Transaction.is_invoice_payment.is_(False),
             )
             .group_by(Transaction.type)
             .all()

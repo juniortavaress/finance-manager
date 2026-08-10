@@ -91,6 +91,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   const isCreditAccountSelected = accountRef.startsWith('credit:');
   const isInstallment = isEditing && !!transaction.installment_plan_id;
   const isInstallmentConfirmed = isInstallment && transaction.status === 'confirmed';
+  const isInvoicePayment = isEditing && !!transaction.is_invoice_payment;
 
   async function handleDelete() {
     if (isInstallment) {
@@ -110,7 +111,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
 
     if (!description.trim()) return setError('Informe uma descrição.');
     if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
-    if (!categoryId) return setError('Selecione uma categoria.');
+    if (!isInvoicePayment && !categoryId) return setError('Selecione uma categoria.');
     if (!accountRef) return setError('Selecione uma conta ou cartão.');
     if (customInstallments && installments < 13) return setError('Informe a quantidade de parcelas.');
 
@@ -121,7 +122,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
           description: description.trim(),
           amount: numericAmount,
           date,
-          category_id: categoryId,
+          ...(isInvoicePayment ? {} : { category_id: categoryId }),
         });
         showSuccess('Transação atualizada com sucesso.');
       } else if (recorrente) {
@@ -233,16 +234,18 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
             </div>
           </div>
 
-          <div className="field">
-            <label>Categoria</label>
-            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.icon} {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!isInvoicePayment && (
+            <div className="field">
+              <label>Categoria</label>
+              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.icon} {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {!isEditing && (
             <div className="field">

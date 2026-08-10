@@ -33,9 +33,16 @@ class Transaction(BaseModel):
     )
     installment_number = db.Column(db.SmallInteger, nullable=True)
     notes = db.Column(db.Text, nullable=True)
+    is_invoice_payment = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    invoice_payment_for_id = db.Column(
+        UUID(as_uuid=True), db.ForeignKey("credit_card_invoices.id"), nullable=True, index=True
+    )
 
     account = db.relationship("Account", backref="transactions")
     category = db.relationship("Category", backref="transactions")
+    invoice_payment_for = db.relationship(
+        "CreditCardInvoice", backref="payment_transactions", foreign_keys=[invoice_payment_for_id]
+    )
 
     def to_dict(self):
         return {
@@ -53,6 +60,8 @@ class Transaction(BaseModel):
             "installment_plan_id": str(self.installment_plan_id) if self.installment_plan_id else None,
             "installment_number": self.installment_number,
             "notes": self.notes,
+            "is_invoice_payment": self.is_invoice_payment,
+            "invoice_payment_for_id": str(self.invoice_payment_for_id) if self.invoice_payment_for_id else None,
             "category": self.category.to_dict() if self.category else None,
             "account": self.account.to_dict() if self.account else None,
         }

@@ -17,6 +17,7 @@ from app.services.finance_service import (
     recalc_account_balance,
     recalc_credit_card_used_amount,
     recalc_installment_plan_total,
+    recalc_invoice_paid_amount,
     recalc_invoice_total,
 )
 
@@ -229,7 +230,7 @@ def update_transaction(transaction_id):
             ref_month = invoice_month_for_date(tx.account.credit_card, tx.date)
             new_invoice = get_or_create_invoice(tx.account.credit_card, ref_month)
             tx.credit_card_invoice_id = new_invoice.id
-    if "category_id" in data:
+    if "category_id" in data and not tx.is_invoice_payment:
         category = Category.query.filter_by(
             id=data["category_id"], user_id=g.current_user.id, archived=False
         ).first()
@@ -257,6 +258,7 @@ def delete_transaction(transaction_id):
 
     account = tx.account
     invoice = tx.credit_card_invoice
+    payment_for_invoice = tx.invoice_payment_for if tx.is_invoice_payment else None
     db.session.delete(tx)
     db.session.flush()
 
@@ -264,6 +266,9 @@ def delete_transaction(transaction_id):
     if invoice:
         recalc_invoice_total(invoice)
         recalc_credit_card_used_amount(invoice.credit_card)
+    if payment_for_invoice:
+        recalc_invoice_paid_amount(payment_for_invoice)
+        recalc_credit_card_used_amount(payment_for_invoice.credit_card)
 
     db.session.commit()
     return {"ok": True}
