@@ -21,9 +21,10 @@ export default function Installments() {
 
   const totalMes = plans.reduce((s, p) => s + p.installment_amount, 0);
   const totalRestante = plans.reduce((s, p) => {
-    const paidCount = p.transactions.filter((t) => t.status === 'confirmed').length || 1;
-    const remaining = p.installments_count - paidCount + 1;
-    return s + p.installment_amount * remaining;
+    const scheduledSum = p.transactions
+      .filter((t) => t.status === 'scheduled')
+      .reduce((acc, t) => acc + t.amount, 0);
+    return s + scheduledSum;
   }, 0);
 
   const advanceScheduledTxs = advancePlan
@@ -67,10 +68,10 @@ export default function Installments() {
           const confirmedCount = p.transactions.filter((t) => t.status === 'confirmed').length;
           const currentInstallment = Math.max(confirmedCount, 1);
           const pct = (currentInstallment / p.installments_count) * 100;
-          const remaining = p.installments_count - currentInstallment + 1;
           const scheduledTxs = p.transactions
             .filter((t) => t.status === 'scheduled')
             .sort((a, b) => a.installment_number - b.installment_number);
+          const remaining = scheduledTxs.length;
           const nextTx = scheduledTxs[0];
           const allTxs = [...p.transactions].sort((a, b) => a.installment_number - b.installment_number);
           const isExpanded = expandedPlan === p.id;
