@@ -214,6 +214,10 @@
   background: var(--teal-soft);
   color: var(--teal);
 }
+.badge.danger {
+  background: var(--brick-soft);
+  color: var(--brick);
+}
 
 /* categories screen chips */
 .cat-grid {

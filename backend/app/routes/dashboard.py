@@ -225,15 +225,21 @@ def upcoming_invoices():
     )
     invoices = []
     for card in cards:
-        open_invoice = (
-            CreditCardInvoice.query.filter_by(credit_card_id=card.id, status="open")
-            .order_by(CreditCardInvoice.reference_month.desc())
-            .first()
+        pending = (
+            CreditCardInvoice.query.filter(
+                CreditCardInvoice.credit_card_id == card.id,
+                CreditCardInvoice.status.in_(("open", "closed")),
+                CreditCardInvoice.total_amount > CreditCardInvoice.paid_amount,
+            )
+            .order_by(CreditCardInvoice.due_date.asc())
+            .limit(3)
+            .all()
         )
-        if open_invoice and open_invoice.total_amount > 0:
-            data = open_invoice.to_dict()
+        for invoice in pending:
+            data = invoice.to_dict()
             data["bank_name"] = card.account.bank.name
             data["bank_color"] = card.account.bank.color_hex
+            data["card_id"] = str(card.id)
             invoices.append(data)
     return {"invoices": invoices}
 

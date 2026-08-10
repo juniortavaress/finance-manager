@@ -225,18 +225,21 @@ export default function Dashboard() {
         <div className="card">
           <h3>Faturas próximas</h3>
           {(invData?.invoices || []).length === 0 && <div className="empty-state">Nenhuma fatura em aberto.</div>}
-          {(invData?.invoices || []).map((inv) => (
-            <div className="fat-row" key={inv.id}>
-              <div>
-                <div className="fat-bank">{inv.bank_name} · cartão</div>
-                <div className="fat-due">vence dia {new Date(`${inv.due_date}T00:00:00`).getDate()}</div>
+          {(invData?.invoices || []).map((inv) => {
+            const isLate = inv.due_date < new Date().toISOString().slice(0, 10);
+            return (
+              <div className="fat-row" key={inv.id}>
+                <div>
+                  <div className="fat-bank">{inv.bank_name} · cartão</div>
+                  <div className="fat-due">vence {fmtDateShort(inv.due_date)}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div className="fat-val num">{fmt(inv.outstanding_amount)}</div>
+                  <span className={`badge ${isLate ? 'danger' : 'warn'}`}>{isLate ? 'atrasada' : 'aberta'}</span>
+                </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div className="fat-val num">{fmt(inv.total_amount)}</div>
-                <span className="badge warn">aberta</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
