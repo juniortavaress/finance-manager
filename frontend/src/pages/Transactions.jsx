@@ -61,7 +61,7 @@ export default function Transactions() {
         category_id: categoryFilter || undefined,
         type: typeFilter || undefined,
         date_from: dateFrom || undefined,
-        date_to: dateTo || todayIso(),
+        date_to: dateTo || (dateFrom ? undefined : todayIso()),
         page_size: 100,
       }),
     [search, categoryFilter, typeFilter, dateFrom, dateTo]
