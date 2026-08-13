@@ -173,7 +173,9 @@ export default function RecurringTransactions() {
                 </div>
               </div>
               <div className="auto-right" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <div className="auto-val num">{fmt(r.amount)}</div>
+                <div className="auto-val num" style={{ color: r.type === 'income' ? 'var(--teal)' : undefined }}>
+                  {fmt(r.amount)}
+                </div>
                 <button className={`mini-toggle${r.active ? '' : ' off'}`} onClick={() => toggleRecurring(r)} />
               </div>
             </div>

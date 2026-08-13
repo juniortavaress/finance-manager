@@ -13,10 +13,11 @@ function todayIso() {
 }
 
 export default function RecurringModal({ open, onClose, onCreated, onDeleted, recurring }) {
-  const { checkingAccounts, creditCardAccounts, expenseCategories } = useData();
+  const { checkingAccounts, creditCardAccounts, expenseCategories, incomeCategories } = useData();
   const { showSuccess, showError } = useToast();
   const isEditing = !!recurring;
 
+  const [type, setType] = useState('expense');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [dayOfMonth, setDayOfMonth] = useState(5);
@@ -32,12 +33,14 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const isCreditSelected = accountRef.startsWith('credit:');
+  const categoryOptions = type === 'income' ? incomeCategories : expenseCategories;
 
   useEffect(() => {
     if (!open) return;
     setError('');
     setEditScope('current_and_future');
     if (isEditing) {
+      setType(recurring.type || 'expense');
       setDescription(recurring.description);
       setAmount(numberToMasked(recurring.amount));
       setDayOfMonth(recurring.day_of_month || 5);
@@ -50,6 +53,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
         recurring.payment_method === 'credit' ? `credit:${recurring.account_id}` : `checking:${recurring.account_id}`
       );
     } else {
+      setType('expense');
       setDescription('');
       setAmount('');
       setDayOfMonth(5);
@@ -62,6 +66,16 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEditing, recurring]);
+
+  function handleTypeChange(nextType) {
+    setType(nextType);
+    const options = nextType === 'income' ? incomeCategories : expenseCategories;
+    setCategoryId((prev) => (options.some((c) => c.id === prev) ? prev : options[0]?.id || ''));
+    if (nextType === 'income') {
+      setAutoDebit(true);
+      if (isCreditSelected) setAccountRef(checkingAccounts[0] ? `checking:${checkingAccounts[0].id}` : '');
+    }
+  }
 
   if (!open) return null;
 
@@ -95,6 +109,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
     if (!categoryId) return setError('Selecione uma categoria.');
     if (!accountRef) return setError('Selecione uma conta ou cartão.');
     if (!autoDebit && isCreditSelected) return setError('Descontar manual não pode ser no cartão de crédito.');
+    if (!autoDebit && type === 'income') return setError('Lançamento manual deve ser uma despesa.');
     if (!dayOfMonth || numericDay < 1 || numericDay > 31) return setError('Informe um dia válido (1 a 31).');
 
     setSubmitting(true);
@@ -125,7 +140,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
         await recurringApi.create({
           description: description.trim(),
           amount: numericAmount,
-          type: 'expense',
+          type,
           account_id: accId,
           category_id: categoryId,
           payment_method: isCreditSelected ? 'credit' : 'debit',
@@ -167,6 +182,17 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
           {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
+            <div className="seg">
+              <div className={`seg-opt despesa${type === 'expense' ? ' active' : ''}`} onClick={() => handleTypeChange('expense')}>
+                Despesa
+              </div>
+              <div className={`seg-opt receita${type === 'income' ? ' active' : ''}`} onClick={() => handleTypeChange('income')}>
+                Receita
+              </div>
+            </div>
+          </div>
+
+          <div className="field">
             <label>Descrição</label>
             <input
               type="text"
@@ -182,7 +208,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
               <CurrencyInput value={amount} onChange={setAmount} />
             </div>
             <div className="field">
-              <label>{autoDebit ? 'Dia da cobrança' : 'Dia de vencimento'}</label>
+              <label>{type === 'income' ? 'Dia do recebimento' : autoDebit ? 'Dia da cobrança' : 'Dia de vencimento'}</label>
               <input
                 type="text"
                 inputMode="numeric"
@@ -200,7 +226,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
           <div className="field">
             <label>Categoria</label>
             <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-              {expenseCategories.map((c) => (
+              {categoryOptions.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.icon} {c.name}
                 </option>
@@ -218,7 +244,7 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
                   </option>
                 ))}
               </optgroup>
-              {autoDebit && (
+              {autoDebit && type === 'expense' && (
                 <optgroup label="Cartões de crédito">
                   {creditCardAccounts.map((a) => (
                     <option key={a.id} value={`credit:${a.id}`}>
@@ -282,10 +308,12 @@ export default function RecurringModal({ open, onClose, onCreated, onDeleted, re
             </div>
           )}
 
-          <div className="recorrente-row">
-            <div className={`toggle${autoDebit ? ' on' : ''}`} onClick={() => setAutoDebit((v) => !v)} />
-            <span>Descontar automaticamente</span>
-          </div>
+          {type === 'expense' && (
+            <div className="recorrente-row">
+              <div className={`toggle${autoDebit ? ' on' : ''}`} onClick={() => setAutoDebit((v) => !v)} />
+              <span>Descontar automaticamente</span>
+            </div>
+          )}
 
           <div className="modal-actions">
             <div className="btn btn-ghost" onClick={onClose}>
