@@ -182,7 +182,7 @@ def income_vs_expense():
     if granularity == "yearly":
         totals = {}
         for y, _m, t, v in rows:
-            totals.setdefault(int(y), {"income": Decimal("0"), "expense": Decimal("0")})[t] = v
+            totals.setdefault(int(y), {"income": Decimal("0"), "expense": Decimal("0")})[t] += v
         years = list(range(start_date.year, today.year + 1))
         result = [
             {
