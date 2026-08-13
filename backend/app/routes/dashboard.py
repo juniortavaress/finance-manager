@@ -242,7 +242,6 @@ def balance_evolution():
                 Transaction.account_id == account.id,
                 Transaction.payment_method == "debit",
                 Transaction.status == "confirmed",
-                Transaction.date >= account.opening_balance_date,
             )
             .order_by(Transaction.date.asc())
             .all()
