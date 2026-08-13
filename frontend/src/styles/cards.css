@@ -310,6 +310,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 .cat-tile .ico {
   width: 38px;
@@ -321,13 +322,26 @@
   font-size: 17px;
   flex-shrink: 0;
 }
+.cat-tile-info {
+  min-width: 0;
+}
 .cat-tile .name {
   font-weight: 500;
   font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 20px;
 }
 .cat-tile .amt {
   font-size: 11.5px;
   color: var(--ink-faint);
+}
+.cat-tile .amt-value {
+  white-space: nowrap;
+}
+.cat-tile .amt-period {
+  white-space: nowrap;
 }
 .add-cat {
   border: 1.5px dashed var(--line);
@@ -400,5 +414,26 @@
   .cat-grid,
   .acct-types {
     grid-template-columns: 1fr 1fr;
+  }
+  .cat-grid {
+    gap: 10px;
+  }
+  .cat-tile {
+    padding: 12px;
+    gap: 8px;
+  }
+  .cat-tile .ico {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+  .cat-tile .name {
+    font-size: 12.5px;
+  }
+  .cat-tile .amt {
+    font-size: 10.5px;
+  }
+  .cat-tile .amt-period {
+    display: block;
   }
 }

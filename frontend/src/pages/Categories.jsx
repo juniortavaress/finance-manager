@@ -16,9 +16,12 @@ function CategoryGrid({ title, items, totalsById, onEdit }) {
             <div className="ico" style={{ background: `${c.color_hex}22` }}>
               {c.icon}
             </div>
-            <div>
+            <div className="cat-tile-info">
               <div className="name">{c.name}</div>
-              <div className="amt num">{fmt(totalsById[c.id] || 0)} este mês</div>
+              <div className="amt num">
+                <span className="amt-value">{fmt(totalsById[c.id] || 0)}</span>{' '}
+                <span className="amt-period">este mês</span>
+              </div>
             </div>
             <button
               title="Editar categoria"
