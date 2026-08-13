@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { fmt, monthLabel } from '../../utils/format';
 import ChartScrollContainer from './ChartScrollContainer';
 import ChartTooltip from './ChartTooltip';
@@ -8,7 +8,7 @@ import { CHART_COLORS } from './theme';
 const COL_WIDTH = 56;
 const MIN_WIDTH = 100;
 
-export default function IncomeExpenseChart({ periods, granularity, onSelectPeriod }) {
+export default function IncomeExpenseChart({ periods, granularity, selectedPeriod, onSelectPeriod }) {
   const [highlightedYear, setHighlightedYear] = useState(null);
 
   const data = periods.map((p) => ({
@@ -20,10 +20,16 @@ export default function IncomeExpenseChart({ periods, granularity, onSelectPerio
     month: p.month,
   }));
 
+  const isSelected = (p) =>
+    granularity === 'monthly' && selectedPeriod && p.year === selectedPeriod.year && p.month === selectedPeriod.month;
+  const hasSelection = granularity === 'monthly' && data.some(isSelected);
+
   const width = Math.max(data.length * COL_WIDTH, MIN_WIDTH);
 
-  function handleClick(e) {
-    const payload = e?.activePayload?.[0]?.payload;
+  function handleClick(state) {
+    const index = state?.activeTooltipIndex;
+    if (index == null || index < 0) return;
+    const payload = data[index];
     if (!payload) return;
     if (granularity === 'monthly') {
       onSelectPeriod?.({ year: payload.year, month: payload.month });
@@ -48,8 +54,16 @@ export default function IncomeExpenseChart({ periods, granularity, onSelectPerio
             />
             <YAxis hide />
             <Tooltip content={<ChartTooltip formatter={fmt} />} cursor={{ fill: CHART_COLORS.bg }} />
-            <Bar dataKey="income" name="Receita" fill={CHART_COLORS.teal} radius={[2, 2, 0, 0]} barSize={9} />
-            <Bar dataKey="expense" name="Despesa" fill={CHART_COLORS.brick} radius={[2, 2, 0, 0]} barSize={9} />
+            <Bar dataKey="income" name="Receita" fill={CHART_COLORS.teal} radius={[2, 2, 0, 0]} barSize={9}>
+              {data.map((d) => (
+                <Cell key={d.key} opacity={!hasSelection || isSelected(d) ? 1 : 0.25} style={{ transition: 'opacity 0.2s ease' }} />
+              ))}
+            </Bar>
+            <Bar dataKey="expense" name="Despesa" fill={CHART_COLORS.brick} radius={[2, 2, 0, 0]} barSize={9}>
+              {data.map((d) => (
+                <Cell key={d.key} opacity={!hasSelection || isSelected(d) ? 1 : 0.25} style={{ transition: 'opacity 0.2s ease' }} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </ChartScrollContainer>

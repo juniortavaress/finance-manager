@@ -17,9 +17,11 @@ export default function BalanceEvolutionChart({ periods, granularity, onSelectPe
 
   const width = Math.max(data.length * COL_WIDTH, MIN_WIDTH);
 
-  function handleClick(e) {
+  function handleClick(state) {
     if (granularity !== 'monthly') return;
-    const payload = e?.activePayload?.[0]?.payload;
+    const index = state?.activeTooltipIndex;
+    if (index == null || index < 0) return;
+    const payload = data[index];
     if (payload) onSelectPeriod?.({ year: payload.year, month: payload.month });
   }
 

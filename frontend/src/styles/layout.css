@@ -238,6 +238,34 @@ main {
   border-radius: 20px;
   cursor: pointer;
 }
+.topbar .period-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  cursor: default;
+}
+.period-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+  border-radius: 50%;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+.period-nav-btn:hover:not(:disabled) {
+  background: var(--bg);
+}
+.period-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
 
 .grid {
   display: grid;

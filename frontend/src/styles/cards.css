@@ -147,14 +147,31 @@
   color: var(--ink-soft);
 }
 .hbar-track {
+  position: relative;
   height: 8px;
   background: var(--bg);
   border-radius: 5px;
   overflow: hidden;
 }
 .hbar-fill {
+  position: relative;
   height: 100%;
   border-radius: 5px;
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
+}
+.hbar-goal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
+}
+
+/* recharts: remove o outline de foco que o navegador desenha ao clicar numa barra/area */
+.recharts-wrapper *:focus,
+.recharts-surface *:focus {
+  outline: none;
 }
 
 /* charts: scroll horizontal (drag + wheel + touch nativo) */
@@ -164,6 +181,11 @@
   cursor: grab;
   min-width: 0;
   max-width: 100%;
+  scrollbar-width: none; /* firefox */
+  -ms-overflow-style: none; /* legacy edge */
+}
+.chart-scroll::-webkit-scrollbar {
+  display: none; /* chrome/safari */
 }
 .chart-scroll.dragging {
   cursor: grabbing;
