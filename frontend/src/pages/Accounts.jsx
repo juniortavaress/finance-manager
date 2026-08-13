@@ -4,6 +4,7 @@ import { creditCardsApi } from '../api/resources';
 import { fmt, monthLabel } from '../utils/format';
 import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
+import InvoiceHistoryChart from '../components/charts/InvoiceHistoryChart';
 import { IconPencil } from '../components/icons';
 
 const FALLBACK_COLOR = '#0F5C5C';
@@ -114,8 +115,6 @@ export default function Accounts() {
     }));
   }, [creditCardAccounts, invoicesByCard]);
 
-  const globalMax = Math.max(1, ...monthGroups.flatMap((g) => g.bars.map((b) => b.amount)));
-
   return (
     <div className="screen active">
       <div className="topbar">
@@ -128,35 +127,13 @@ export default function Accounts() {
       {monthGroups.length > 0 && (
         <div className="card" style={{ marginBottom: 20 }}>
           <h3>Histórico de faturas por mês</h3>
-          <div className="rd-chart" style={{ height: 150 }}>
-            {monthGroups.map((group) => (
-              <div className="rd-col" key={group.referenceMonth}>
-                <div className="rd-bars">
-                  {group.bars.map(({ account, amount }) => {
-                    const cardId = account.credit_card.id;
-                    const dimmed = highlightedCardId && highlightedCardId !== cardId;
-                    return (
-                      <div
-                        key={cardId}
-                        className="rd-bar"
-                        style={{
-                          height: `${Math.max((amount / globalMax) * 100, amount > 0 ? 3 : 0)}px`,
-                          background: colorForAccount(account),
-                          width: 12,
-                          opacity: dimmed ? 0.3 : 1,
-                          transition: 'opacity 0.15s ease',
-                          cursor: 'pointer',
-                        }}
-                        title={`${account.name}: ${fmt(amount)}`}
-                        onClick={() => toggleHighlight(cardId)}
-                      />
-                    );
-                  })}
-                </div>
-                <div className="rd-month">{monthLabel(Number(group.referenceMonth.slice(5, 7)))}</div>
-              </div>
-            ))}
-          </div>
+          <InvoiceHistoryChart
+            monthGroups={monthGroups}
+            creditCardAccounts={creditCardAccounts}
+            colorForAccount={colorForAccount}
+            highlightedCardId={highlightedCardId}
+            onToggleHighlight={toggleHighlight}
+          />
 
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
             {creditCardAccounts.map((account) => (
