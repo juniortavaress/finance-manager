@@ -164,3 +164,18 @@ export const IconBell = (props) => (
     <path d="M10.3 21a1.94 1.94 0 003.4 0" />
   </svg>
 );
+
+export const IconMenu = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <line x1="3" y1="6" x2="21" y2="6" />
+    <line x1="3" y1="12" x2="21" y2="12" />
+    <line x1="3" y1="18" x2="21" y2="18" />
+  </svg>
+);
+
+export const IconClose = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <line x1="5" y1="5" x2="19" y2="19" />
+    <line x1="19" y1="5" x2="5" y2="19" />
+  </svg>
+);

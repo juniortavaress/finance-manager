@@ -15,6 +15,7 @@ import {
   IconUser,
   IconLogout,
   IconChevronDown,
+  IconClose,
 } from './icons';
 
 const NAV_GROUPS = [
@@ -62,7 +63,7 @@ function initials(name) {
     .join('');
 }
 
-export default function Sidebar() {
+export default function Sidebar({ onClose }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -87,6 +88,9 @@ export default function Sidebar() {
           <div className="wordmark">Atmos</div>
           <span className="sub">gestão financeira</span>
         </div>
+        <button type="button" className="sidebar-close" onClick={onClose} aria-label="Fechar menu">
+          <IconClose />
+        </button>
       </div>
 
       <nav>
