@@ -15,6 +15,7 @@ class Category(BaseModel):
     color_hex = db.Column(db.Text, nullable=False, default="#8B9A97")
     kind = db.Column(db.Enum(*CATEGORY_KINDS, name="category_kind"), nullable=False)
     archived = db.Column(db.Boolean, nullable=False, default=False)
+    budget_amount = db.Column(db.Numeric(14, 2), nullable=True)
 
     def to_dict(self):
         return {
@@ -25,4 +26,5 @@ class Category(BaseModel):
             "color_hex": self.color_hex,
             "kind": self.kind,
             "archived": self.archived,
+            "budget_amount": float(self.budget_amount) if self.budget_amount is not None else None,
         }

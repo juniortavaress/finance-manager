@@ -47,12 +47,22 @@ def create_category():
     if kind not in ("expense", "income", "both"):
         raise ApiError("Tipo de categoria invalido", 400)
 
+    budget_amount = data.get("budget_amount")
+    if budget_amount is not None:
+        try:
+            budget_amount = float(budget_amount)
+        except (TypeError, ValueError):
+            raise ApiError("Valor meta invalido", 400)
+        if budget_amount < 0:
+            raise ApiError("Valor meta invalido", 400)
+
     category = Category(
         user_id=g.current_user.id,
         name=name,
         icon=data.get("icon") or "\U0001F4C1",
         color_hex=data.get("color_hex") or "#8B9A97",
         kind=kind,
+        budget_amount=budget_amount,
     )
     db.session.add(category)
     db.session.commit()
@@ -67,7 +77,18 @@ def update_category(category_id):
         raise ApiError("Categoria nao encontrada", 404)
 
     data = request.get_json(silent=True) or {}
-    for field in ("name", "icon", "color_hex", "kind", "archived"):
+    if "budget_amount" in data:
+        budget_amount = data["budget_amount"]
+        if budget_amount is not None:
+            try:
+                budget_amount = float(budget_amount)
+            except (TypeError, ValueError):
+                raise ApiError("Valor meta invalido", 400)
+            if budget_amount < 0:
+                raise ApiError("Valor meta invalido", 400)
+        data["budget_amount"] = budget_amount
+
+    for field in ("name", "icon", "color_hex", "kind", "archived", "budget_amount"):
         if field in data:
             setattr(category, field, data[field])
     db.session.commit()

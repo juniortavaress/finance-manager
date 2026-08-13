@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { categoriesApi } from '../../api/resources';
 import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
+import { maskToNumber, numberToMasked } from '../../utils/currency';
 import { IconTrash } from '../icons';
+import CurrencyInput from '../CurrencyInput';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 
 const ICON_OPTIONS = [
   '🛒', '🏠', '🚗', '💻', '🍽️', '➕', '🎬', '💰', '💼', '✨', '📁', '🐾', '👕', '🎓', '🌍', '✈️', '🎁', '⚽',
+  '💊', '🏥', '❤️', '🤝', '🎮', '🎨', '🎵', '📚', '☕', '🍺', '💅', '🧘',
 ];
 const COLOR_OPTIONS = ['#0F5C5C', '#C0912F', '#A6432C', '#7A4FE0', '#3D7A8C', '#D97757', '#8B9A97', '#1C2B29'];
 
@@ -24,6 +27,7 @@ export default function CategoryConfigModal({ open, onClose, onSaved, category, 
   const [icon, setIcon] = useState(ICON_OPTIONS[0]);
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
   const [kind, setKind] = useState('expense');
+  const [budgetAmount, setBudgetAmount] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -41,11 +45,13 @@ export default function CategoryConfigModal({ open, onClose, onSaved, category, 
       setIcon(category.icon);
       setColor(category.color_hex);
       setKind(category.kind === 'both' ? 'expense' : category.kind);
+      setBudgetAmount(category.budget_amount != null ? numberToMasked(category.budget_amount) : '');
     } else {
       setName('');
       setIcon(ICON_OPTIONS[0]);
       setColor(COLOR_OPTIONS[0]);
       setKind(defaultKind);
+      setBudgetAmount('');
     }
   }, [open, isEditing, category, defaultKind]);
 
@@ -56,13 +62,15 @@ export default function CategoryConfigModal({ open, onClose, onSaved, category, 
     setError('');
     if (!name.trim()) return setError('Informe o nome da categoria.');
 
+    const budgetValue = budgetAmount ? maskToNumber(budgetAmount) : null;
+
     setSubmitting(true);
     try {
       if (isEditing) {
-        await categoriesApi.update(category.id, { name: name.trim(), icon, color_hex: color, kind });
+        await categoriesApi.update(category.id, { name: name.trim(), icon, color_hex: color, kind, budget_amount: budgetValue });
         showSuccess('Categoria atualizada com sucesso.');
       } else {
-        await categoriesApi.create({ name: name.trim(), icon, color_hex: color, kind });
+        await categoriesApi.create({ name: name.trim(), icon, color_hex: color, kind, budget_amount: budgetValue });
         showSuccess('Categoria criada com sucesso.');
       }
       onSaved?.();
@@ -183,6 +191,13 @@ export default function CategoryConfigModal({ open, onClose, onSaved, category, 
               ))}
             </div>
           </div>
+
+          {kind === 'expense' && (
+            <div className="field">
+              <label>Meta mensal (opcional)</label>
+              <CurrencyInput value={budgetAmount} onChange={setBudgetAmount} />
+            </div>
+          )}
 
           <div className="modal-actions">
             <div className="btn btn-ghost" onClick={onClose}>
