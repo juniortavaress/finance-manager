@@ -34,6 +34,10 @@ def create_app():
     from app.routes.investments import investments_bp
     from app.routes.dashboard import dashboard_bp
     from app.routes.reports import reports_bp
+    from app.routes.friends import friends_bp
+    from app.routes.groups import groups_bp
+    from app.routes.shared_expenses import shared_expenses_bp
+    from app.routes.settlements import settlements_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(banks_bp, url_prefix="/api/banks")
@@ -46,6 +50,10 @@ def create_app():
     app.register_blueprint(investments_bp, url_prefix="/api/investments")
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
     app.register_blueprint(reports_bp, url_prefix="/api/reports")
+    app.register_blueprint(friends_bp, url_prefix="/api/friends")
+    app.register_blueprint(groups_bp, url_prefix="/api/groups")
+    app.register_blueprint(shared_expenses_bp, url_prefix="/api/shared-expenses")
+    app.register_blueprint(settlements_bp, url_prefix="/api/settlements")
 
     @app.get("/api/health")
     def health():

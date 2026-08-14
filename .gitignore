@@ -1,0 +1,26 @@
+# Frontend
+frontend/dist/
+frontend/node_modules/
+
+# Backend
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.egg-info/
+backend/.pytest_cache/
+
+# Env
+.env
+.env.local
+*.venv/
+venv/
+
+# Claude Code local settings (may contain local permissions/history)
+.claude/
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

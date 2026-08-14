@@ -16,6 +16,11 @@ import Categories from './pages/Categories';
 import Investments from './pages/Investments';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import Friends from './pages/Friends';
+import FriendsList from './pages/FriendsList';
+import FriendDetail from './pages/FriendDetail';
+import Groups from './pages/Groups';
+import GroupDetail from './pages/GroupDetail';
 
 export default function App() {
   return (
@@ -44,6 +49,11 @@ export default function App() {
               <Route path="parcelas" element={<Installments />} />
               <Route path="lembretes" element={<Navigate to="/recorrentes" replace />} />
               <Route path="categorias" element={<Categories />} />
+              <Route path="amigos" element={<Friends />} />
+              <Route path="amigos/lista" element={<FriendsList />} />
+              <Route path="amigos/grupos" element={<Groups />} />
+              <Route path="amigos/grupos/:groupId" element={<GroupDetail />} />
+              <Route path="amigos/:friendUserId" element={<FriendDetail />} />
               <Route path="investimentos" element={<Investments />} />
               <Route path="relatorios" element={<Reports />} />
               <Route path="configuracoes" element={<Settings />} />

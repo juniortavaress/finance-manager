@@ -13,6 +13,7 @@ import {
   IconChart,
   IconGear,
   IconUser,
+  IconUsers,
   IconLogout,
   IconChevronDown,
   IconClose,
@@ -33,6 +34,14 @@ const NAV_GROUPS = [
       { to: '/recorrentes', label: 'Recorrentes', icon: IconRepeat },
       { to: '/parcelas', label: 'Parcelas', icon: IconInstallments },
       { to: '/categorias', label: 'Categorias', icon: IconGrid },
+    ],
+  },
+  {
+    label: 'Amigos',
+    items: [
+      { to: '/amigos', label: 'Visão geral', icon: IconUsers, end: true },
+      { to: '/amigos/lista', label: 'Amigos', icon: IconUsers },
+      { to: '/amigos/grupos', label: 'Grupos', icon: IconGrid },
     ],
   },
   {

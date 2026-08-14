@@ -173,6 +173,16 @@ export const IconMenu = (props) => (
   </svg>
 );
 
+export const IconUsers = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <circle cx="8.5" cy="8" r="3.2" />
+    <path d="M2.5 20c1.2-3.5 4-5 6-5s4.8 1.5 6 5" />
+    <circle cx="17" cy="8.5" r="2.6" />
+    <path d="M15.5 4.6a2.6 2.6 0 010 7.8" />
+    <path d="M15.8 15c1.9.4 3.8 1.8 4.7 5" />
+  </svg>
+);
+
 export const IconClose = (props) => (
   <svg viewBox="0 0 24 24" {...base} {...props}>
     <line x1="5" y1="5" x2="19" y2="19" />

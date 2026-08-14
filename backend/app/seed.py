@@ -7,20 +7,27 @@ from app.models import (
     Bank,
     Category,
     CreditCard,
+    ExpenseParticipant,
+    Friendship,
+    Group,
+    GroupMember,
     Investment,
     InvestmentAccount,
     InvestmentSnapshot,
+    SharedExpense,
     Transaction,
     User,
 )
 from app.services.auth_service import hash_password
 from app.services.finance_service import (
+    apply_transaction_side_effects,
     get_or_create_invoice,
     invoice_month_for_date,
     recalc_account_balance,
     recalc_credit_card_used_amount,
     recalc_invoice_total,
 )
+from app.services.split_service import get_or_create_shared_expense_category, split_equal
 
 DEFAULT_EXPENSE_CATEGORIES = [
     ("Alimentacao", "\U0001F6D2", "#C0912F"),
@@ -52,6 +59,11 @@ def seed_demo_user():
     """Cria o usuario junior@gmail.com com dados de exemplo, se ainda nao existir."""
     user = User.query.filter_by(email="junior@gmail.com").first()
     if user:
+        maria = seed_second_demo_user()
+        junior_account = Account.query.filter_by(user_id=user.id, type="checking").first()
+        if junior_account:
+            seed_friends_demo_data(user, maria, junior_account, dt.date.today())
+        db.session.commit()
         return user
 
     user = User(name="Junior", email="junior@gmail.com", password_hash=hash_password("123456"), currency_default="BRL")
@@ -218,5 +230,117 @@ def seed_demo_user():
         db.session.flush()
         db.session.add(InvestmentSnapshot(investment_id=investment.id, date=today, value=investment.current_amount))
 
+    maria = seed_second_demo_user()
+    seed_friends_demo_data(user, maria, checking_accounts["Nubank"], today)
+
     db.session.commit()
     return user
+
+
+def seed_second_demo_user():
+    """Cria a usuaria maria@gmail.com, uma amiga de exemplo com sua propria conta."""
+    user = User.query.filter_by(email="maria@gmail.com").first()
+    if user:
+        return user
+
+    user = User(name="Maria Costa", email="maria@gmail.com", password_hash=hash_password("123456"), currency_default="BRL")
+    db.session.add(user)
+    db.session.flush()
+
+    seed_default_categories_for_user(user.id)
+
+    bank = Bank(user_id=user.id, name="Nubank", color_hex="#7A4FE0")
+    db.session.add(bank)
+    db.session.flush()
+
+    account = Account(
+        user_id=user.id,
+        bank_id=bank.id,
+        type="checking",
+        name="Conta corrente Nubank",
+        balance=Decimal("2200.00"),
+        opening_balance=Decimal("2200.00"),
+        opening_balance_date=dt.date.today() - dt.timedelta(days=150),
+    )
+    db.session.add(account)
+    db.session.flush()
+
+    return user
+
+
+def seed_friends_demo_data(junior, maria, junior_account, today):
+    """Amizade aceita entre junior e maria, um grupo, e despesas exemplificando os
+    tres modos de divisao, para a secao Amigos ter dados de demonstracao."""
+    if Friendship.query.filter_by(requester_id=junior.id, addressee_id=maria.id).first():
+        return
+
+    friendship = Friendship(
+        requester_id=junior.id, addressee_id=maria.id, status="accepted", responded_at=dt.datetime.now(dt.timezone.utc)
+    )
+    db.session.add(friendship)
+
+    group = Group(name="Ape 302", created_by=junior.id)
+    db.session.add(group)
+    db.session.flush()
+    db.session.add(GroupMember(group_id=group.id, user_id=junior.id))
+    db.session.add(GroupMember(group_id=group.id, user_id=maria.id))
+    db.session.flush()
+
+    category = get_or_create_shared_expense_category(junior.id)
+
+    # despesa de grupo, split igual, com transacao vinculada na conta do junior
+    group_expense = SharedExpense(
+        group_id=group.id,
+        description="Conta de luz",
+        total_amount=Decimal("180.00"),
+        date=today - dt.timedelta(days=5),
+        paid_by_id=junior.id,
+        split_mode="equal",
+        created_by=junior.id,
+    )
+    db.session.add(group_expense)
+    db.session.flush()
+    shares = split_equal(group_expense.total_amount, [junior.id, maria.id])
+    for uid, share in shares.items():
+        db.session.add(ExpenseParticipant(shared_expense_id=group_expense.id, user_id=uid, share_amount=share))
+
+    tx = Transaction(
+        user_id=junior.id,
+        account_id=junior_account.id,
+        category_id=category.id,
+        description=group_expense.description,
+        amount=group_expense.total_amount,
+        type="expense",
+        date=group_expense.date,
+        payment_method="debit",
+        status="confirmed",
+    )
+    db.session.add(tx)
+    db.session.flush()
+    apply_transaction_side_effects(tx, junior_account)
+    group_expense.payer_account_id = junior_account.id
+    group_expense.transaction_id = tx.id
+
+    # despesa avulsa entre os dois (fora do grupo), split por valores
+    low, high = sorted([junior.id, maria.id], key=str)
+    pair_expense = SharedExpense(
+        group_id=None,
+        friend_user_low_id=low,
+        friend_user_high_id=high,
+        description="Jantar aniversario",
+        total_amount=Decimal("280.00"),
+        date=today - dt.timedelta(days=2),
+        paid_by_id=maria.id,
+        split_mode="value",
+        created_by=junior.id,
+    )
+    db.session.add(pair_expense)
+    db.session.flush()
+    db.session.add(
+        ExpenseParticipant(shared_expense_id=pair_expense.id, user_id=junior.id, share_amount=Decimal("140.00"))
+    )
+    db.session.add(
+        ExpenseParticipant(shared_expense_id=pair_expense.id, user_id=maria.id, share_amount=Decimal("140.00"))
+    )
+
+    db.session.flush()

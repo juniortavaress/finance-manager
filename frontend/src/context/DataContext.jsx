@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useState } from 'react';
-import { accountsApi, banksApi, categoriesApi } from '../api/resources';
+import { accountsApi, banksApi, categoriesApi, friendsApi } from '../api/resources';
 
 const DataContext = createContext(null);
 
@@ -7,17 +7,20 @@ export function DataProvider({ children }) {
   const [banks, setBanks] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [friends, setFriends] = useState([]);
   const [loaded, setLoaded] = useState(false);
 
   const reloadAll = useCallback(async () => {
-    const [banksRes, accountsRes, categoriesRes] = await Promise.all([
+    const [banksRes, accountsRes, categoriesRes, friendsRes] = await Promise.all([
       banksApi.list(),
       accountsApi.list(),
       categoriesApi.list(),
+      friendsApi.list(),
     ]);
     setBanks(banksRes.banks);
     setAccounts(accountsRes.accounts);
     setCategories(categoriesRes.categories);
+    setFriends(friendsRes.friends);
     setLoaded(true);
   }, []);
 
@@ -25,8 +28,10 @@ export function DataProvider({ children }) {
     banks,
     accounts,
     categories,
+    friends,
     loaded,
     reloadAll,
+    friendById: (id) => friends.find((f) => f.id === id),
     checkingAccounts: accounts.filter((a) => a.type === 'checking'),
     creditCardAccounts: accounts.filter((a) => a.type === 'credit_card'),
     investmentAccounts: accounts.filter((a) => a.type === 'investment'),

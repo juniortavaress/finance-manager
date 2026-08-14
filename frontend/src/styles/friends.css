@@ -1,0 +1,442 @@
+/* ---------- AMIGOS ---------- */
+.screen {
+  width: 100%;
+}
+.back-link {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  margin-bottom: 14px;
+  display: inline-block;
+}
+.back-link:hover {
+  color: var(--teal);
+}
+.empty-hint {
+  padding: 16px 4px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.group-config-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.group-config-trigger:hover {
+  color: var(--ink);
+}
+.group-config-trigger svg {
+  width: 16px;
+  height: 16px;
+}
+.group-config-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 4px;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.group-config-item:last-child {
+  border-bottom: none;
+}
+.group-config-item:hover:not(:disabled) {
+  background: var(--bg);
+}
+.group-config-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.group-config-item.danger {
+  color: var(--brick);
+}
+
+.friend-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.friend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  color: inherit;
+  gap: 12px;
+}
+.friend-row:last-child {
+  border-bottom: none;
+}
+a.friend-row:hover {
+  background: var(--bg);
+  margin: 0 -8px;
+  padding-left: 8px;
+  padding-right: 8px;
+  border-radius: 8px;
+}
+.friend-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.friend-name {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.friend-sub {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+
+.friend-search-hint {
+  padding: 10px 4px;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+.friend-search-results {
+  max-height: 280px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+.balance-pill {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+.balance-pill.pos {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.balance-pill.neg {
+  background: var(--brick-soft);
+  color: var(--brick);
+}
+.balance-pill.zero {
+  background: var(--bg);
+  color: var(--ink-faint);
+}
+/* grupos */
+.group-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+}
+.group-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+.group-card:hover {
+  border-color: var(--ink-faint);
+}
+.group-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.group-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.group-name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-top: 10px;
+}
+.group-members {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+.group-balance {
+  font-size: 15px;
+  font-weight: 600;
+  margin-top: 12px;
+}
+.group-balance.pos {
+  color: var(--teal);
+}
+.group-balance.neg {
+  color: var(--brick);
+}
+
+/* despesas */
+.expense-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.expense-row:last-child {
+  border-bottom: none;
+}
+.expense-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.expense-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.expense-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+  background: var(--bg);
+}
+.expense-desc {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.expense-meta {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+.expense-right {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.settlement-row {
+  background: var(--gold-soft);
+  margin: 0 -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: 8px;
+  border-bottom-color: transparent;
+}
+.settlement-icon {
+  background: var(--gold);
+  color: #fff;
+}
+
+.modal-actions-footer {
+  padding: 14px 24px;
+  border-top: 1px solid var(--line);
+  margin: 0;
+}
+.expense-total {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.expense-share {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+
+/* split preview no modal */
+.split-preview-box {
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.split-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 10px;
+}
+.split-row:last-child {
+  border-bottom: none;
+}
+.split-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.split-name {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.split-val {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  flex-shrink: 0;
+}
+.split-val input {
+  width: 100px;
+  text-align: right;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+}
+
+/* participant picker */
+.participant-picker {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+.participant-picker-section + .participant-picker-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.participant-picker-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-faint);
+  margin-bottom: 8px;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.chip-empty {
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.friend-picker-chip,
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+}
+.chip:hover {
+  border-color: var(--ink-faint);
+}
+.chip-selected {
+  background: var(--teal-soft);
+  border-color: var(--teal);
+  color: var(--teal);
+}
+.chip-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.chip-selected .chip-avatar {
+  background: var(--teal);
+}
+.chip-remove {
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+/* pendencias */
+.pending-payment-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.pending-payment-card:last-child {
+  border-bottom: none;
+}
+.pending-payment-info {
+  min-width: 0;
+}
+.pending-payment-label {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.pending-payment-amount {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.pending-payment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.pending-payment-actions select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12.5px;
+  background: var(--surface);
+}
+.pending-payment-actions button {
+  padding: 7px 14px;
+  font-size: 12.5px;
+}
+
+@media (max-width: 720px) {
+  .group-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .pending-payment-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

@@ -77,3 +77,45 @@ export const dashboardApi = {
 export const reportsApi = {
   monthlyComparison: (months) => api.get('/reports/monthly-comparison', { months }),
 };
+
+export const friendsApi = {
+  search: (q) => api.get('/friends/search', { q }),
+  list: () => api.get('/friends/'),
+  requests: () => api.get('/friends/requests'),
+  sendRequest: (addresseeId) => api.post('/friends/requests', { addressee_id: addresseeId }),
+  acceptRequest: (id) => api.post(`/friends/requests/${id}/accept`),
+  rejectRequest: (id) => api.post(`/friends/requests/${id}/reject`),
+  expenses: (friendUserId) => api.get(`/friends/${friendUserId}/expenses`),
+  history: (friendUserId) => api.get(`/friends/${friendUserId}/history`),
+  balance: (friendUserId) => api.get(`/friends/${friendUserId}/balance`),
+  accounts: (friendUserId) => api.get(`/friends/${friendUserId}/accounts`),
+  activity: (limit) => api.get('/friends/activity', { limit }),
+};
+
+export const groupsApi = {
+  list: () => api.get('/groups/'),
+  create: (data) => api.post('/groups/', data),
+  get: (id) => api.get(`/groups/${id}`),
+  update: (id, data) => api.patch(`/groups/${id}`, data),
+  addMember: (id, userId) => api.post(`/groups/${id}/members`, { user_id: userId }),
+  removeMember: (id, userId) => api.delete(`/groups/${id}/members/${userId}`),
+  remove: (id) => api.delete(`/groups/${id}`),
+  simplify: (id) => api.get(`/groups/${id}/simplify`),
+};
+
+export const sharedExpensesApi = {
+  create: (data) => api.post('/shared-expenses/', data),
+  update: (id, data) => api.patch(`/shared-expenses/${id}`, data),
+  remove: (id) => api.delete(`/shared-expenses/${id}`),
+  linkPayment: (id, accountId) => api.post(`/shared-expenses/${id}/link-payment`, { account_id: accountId }),
+  pendingPayments: () => api.get('/shared-expenses/pending-payments'),
+};
+
+export const settlementsApi = {
+  list: (params) => api.get('/settlements/', params),
+  create: (data) => api.post('/settlements/', data),
+  receive: (data) => api.post('/settlements/receive', data),
+  recordReceipt: (id, accountId) => api.post(`/settlements/${id}/record-receipt`, { account_id: accountId }),
+  pendingReceipts: () => api.get('/settlements/pending-receipts'),
+  remove: (id) => api.delete(`/settlements/${id}`),
+};
