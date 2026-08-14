@@ -28,7 +28,6 @@ function saldoLabel(v) {
 export default function Friends() {
   const { friends, reloadAll } = useData();
   const { showSuccess, showError } = useToast();
-  const [requests, setRequests] = useState({ sent: [], received: [] });
   const [activity, setActivity] = useState([]);
   const [pendingPayments, setPendingPayments] = useState([]);
   const [pendingReceipts, setPendingReceipts] = useState([]);
@@ -37,13 +36,11 @@ export default function Friends() {
   const [receiptTarget, setReceiptTarget] = useState(null);
 
   const load = useCallback(async () => {
-    const [reqRes, actRes, payRes, recRes] = await Promise.all([
-      friendsApi.requests(),
+    const [actRes, payRes, recRes] = await Promise.all([
       friendsApi.activity(10),
       sharedExpensesApi.pendingPayments(),
       settlementsApi.pendingReceipts(),
     ]);
-    setRequests(reqRes);
     setActivity(actRes.activity);
     setPendingPayments(payRes.shared_expenses);
     setPendingReceipts(recRes.settlements);
@@ -52,25 +49,6 @@ export default function Friends() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function handleAccept(id) {
-    try {
-      await friendsApi.acceptRequest(id);
-      showSuccess('Solicitação aceita.');
-      await Promise.all([load(), reloadAll()]);
-    } catch (err) {
-      showError(err.message || 'Não foi possível aceitar.');
-    }
-  }
-
-  async function handleReject(id) {
-    try {
-      await friendsApi.rejectRequest(id);
-      await load();
-    } catch (err) {
-      showError(err.message || 'Não foi possível recusar.');
-    }
-  }
 
   async function handleLinkPayment(expenseId, accountId) {
     try {
@@ -135,28 +113,9 @@ export default function Friends() {
         </div>
       </div>
 
-      {(requests.received.length > 0 || pendingPayments.length > 0 || pendingReceipts.length > 0) && (
+      {(pendingPayments.length > 0 || pendingReceipts.length > 0) && (
         <div className="card" style={{ marginBottom: 20 }}>
           <h3>Pendências</h3>
-          {requests.received.map((r) => (
-            <div className="friend-row" key={r.id}>
-              <div className="friend-left">
-                <div className="friend-avatar">{initials(r.requester.name)}</div>
-                <div>
-                  <div className="friend-name">{r.requester.name}</div>
-                  <div className="friend-sub">quer ser seu amigo</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-ghost" onClick={() => handleReject(r.id)}>
-                  Recusar
-                </button>
-                <button className="btn btn-primary" onClick={() => handleAccept(r.id)}>
-                  Aceitar
-                </button>
-              </div>
-            </div>
-          ))}
           {pendingPayments.map((e) => (
             <PendingPaymentCard
               key={e.id}

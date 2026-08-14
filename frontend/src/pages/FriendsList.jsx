@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { IconSearch } from '../components/icons';
+import { friendsApi } from '../api/resources';
+import { useToast } from '../context/ToastContext';
+import { IconSearch, IconBell } from '../components/icons';
 import { fmt } from '../utils/format';
 import AddFriendModal from '../components/modals/AddFriendModal';
 import SettleUpModal from '../components/modals/SettleUpModal';
 import RegisterReceiptModal from '../components/modals/RegisterReceiptModal';
+import FriendRequestsModal from '../components/modals/FriendRequestsModal';
 
 function initials(name) {
   if (!name) return '?';
@@ -25,19 +28,62 @@ function saldoLabel(v) {
 
 export default function FriendsList() {
   const { friends, reloadAll } = useData();
+  const { showSuccess, showError } = useToast();
   const [search, setSearch] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [settleTarget, setSettleTarget] = useState(null);
   const [receiptTarget, setReceiptTarget] = useState(null);
+  const [requests, setRequests] = useState({ sent: [], received: [] });
+  const [requestsModalOpen, setRequestsModalOpen] = useState(false);
+
+  const loadRequests = useCallback(async () => {
+    const res = await friendsApi.requests();
+    setRequests(res);
+  }, []);
+
+  useEffect(() => {
+    loadRequests();
+  }, [loadRequests]);
+
+  async function handleAccept(id) {
+    try {
+      await friendsApi.acceptRequest(id);
+      showSuccess('Solicitação aceita.');
+      await Promise.all([loadRequests(), reloadAll()]);
+    } catch (err) {
+      showError(err.message || 'Não foi possível aceitar.');
+    }
+  }
+
+  async function handleReject(id) {
+    try {
+      await friendsApi.rejectRequest(id);
+      await loadRequests();
+    } catch (err) {
+      showError(err.message || 'Não foi possível recusar.');
+    }
+  }
 
   const filtered = friends.filter((f) => f.name.toLowerCase().includes(search.toLowerCase()));
+  const pendingCount = requests.received.length;
 
   return (
     <div className="screen">
       <div className="topbar">
         <h1>Amigos</h1>
-        <div className="period" onClick={() => setAddModalOpen(true)}>
-          + adicionar amigo
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div className="period" onClick={() => setAddModalOpen(true)}>
+            + adicionar amigo
+          </div>
+          <button
+            type="button"
+            className="notif-bell-trigger"
+            onClick={() => setRequestsModalOpen(true)}
+            aria-label="Pedidos de amizade"
+          >
+            <IconBell />
+            {pendingCount > 0 && <span className="notif-badge">{pendingCount}</span>}
+          </button>
         </div>
       </div>
 
@@ -91,7 +137,22 @@ export default function FriendsList() {
         })}
       </div>
 
-      <AddFriendModal open={addModalOpen} onClose={() => setAddModalOpen(false)} onSent={reloadAll} />
+      <AddFriendModal
+        open={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
+        onSent={() => {
+          reloadAll();
+          loadRequests();
+        }}
+      />
+
+      <FriendRequestsModal
+        open={requestsModalOpen}
+        onClose={() => setRequestsModalOpen(false)}
+        requests={requests.received}
+        onAccept={handleAccept}
+        onReject={handleReject}
+      />
 
       <SettleUpModal
         open={!!settleTarget}
