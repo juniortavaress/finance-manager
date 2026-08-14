@@ -6,7 +6,7 @@ from flask import Blueprint, g, request
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import Account, GroupMember, Settlement
+from app.models import Account, Category, GroupMember, Settlement
 from app.models.transaction import Transaction
 from app.routes.friends import are_friends
 from app.services.finance_service import apply_transaction_side_effects, recalc_account_balance
@@ -17,6 +17,18 @@ settlements_bp = Blueprint("settlements", __name__)
 
 def _friend_pair(user_a_id, user_b_id):
     return sorted([user_a_id, user_b_id], key=str)
+
+
+def _resolve_category(category_id, kind):
+    """Categoria escolhida pelo usuario pra transacao do acerto -- obrigatoria
+    sempre que uma conta e informada (ou seja, uma transacao vai ser criada de
+    fato); a categoria automatica de sistema nao aparece como opcao."""
+    if not category_id:
+        raise ApiError("Selecione a categoria", 400)
+    category = Category.query.filter_by(id=category_id, user_id=g.current_user.id, archived=False).first()
+    if category is None or category.kind not in (kind, "both"):
+        raise ApiError("Categoria invalida", 400)
+    return category
 
 
 def _resolve_scope(data):
@@ -52,6 +64,7 @@ def create_settlement():
     amount = data.get("amount")
     date_raw = data.get("date")
     payer_account_id = data.get("payer_account_id")
+    category_id = data.get("category_id")
 
     if str(payer_id) != str(g.current_user.id):
         raise ApiError("So e possivel registrar um acerto em que voce e quem pagou", 400)
@@ -87,7 +100,7 @@ def create_settlement():
         if account is None:
             raise ApiError("Conta nao encontrada", 404)
 
-        category = get_or_create_shared_expense_category(g.current_user.id)
+        category = _resolve_category(category_id, "expense")
         tx = Transaction(
             user_id=g.current_user.id,
             account_id=account.id,
@@ -124,6 +137,7 @@ def register_receipt_directly():
     amount = data.get("amount")
     date_raw = data.get("date")
     receiver_account_id = data.get("receiver_account_id")
+    category_id = data.get("category_id")
 
     if not payer_id:
         raise ApiError("Informe quem te pagou", 400)
@@ -135,6 +149,8 @@ def register_receipt_directly():
         raise ApiError("Data e obrigatoria", 400)
     if not receiver_account_id:
         raise ApiError("Informe a conta de entrada", 400)
+
+    category = _resolve_category(category_id, "income")
 
     amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     group_id, friend_low, friend_high, allowed_ids = _resolve_scope(data)
@@ -158,7 +174,6 @@ def register_receipt_directly():
     db.session.add(settlement)
     db.session.flush()
 
-    category = get_or_create_settlement_income_category(g.current_user.id)
     tx = Transaction(
         user_id=g.current_user.id,
         account_id=account.id,

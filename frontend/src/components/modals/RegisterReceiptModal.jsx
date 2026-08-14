@@ -22,12 +22,13 @@ function todayIso() {
  * grupo mantem seu proprio saldo isolado.
  */
 export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, friendUserId, counterpartyName, suggestedAmount, breakdown }) {
-  const { checkingAccounts } = useData();
+  const { checkingAccounts, incomeCategories } = useData();
   const { showSuccess, showError } = useToast();
 
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState(todayIso());
   const [accountId, setAccountId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,6 +37,7 @@ export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, 
     setAmount(suggestedAmount ? numberToMasked(Math.abs(suggestedAmount)) : '');
     setDate(todayIso());
     setAccountId(checkingAccounts[0]?.id || '');
+    setCategoryId('');
     setError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, suggestedAmount]);
@@ -49,6 +51,7 @@ export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, 
     setError('');
     if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
     if (!accountId) return setError('Selecione a conta de entrada.');
+    if (!categoryId) return setError('Selecione a categoria.');
 
     setSubmitting(true);
     try {
@@ -65,6 +68,7 @@ export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, 
               amount: b.amount,
               date,
               receiver_account_id: accountId,
+              category_id: categoryId || undefined,
             })
           )
         );
@@ -76,6 +80,7 @@ export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, 
           amount: numericAmount,
           date,
           receiver_account_id: accountId,
+          category_id: categoryId || undefined,
         });
       }
       showSuccess('Recebimento registrado com sucesso.');
@@ -112,15 +117,28 @@ export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, 
             </div>
           </div>
 
-          <div className="field">
-            <label>Sua conta de entrada</label>
-            <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              {checkingAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
+          <div className="field-row">
+            <div className="field">
+              <label>Sua conta de entrada</label>
+              <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+                {checkingAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>Categoria</label>
+              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                <option value="">Selecione...</option>
+                {incomeCategories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.icon} {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="modal-actions" style={{ marginTop: 16 }}>
