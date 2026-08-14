@@ -9,11 +9,16 @@ const MIN_WIDTH = 100;
 
 export default function BalanceEvolutionChart({ periods, granularity, onSelectPeriod }) {
   const data = periods.map((p) => ({
+    key: granularity === 'yearly' ? String(p.year) : `${p.year}-${p.month}`,
     label: granularity === 'yearly' ? String(p.year) : monthLabel(p.month),
+    fullLabel: granularity === 'yearly' ? String(p.year) : `${monthLabel(p.month)} ${p.year}`,
     balance: p.balance,
     year: p.year,
     month: p.month,
   }));
+
+  const labelByKey = Object.fromEntries(data.map((d) => [d.key, d.label]));
+  const fullLabelByKey = Object.fromEntries(data.map((d) => [d.key, d.fullLabel]));
 
   const width = Math.max(data.length * COL_WIDTH, MIN_WIDTH);
 
@@ -37,13 +42,17 @@ export default function BalanceEvolutionChart({ periods, granularity, onSelectPe
           </defs>
           <CartesianGrid vertical={false} stroke={CHART_COLORS.line} />
           <XAxis
-            dataKey="label"
+            dataKey="key"
+            tickFormatter={(key) => labelByKey[key] ?? key}
             tick={{ fontFamily: 'IBM Plex Mono', fontSize: 10.5, fill: CHART_COLORS.inkFaint }}
             axisLine={{ stroke: CHART_COLORS.line }}
             tickLine={false}
           />
           <YAxis hide domain={['dataMin', 'dataMax']} />
-          <Tooltip content={<ChartTooltip formatter={fmt} />} cursor={{ stroke: CHART_COLORS.teal, strokeWidth: 1 }} />
+          <Tooltip
+            content={<ChartTooltip formatter={fmt} labelFormatter={(key) => fullLabelByKey[key] ?? key} />}
+            cursor={{ stroke: CHART_COLORS.teal, strokeWidth: 1 }}
+          />
           <Area
             type="monotone"
             dataKey="balance"

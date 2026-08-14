@@ -14,11 +14,15 @@ export default function IncomeExpenseChart({ periods, granularity, selectedPerio
   const data = periods.map((p) => ({
     key: granularity === 'yearly' ? String(p.year) : `${p.year}-${p.month}`,
     label: granularity === 'yearly' ? String(p.year) : monthLabel(p.month),
+    fullLabel: granularity === 'yearly' ? String(p.year) : `${monthLabel(p.month)} ${p.year}`,
     income: p.income,
     expense: p.expense,
     year: p.year,
     month: p.month,
   }));
+
+  const labelByKey = Object.fromEntries(data.map((d) => [d.key, d.label]));
+  const fullLabelByKey = Object.fromEntries(data.map((d) => [d.key, d.fullLabel]));
 
   const isSelected = (p) =>
     granularity === 'monthly' && selectedPeriod && p.year === selectedPeriod.year && p.month === selectedPeriod.month;
@@ -47,13 +51,17 @@ export default function IncomeExpenseChart({ periods, granularity, selectedPerio
           <BarChart data={data} onClick={handleClick} style={{ cursor: 'pointer' }}>
             <CartesianGrid vertical={false} stroke={CHART_COLORS.line} />
             <XAxis
-              dataKey="label"
+              dataKey="key"
+              tickFormatter={(key) => labelByKey[key] ?? key}
               tick={{ fontFamily: 'IBM Plex Mono', fontSize: 10.5, fill: CHART_COLORS.inkFaint }}
               axisLine={{ stroke: CHART_COLORS.line }}
               tickLine={false}
             />
             <YAxis hide />
-            <Tooltip content={<ChartTooltip formatter={fmt} />} cursor={{ fill: CHART_COLORS.bg }} />
+            <Tooltip
+              content={<ChartTooltip formatter={fmt} labelFormatter={(key) => fullLabelByKey[key] ?? key} />}
+              cursor={{ fill: CHART_COLORS.bg }}
+            />
             <Bar dataKey="income" name="Receita" fill={CHART_COLORS.teal} radius={[2, 2, 0, 0]} barSize={9}>
               {data.map((d) => (
                 <Cell key={d.key} opacity={!hasSelection || isSelected(d) ? 1 : 0.25} style={{ transition: 'opacity 0.2s ease' }} />

@@ -9,12 +9,21 @@ const MIN_WIDTH = 100;
 
 export default function InvoiceHistoryChart({ monthGroups, creditCardAccounts, colorForAccount, highlightedCardId, onToggleHighlight }) {
   const data = monthGroups.map((group) => {
-    const row = { key: group.referenceMonth, label: monthLabel(Number(group.referenceMonth.slice(5, 7))) };
+    const month = Number(group.referenceMonth.slice(5, 7));
+    const year = group.referenceMonth.slice(0, 4);
+    const row = {
+      key: group.referenceMonth,
+      label: monthLabel(month),
+      fullLabel: `${monthLabel(month)} ${year}`,
+    };
     group.bars.forEach(({ account, amount }) => {
       row[account.credit_card.id] = amount;
     });
     return row;
   });
+
+  const labelByKey = Object.fromEntries(data.map((d) => [d.key, d.label]));
+  const fullLabelByKey = Object.fromEntries(data.map((d) => [d.key, d.fullLabel]));
 
   const width = Math.max(data.length * COL_WIDTH, MIN_WIDTH);
 
@@ -24,13 +33,17 @@ export default function InvoiceHistoryChart({ monthGroups, creditCardAccounts, c
         <BarChart data={data}>
           <CartesianGrid vertical={false} stroke={CHART_COLORS.line} />
           <XAxis
-            dataKey="label"
+            dataKey="key"
+            tickFormatter={(key) => labelByKey[key] ?? key}
             tick={{ fontFamily: 'IBM Plex Mono', fontSize: 10.5, fill: CHART_COLORS.inkFaint }}
             axisLine={{ stroke: CHART_COLORS.line }}
             tickLine={false}
           />
           <YAxis hide />
-          <Tooltip content={<ChartTooltip formatter={fmt} />} cursor={{ fill: CHART_COLORS.bg }} />
+          <Tooltip
+            content={<ChartTooltip formatter={fmt} labelFormatter={(key) => fullLabelByKey[key] ?? key} />}
+            cursor={{ fill: CHART_COLORS.bg }}
+          />
           {creditCardAccounts.map((account) => {
             const cardId = account.credit_card.id;
             const dimmed = highlightedCardId && highlightedCardId !== cardId;

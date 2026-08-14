@@ -1,8 +1,9 @@
-export default function ChartTooltip({ active, payload, label, formatter }) {
+export default function ChartTooltip({ active, payload, label, formatter, labelFormatter }) {
   if (!active || !payload?.length) return null;
+  const displayLabel = labelFormatter ? labelFormatter(label, payload) : label;
   return (
     <div className="chart-tooltip">
-      <div className="chart-tooltip-label">{label}</div>
+      <div className="chart-tooltip-label">{displayLabel}</div>
       {payload.map((entry) => (
         <div className="chart-tooltip-row" key={entry.dataKey}>
           <span className="chart-tooltip-dot" style={{ background: entry.color }} />
