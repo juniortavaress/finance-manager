@@ -6,11 +6,10 @@ from flask import Blueprint, g, request
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import Account, ExpenseParticipant, Group, GroupMember, SharedExpense
+from app.models import Account, Category, ExpenseParticipant, Group, GroupMember, SharedExpense
 from app.routes.friends import are_friends
 from app.services.finance_service import apply_transaction_side_effects, recalc_account_balance
 from app.services.split_service import (
-    get_or_create_shared_expense_category,
     split_by_percentage,
     split_equal,
     validate_value_split,
@@ -22,6 +21,15 @@ shared_expenses_bp = Blueprint("shared_expenses", __name__)
 
 def _friend_pair(user_a_id, user_b_id):
     return sorted([user_a_id, user_b_id], key=str)
+
+
+def _resolve_category(category_id):
+    if not category_id:
+        raise ApiError("Selecione a categoria", 400)
+    category = Category.query.filter_by(id=category_id, user_id=g.current_user.id, archived=False).first()
+    if category is None or category.kind not in ("expense", "both"):
+        raise ApiError("Categoria invalida", 400)
+    return category
 
 
 def _resolve_scope(data):
@@ -99,6 +107,7 @@ def create_shared_expense():
     split_mode = data.get("split_mode") or "equal"
     participants = data.get("participants") or []
     payer_account_id = data.get("payer_account_id")
+    payer_category_id = data.get("payer_category_id")
 
     if not description:
         raise ApiError("Descricao e obrigatoria", 400)
@@ -141,18 +150,18 @@ def create_shared_expense():
         db.session.add(ExpenseParticipant(shared_expense_id=expense.id, user_id=user_id, share_amount=share_amount))
 
     if str(paid_by_id) == str(g.current_user.id) and payer_account_id:
-        _link_payment(expense, payer_account_id)
+        _link_payment(expense, payer_account_id, payer_category_id)
 
     db.session.commit()
     return {"shared_expense": expense.to_dict()}, 201
 
 
-def _link_payment(expense, account_id):
+def _link_payment(expense, account_id, category_id):
     account = Account.query.filter_by(id=account_id, user_id=g.current_user.id, archived=False).first()
     if account is None:
         raise ApiError("Conta nao encontrada", 404)
 
-    category = get_or_create_shared_expense_category(g.current_user.id)
+    category = _resolve_category(category_id)
     tx = Transaction(
         user_id=g.current_user.id,
         account_id=account.id,
@@ -183,10 +192,11 @@ def link_payment(expense_id):
 
     data = request.get_json(silent=True) or {}
     account_id = data.get("account_id")
+    category_id = data.get("category_id")
     if not account_id:
         raise ApiError("Informe a conta", 400)
 
-    _link_payment(expense, account_id)
+    _link_payment(expense, account_id, category_id)
     db.session.commit()
     return {"shared_expense": expense.to_dict()}
 

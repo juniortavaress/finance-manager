@@ -6,18 +6,21 @@ import { fmt } from '../utils/format';
  * Card de pendencia reusado para dois casos: "vincular pagamento que eu fiz"
  * (despesa criada com outra pessoa marcada como pagadora, ou minha propria
  * despesa sem conta ainda) e "confirmar recebimento" (settlement em que sou
- * o receiver). Mesma UI -- texto + seletor de conta propria + botao confirmar.
+ * o receiver). Mesma UI -- texto + seletor de conta e categoria proprios +
+ * botao confirmar. `kind` define se a categoria e de despesa ou receita.
  */
-export default function PendingPaymentCard({ label, amount, accountIdDefault, onConfirm }) {
-  const { checkingAccounts } = useData();
+export default function PendingPaymentCard({ label, amount, accountIdDefault, kind = 'expense', onConfirm }) {
+  const { checkingAccounts, expenseCategories, incomeCategories } = useData();
+  const categories = kind === 'income' ? incomeCategories : expenseCategories;
   const [accountId, setAccountId] = useState(accountIdDefault || checkingAccounts[0]?.id || '');
+  const [categoryId, setCategoryId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   async function handleConfirm() {
-    if (!accountId) return;
+    if (!accountId || !categoryId) return;
     setSubmitting(true);
     try {
-      await onConfirm(accountId);
+      await onConfirm(accountId, categoryId);
     } finally {
       setSubmitting(false);
     }
@@ -37,7 +40,20 @@ export default function PendingPaymentCard({ label, amount, accountIdDefault, on
             </option>
           ))}
         </select>
-        <button type="button" className="btn btn-primary" disabled={submitting || !accountId} onClick={handleConfirm}>
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+          <option value="">Categoria...</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.icon} {c.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={submitting || !accountId || !categoryId}
+          onClick={handleConfirm}
+        >
           {submitting ? 'Confirmando...' : 'Confirmar'}
         </button>
       </div>

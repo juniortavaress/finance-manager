@@ -35,7 +35,7 @@ export default function SharedExpenseModal({
   groups = [],
 }) {
   const { user } = useAuth();
-  const { friends, checkingAccounts } = useData();
+  const { friends, checkingAccounts, expenseCategories } = useData();
   const { showSuccess, showError } = useToast();
   const isEditing = !!expense;
 
@@ -48,6 +48,7 @@ export default function SharedExpenseModal({
   const [splitMode, setSplitMode] = useState('equal');
   const [customValues, setCustomValues] = useState({});
   const [payerAccountId, setPayerAccountId] = useState('');
+  const [payerCategoryId, setPayerCategoryId] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -103,6 +104,7 @@ export default function SharedExpenseModal({
       });
       setCustomValues(values);
       setPayerAccountId('');
+      setPayerCategoryId('');
     } else {
       setDescription('');
       setAmount('');
@@ -112,6 +114,7 @@ export default function SharedExpenseModal({
       setSplitMode('equal');
       setCustomValues({});
       setPayerAccountId(checkingAccounts[0]?.id || '');
+      setPayerCategoryId('');
       const initialIds = groupId && groupMembers ? groupMembers.map((m) => m.user_id) : friendUserId ? [user?.id, friendUserId] : [user?.id];
       setParticipantIds(initialIds);
     }
@@ -167,6 +170,9 @@ export default function SharedExpenseModal({
     if (showGroupSelector && !selectedGroupId && !inferredFriendId) {
       return setError('Selecione com qual amigo é essa despesa.');
     }
+    if (isPaidByMe && payerAccountId && !payerCategoryId) {
+      return setError('Selecione a categoria da despesa.');
+    }
 
     let participantsPayload;
     if (splitMode === 'equal') {
@@ -191,7 +197,9 @@ export default function SharedExpenseModal({
       paid_by_id: paidById,
       split_mode: splitMode,
       participants: participantsPayload,
-      ...(isPaidByMe && payerAccountId ? { payer_account_id: payerAccountId } : {}),
+      ...(isPaidByMe && payerAccountId
+        ? { payer_account_id: payerAccountId, payer_category_id: payerCategoryId }
+        : {}),
       ...(groupId
         ? { group_id: groupId }
         : selectedGroupId
@@ -350,16 +358,31 @@ export default function SharedExpenseModal({
           </div>
 
           {isPaidByMe && (
-            <div className="field">
-              <label>Conta de saída (opcional)</label>
-              <select value={payerAccountId} onChange={(e) => setPayerAccountId(e.target.value)}>
-                <option value="">Não vincular a uma conta agora</option>
-                {checkingAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
+            <div className="field-row">
+              <div className="field">
+                <label>Conta de saída (opcional)</label>
+                <select value={payerAccountId} onChange={(e) => setPayerAccountId(e.target.value)}>
+                  <option value="">Não vincular a uma conta agora</option>
+                  {checkingAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {payerAccountId && (
+                <div className="field">
+                  <label>Categoria</label>
+                  <select value={payerCategoryId} onChange={(e) => setPayerCategoryId(e.target.value)}>
+                    <option value="">Selecione...</option>
+                    {expenseCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.icon} {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
 

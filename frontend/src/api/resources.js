@@ -107,7 +107,8 @@ export const sharedExpensesApi = {
   create: (data) => api.post('/shared-expenses/', data),
   update: (id, data) => api.patch(`/shared-expenses/${id}`, data),
   remove: (id) => api.delete(`/shared-expenses/${id}`),
-  linkPayment: (id, accountId) => api.post(`/shared-expenses/${id}/link-payment`, { account_id: accountId }),
+  linkPayment: (id, accountId, categoryId) =>
+    api.post(`/shared-expenses/${id}/link-payment`, { account_id: accountId, category_id: categoryId }),
   pendingPayments: () => api.get('/shared-expenses/pending-payments'),
 };
 
@@ -115,7 +116,8 @@ export const settlementsApi = {
   list: (params) => api.get('/settlements/', params),
   create: (data) => api.post('/settlements/', data),
   receive: (data) => api.post('/settlements/receive', data),
-  recordReceipt: (id, accountId) => api.post(`/settlements/${id}/record-receipt`, { account_id: accountId }),
+  recordReceipt: (id, accountId, categoryId) =>
+    api.post(`/settlements/${id}/record-receipt`, { account_id: accountId, category_id: categoryId }),
   pendingReceipts: () => api.get('/settlements/pending-receipts'),
   remove: (id) => api.delete(`/settlements/${id}`),
 };

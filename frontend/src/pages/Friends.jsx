@@ -55,9 +55,9 @@ export default function Friends() {
     load();
   }, [load]);
 
-  async function handleLinkPayment(expenseId, accountId) {
+  async function handleLinkPayment(expenseId, accountId, categoryId) {
     try {
-      await sharedExpensesApi.linkPayment(expenseId, accountId);
+      await sharedExpensesApi.linkPayment(expenseId, accountId, categoryId);
       showSuccess('Pagamento vinculado com sucesso.');
       await Promise.all([load(), reloadAll()]);
     } catch (err) {
@@ -65,9 +65,9 @@ export default function Friends() {
     }
   }
 
-  async function handleRecordReceipt(settlementId, accountId) {
+  async function handleRecordReceipt(settlementId, accountId, categoryId) {
     try {
-      await settlementsApi.recordReceipt(settlementId, accountId);
+      await settlementsApi.recordReceipt(settlementId, accountId, categoryId);
       showSuccess('Recebimento registrado com sucesso.');
       await Promise.all([load(), reloadAll()]);
     } catch (err) {
@@ -126,7 +126,8 @@ export default function Friends() {
               key={e.id}
               label={`Você pagou "${e.description}" — em qual conta saiu?`}
               amount={e.total_amount}
-              onConfirm={(accountId) => handleLinkPayment(e.id, accountId)}
+              kind="expense"
+              onConfirm={(accountId, categoryId) => handleLinkPayment(e.id, accountId, categoryId)}
             />
           ))}
           {pendingReceipts.map((s) => (
@@ -134,7 +135,8 @@ export default function Friends() {
               key={s.id}
               label={`${s.payer.name} te pagou — em qual conta caiu?`}
               amount={s.amount}
-              onConfirm={(accountId) => handleRecordReceipt(s.id, accountId)}
+              kind="income"
+              onConfirm={(accountId, categoryId) => handleRecordReceipt(s.id, accountId, categoryId)}
             />
           ))}
         </div>

@@ -10,7 +10,6 @@ from app.models import Account, Category, GroupMember, Settlement
 from app.models.transaction import Transaction
 from app.routes.friends import are_friends
 from app.services.finance_service import apply_transaction_side_effects, recalc_account_balance
-from app.services.split_service import get_or_create_settlement_income_category, get_or_create_shared_expense_category
 
 settlements_bp = Blueprint("settlements", __name__)
 
@@ -207,14 +206,16 @@ def record_receipt(settlement_id):
 
     data = request.get_json(silent=True) or {}
     account_id = data.get("account_id")
+    category_id = data.get("category_id")
     if not account_id:
         raise ApiError("Informe a conta", 400)
+
+    category = _resolve_category(category_id, "income")
 
     account = Account.query.filter_by(id=account_id, user_id=g.current_user.id, archived=False).first()
     if account is None:
         raise ApiError("Conta nao encontrada", 404)
 
-    category = get_or_create_settlement_income_category(g.current_user.id)
     tx = Transaction(
         user_id=g.current_user.id,
         account_id=account.id,
