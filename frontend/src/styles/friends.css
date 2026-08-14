@@ -357,6 +357,14 @@ a.friend-row:hover {
   font-size: 12.5px;
 }
 
+.split-left input[type='checkbox'] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--teal);
+  cursor: pointer;
+}
+
 /* participant picker */
 .participant-picker {
   border: 1px solid var(--line);

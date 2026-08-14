@@ -59,24 +59,30 @@ def _resolve_shares(total_amount, split_mode, participants):
     try:
         if split_mode == "equal":
             shares = split_equal(total_amount, participant_ids)
+            if any(v <= 0 for v in shares.values()):
+                raise ApiError(
+                    "O valor e pequeno demais para ser dividido entre todos os participantes "
+                    "(algum participante ficaria com R$ 0,00). Reduza o numero de participantes "
+                    "ou aumente o valor.",
+                    400,
+                )
         elif split_mode == "value":
             shares = {p["user_id"]: Decimal(str(p["value"])).quantize(Decimal("0.01")) for p in participants}
             validate_value_split(total_amount, shares)
+            # Participante com valor 0 nao deve nada dessa despesa -- so estava
+            # na lista (ex.: adiantou o dinheiro mas nao consumiu nada).
+            shares = {uid: v for uid, v in shares.items() if v > 0}
         elif split_mode == "percentage":
             percentages = {p["user_id"]: Decimal(str(p["percentage"])) for p in participants}
             shares = split_by_percentage(total_amount, percentages)
+            shares = {uid: v for uid, v in shares.items() if v > 0}
         else:
             raise ApiError("Modo de divisao invalido", 400)
     except ValueError as exc:
         raise ApiError(str(exc), 400)
 
-    if any(v <= 0 for v in shares.values()):
-        raise ApiError(
-            "O valor e pequeno demais para ser dividido entre todos os participantes "
-            "(algum participante ficaria com R$ 0,00). Reduza o numero de participantes "
-            "ou aumente o valor.",
-            400,
-        )
+    if not shares:
+        raise ApiError("Selecione ao menos um participante com valor maior que zero", 400)
 
     return shares
 

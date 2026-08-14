@@ -10,17 +10,17 @@ import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
-import ParticipantPicker from '../ParticipantPicker';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
 /**
- * Modal de despesa dividida. Quando `groupId` e passado (aberta de dentro de
- * um grupo), o campo "Grupo (opcional)" nao aparece -- contexto ja e implicito.
- * Quando aberta a partir de Amigos, mostra o seletor de grupo/avulsa e troca o
- * pool de participantes conforme a escolha.
+ * Modal de despesa dividida. Quando `groupId` ou `friendUserId` são passados
+ * (aberta de dentro de um grupo/amigo), o escopo já é implícito. Quando aberta
+ * a partir da visão geral de Amigos, a lista "Envolvidos" mostra todos os
+ * amigos do usuário -- marcar um amigo (fora de um grupo) também define com
+ * quem é a despesa, já que despesa avulsa só pode ser com uma pessoa por vez.
  */
 export default function SharedExpenseModal({
   open,
@@ -52,12 +52,15 @@ export default function SharedExpenseModal({
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
-  const showGroupSelector = !groupId;
+  const showGroupSelector = !groupId && !friendUserId;
 
   const activeGroup = groups.find((g) => g.id === selectedGroupId);
   const withYouLabel = (person) =>
     String(person.id) === String(user?.id) ? { ...person, name: `${person.name} (você)` } : person;
 
+  // Todos os candidatos possíveis pra "Envolvidos": membros do grupo fixo, ou
+  // membros do grupo selecionado, ou eu + o amigo fixo, ou eu + todos os meus
+  // amigos (visão geral -- marcar um deles define o escopo da despesa avulsa).
   const candidates = useMemo(() => {
     if (groupId && groupMembers) {
       return groupMembers.map((m) => withYouLabel(m.user));
@@ -68,20 +71,20 @@ export default function SharedExpenseModal({
     if (friendUserId) {
       return [{ id: user?.id, name: `${user?.name} (você)` }, { id: friendUserId, name: friendName }];
     }
-    return [
-      { id: user?.id, name: `${user?.name} (você)` },
-      ...friends.map((f) => ({ id: f.id, name: f.name })),
-    ];
+    return [{ id: user?.id, name: `${user?.name} (você)` }, ...friends.map((f) => ({ id: f.id, name: f.name }))];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId, groupMembers, selectedGroupId, activeGroup, friendUserId, friendName, friends, user]);
 
-  // Despesa avulsa: o pagador só pode ser um dos participantes já escolhidos
-  // (evita marcar como pagador alguém fora da dívida). Em grupo, qualquer
-  // membro pode ser pagador mesmo antes de estar na lista de participantes.
-  const payerCandidates =
-    showGroupSelector && !selectedGroupId && !friendUserId
-      ? candidates.filter((c) => participantIds.some((id) => String(id) === String(c.id)))
-      : candidates;
+  // Qualquer candidato pode ser marcado como "pago por" mesmo sem estar entre
+  // os envolvidos -- cobre o caso de alguém que só adiantou o dinheiro mas não
+  // deve nada da divisão (ex.: sua namorada pagou, só você deve os R$10 de volta).
+  const payerCandidates = candidates;
+
+  // Despesa avulsa (sem grupo): o amigo da dívida é inferido de quem está
+  // marcado em Envolvidos -- só pode ser eu + um amigo por vez.
+  const inferredFriendId = showGroupSelector
+    ? participantIds.find((id) => String(id) !== String(user?.id))
+    : null;
 
   useEffect(() => {
     if (!open) return;
@@ -109,7 +112,7 @@ export default function SharedExpenseModal({
       setSplitMode('equal');
       setCustomValues({});
       setPayerAccountId(checkingAccounts[0]?.id || '');
-      const initialIds = groupId && groupMembers ? groupMembers.map((m) => m.user_id) : friendUserId ? [user?.id, friendUserId] : [];
+      const initialIds = groupId && groupMembers ? groupMembers.map((m) => m.user_id) : friendUserId ? [user?.id, friendUserId] : [user?.id];
       setParticipantIds(initialIds);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -134,8 +137,18 @@ export default function SharedExpenseModal({
 
   if (!open) return null;
 
-  function toggleParticipants(ids) {
-    setParticipantIds(ids);
+  function toggleParticipant(id) {
+    setParticipantIds((prev) => {
+      const isSelected = prev.some((x) => String(x) === String(id));
+      if (isSelected) return prev.filter((x) => String(x) !== String(id));
+      if (showGroupSelector && !selectedGroupId) {
+        // Despesa avulsa: só eu + um amigo por vez -- marcar outro amigo troca
+        // quem estava marcado antes, em vez de acumular vários.
+        const onlyMe = prev.filter((x) => String(x) === String(user?.id));
+        return [...onlyMe, id];
+      }
+      return [...prev, id];
+    });
   }
 
   async function handleDelete() {
@@ -145,39 +158,30 @@ export default function SharedExpenseModal({
     onDeleted?.();
   }
 
-  // Despesa avulsa (sem grupo selecionado, sem friendUserId fixo): o "amigo" da
-  // dívida e inferido dos participantes escolhidos, nao de um seletor a parte --
-  // precisa ser exatamente eu + 1 amigo.
-  const inferredFriendId =
-    showGroupSelector && !selectedGroupId && !friendUserId
-      ? participantIds.find((id) => String(id) !== String(user?.id))
-      : null;
-
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
 
     if (!description.trim()) return setError('Informe uma descrição.');
     if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
-    if (participantIds.length === 0) return setError('Selecione ao menos um participante.');
-
-    const isStandaloneExpense = showGroupSelector && !selectedGroupId && !friendUserId;
-    if (isStandaloneExpense) {
-      const others = participantIds.filter((id) => String(id) !== String(user?.id));
-      if (others.length === 0) return setError('Selecione com qual amigo a despesa é dividida.');
-      if (others.length > 1) return setError('Despesa avulsa (sem grupo) só pode ser dividida com um amigo por vez — para mais pessoas, crie um grupo.');
+    if (showGroupSelector && !selectedGroupId && !inferredFriendId) {
+      return setError('Selecione com qual amigo é essa despesa.');
     }
 
     let participantsPayload;
     if (splitMode === 'equal') {
+      if (participantIds.length === 0) return setError('Selecione ao menos um participante.');
       participantsPayload = participantIds.map((id) => ({ user_id: id }));
     } else if (splitMode === 'value') {
-      participantsPayload = participantIds.map((id) => ({ user_id: id, value: maskToNumber(customValues[id] || '') }));
+      participantsPayload = participantIds
+        .map((id) => ({ user_id: id, value: maskToNumber(customValues[id] || '') }))
+        .filter((p) => p.value > 0);
+      if (participantsPayload.length === 0) return setError('Informe o valor de ao menos um participante.');
     } else {
-      participantsPayload = participantIds.map((id) => ({
-        user_id: id,
-        percentage: Number(String(customValues[id] || '0').replace(',', '.')),
-      }));
+      participantsPayload = participantIds
+        .map((id) => ({ user_id: id, percentage: Number(String(customValues[id] || '0').replace(',', '.')) }))
+        .filter((p) => p.percentage > 0);
+      if (participantsPayload.length === 0) return setError('Informe o percentual de ao menos um participante.');
     }
 
     const payload = {
@@ -261,7 +265,7 @@ export default function SharedExpenseModal({
             </div>
           </div>
 
-          {showGroupSelector && !friendUserId && (
+          {showGroupSelector && (
             <div className="field">
               <label>Grupo (opcional)</label>
               <select value={selectedGroupId} onChange={(e) => setSelectedGroupId(e.target.value)}>
@@ -274,11 +278,6 @@ export default function SharedExpenseModal({
               </select>
             </div>
           )}
-
-          <div className="field">
-            <label>Envolvidos</label>
-            <ParticipantPicker candidates={candidates} selectedIds={participantIds} onChange={toggleParticipants} />
-          </div>
 
           <div className="field">
             <label>Pago por</label>
@@ -305,33 +304,41 @@ export default function SharedExpenseModal({
             </div>
           </div>
 
-          {participantIds.length > 0 && (
-            <div className="field split-preview-box">
-              {participantIds.map((id) => {
-                const person = candidates.find((c) => String(c.id) === String(id));
+          <div className="field">
+            <label>Envolvidos</label>
+            <div className="split-preview-box">
+              {candidates.map((c) => {
+                const checked = participantIds.some((id) => String(id) === String(c.id));
                 return (
-                  <div className="split-row" key={id}>
+                  <div className="split-row" key={c.id}>
                     <div className="split-left">
-                      <span className="split-name">{person?.name || '—'}</span>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleParticipant(c.id)}
+                      />
+                      <span className="split-name">{c.name}</span>
                     </div>
-                    {splitMode === 'equal' ? (
-                      <span className="split-val num">{fmt(equalPreview[id] || 0)}</span>
-                    ) : splitMode === 'value' ? (
+                    {checked && splitMode === 'equal' && (
+                      <span className="split-val num">{fmt(equalPreview[c.id] || 0)}</span>
+                    )}
+                    {checked && splitMode === 'value' && (
                       <span className="split-val">
                         <CurrencyInput
-                          value={customValues[id] || ''}
-                          onChange={(v) => setCustomValues((prev) => ({ ...prev, [id]: v }))}
+                          value={customValues[c.id] || ''}
+                          onChange={(v) => setCustomValues((prev) => ({ ...prev, [c.id]: v }))}
                         />
                       </span>
-                    ) : (
+                    )}
+                    {checked && splitMode === 'percentage' && (
                       <span className="split-val">
                         <input
                           type="text"
                           inputMode="decimal"
                           placeholder="0%"
-                          value={customValues[id] || ''}
+                          value={customValues[c.id] || ''}
                           onChange={(e) =>
-                            setCustomValues((prev) => ({ ...prev, [id]: e.target.value.replace(/[^\d,.]/g, '') }))
+                            setCustomValues((prev) => ({ ...prev, [c.id]: e.target.value.replace(/[^\d,.]/g, '') }))
                           }
                         />
                       </span>
@@ -340,7 +347,7 @@ export default function SharedExpenseModal({
                 );
               })}
             </div>
-          )}
+          </div>
 
           {isPaidByMe && (
             <div className="field">

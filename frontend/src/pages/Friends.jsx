@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../context/DataContext';
-import { friendsApi, sharedExpensesApi, settlementsApi } from '../api/resources';
+import { friendsApi, sharedExpensesApi, settlementsApi, groupsApi } from '../api/resources';
 import { useToast } from '../context/ToastContext';
 import { fmt, fmtDateShort } from '../utils/format';
 import SharedExpenseModal from '../components/modals/SharedExpenseModal';
 import SettleUpModal from '../components/modals/SettleUpModal';
 import RegisterReceiptModal from '../components/modals/RegisterReceiptModal';
+import ExpenseScopePickerModal from '../components/modals/ExpenseScopePickerModal';
 import PendingPaymentCard from '../components/PendingPaymentCard';
 
 function initials(name) {
@@ -31,19 +32,23 @@ export default function Friends() {
   const [activity, setActivity] = useState([]);
   const [pendingPayments, setPendingPayments] = useState([]);
   const [pendingReceipts, setPendingReceipts] = useState([]);
-  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [groups, setGroups] = useState([]);
+  const [scopePickerOpen, setScopePickerOpen] = useState(false);
+  const [expenseScope, setExpenseScope] = useState(null);
   const [settleTarget, setSettleTarget] = useState(null);
   const [receiptTarget, setReceiptTarget] = useState(null);
 
   const load = useCallback(async () => {
-    const [actRes, payRes, recRes] = await Promise.all([
+    const [actRes, payRes, recRes, groupsRes] = await Promise.all([
       friendsApi.activity(10),
       sharedExpensesApi.pendingPayments(),
       settlementsApi.pendingReceipts(),
+      groupsApi.list(),
     ]);
     setActivity(actRes.activity);
     setPendingPayments(payRes.shared_expenses);
     setPendingReceipts(recRes.settlements);
+    setGroups(groupsRes.groups);
   }, []);
 
   useEffect(() => {
@@ -86,7 +91,7 @@ export default function Friends() {
         <div
           className="period"
           style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
-          onClick={() => setExpenseModalOpen(true)}
+          onClick={() => setScopePickerOpen(true)}
         >
           + nova despesa dividida
         </div>
@@ -202,11 +207,36 @@ export default function Friends() {
         </div>
       </div>
 
+      <ExpenseScopePickerModal
+        open={scopePickerOpen}
+        onClose={() => setScopePickerOpen(false)}
+        groups={groups}
+        onPickFriend={(friendId) => {
+          const f = friends.find((fr) => fr.id === friendId);
+          setExpenseScope({ friendUserId: friendId, friendName: f?.name || '' });
+          setScopePickerOpen(false);
+        }}
+        onPickGroup={async (groupId) => {
+          try {
+            const res = await groupsApi.get(groupId);
+            setExpenseScope({ groupId, groupMembers: res.group.members });
+            setScopePickerOpen(false);
+          } catch (err) {
+            showError(err.message || 'Não foi possível carregar o grupo.');
+          }
+        }}
+      />
+
       <SharedExpenseModal
-        open={expenseModalOpen}
-        onClose={() => setExpenseModalOpen(false)}
+        open={!!expenseScope}
+        onClose={() => setExpenseScope(null)}
+        friendUserId={expenseScope?.friendUserId}
+        friendName={expenseScope?.friendName}
+        groupId={expenseScope?.groupId}
+        groupMembers={expenseScope?.groupMembers}
+        groups={groups}
         onSaved={() => {
-          setExpenseModalOpen(false);
+          setExpenseScope(null);
           load();
           reloadAll();
         }}
