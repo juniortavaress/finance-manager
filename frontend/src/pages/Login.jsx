@@ -113,11 +113,6 @@ export default function Login() {
 
         <div className="login-hint">
           Não tem conta? <Link to="/register">Criar conta</Link>
-          <br />
-          <br />
-          Usuário de demonstração
-          <br />
-          <b>junior@gmail.com</b> · senha <b>123456</b>
         </div>
       </div>
     </div>
