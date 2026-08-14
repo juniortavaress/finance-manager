@@ -97,14 +97,22 @@ def compute_group_original_debts(group_id) -> list:
     for s in settlements:
         pair_amounts[(s.payer_id, s.receiver_id)] -= s.amount
 
-    debts = []
+    # Quando o mesmo par de pessoas deve nos dois sentidos (ex.: A deve 70 pra
+    # B de uma despesa, B deve 46 pra A de outra), consolida num unico sentido
+    # liquido -- nao ha terceira pessoa nesse par especifico pra quem a divida
+    # dupla faria diferenca, entao mostrar os dois sentidos so duplica ruido.
+    net_pairs = defaultdict(lambda: Decimal("0"))
     for (debtor_id, creditor_id), amount in pair_amounts.items():
+        key = tuple(sorted((str(debtor_id), str(creditor_id))))
+        sign = 1 if str(debtor_id) == key[0] else -1
+        net_pairs[key] += sign * amount
+
+    debts = []
+    for (id_a, id_b), amount in net_pairs.items():
         if amount >= CENT:
-            debts.append({"from_user_id": str(debtor_id), "to_user_id": str(creditor_id), "amount": float(amount)})
+            debts.append({"from_user_id": id_a, "to_user_id": id_b, "amount": float(amount)})
         elif amount <= -CENT:
-            # Acerto pagou mais do que a divida original desse par -- credito
-            # sobra pro lado inverso (raro, mas mantem o extrato coerente).
-            debts.append({"from_user_id": str(creditor_id), "to_user_id": str(debtor_id), "amount": float(-amount)})
+            debts.append({"from_user_id": id_b, "to_user_id": id_a, "amount": float(-amount)})
 
     return debts
 

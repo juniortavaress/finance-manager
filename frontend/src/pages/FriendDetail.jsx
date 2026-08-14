@@ -58,10 +58,6 @@ export default function FriendDetail() {
     setBreakdown(balRes.breakdown || []);
   }, [friendUserId]);
 
-  // Despesas de grupo colapsam numa unica linha-resumo por grupo (saldo total),
-  // em vez de listar cada despesa individual -- avulsas e acertos continuam
-  // aparecendo item a item. Ordenado por data de criacao (mais recente primeiro),
-  // usando o item mais recente de cada grupo para posicionar o resumo na lista.
   const timeline = useMemo(() => {
     const groupSummaries = new Map();
     const rows = [];
@@ -75,17 +71,18 @@ export default function FriendDetail() {
 
       const e = item.data;
       const existing = groupSummaries.get(e.group_id);
-      const myShare = myShareInExpense(e, user?.id);
       if (existing) {
-        existing.total += myShare;
         existing.count += 1;
         if ((e.created_at || e.date) > existing.sortKey) existing.sortKey = e.created_at || e.date;
       } else {
+        const groupBreakdown = breakdown.find((b) => b.group_id === e.group_id);
         groupSummaries.set(e.group_id, {
           kind: 'group-summary',
           groupId: e.group_id,
           groupName: e.group_name,
-          total: myShare,
+          groupIcon: e.group_icon,
+          groupColorHex: e.group_color_hex,
+          total: groupBreakdown ? groupBreakdown.amount : 0,
           count: 1,
           sortKey: e.created_at || e.date,
         });
@@ -95,7 +92,7 @@ export default function FriendDetail() {
     for (const summary of groupSummaries.values()) rows.push(summary);
     rows.sort((a, b) => (a.sortKey < b.sortKey ? 1 : -1));
     return rows;
-  }, [history, user]);
+  }, [history, breakdown]);
 
   useEffect(() => {
     load();
@@ -182,7 +179,16 @@ export default function FriendDetail() {
               >
                 <div className="expense-top">
                   <div className="expense-left">
-                    <div className="expense-icon">👥</div>
+                    <div
+                      className="expense-icon"
+                      style={
+                        item.groupColorHex
+                          ? { background: `${item.groupColorHex}22`, color: item.groupColorHex }
+                          : undefined
+                      }
+                    >
+                      {item.groupIcon || '👥'}
+                    </div>
                     <div>
                       <div className="expense-desc">Saldo grupo {item.groupName}</div>
                       <div className="expense-meta">

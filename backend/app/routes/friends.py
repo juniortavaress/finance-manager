@@ -183,16 +183,27 @@ def friend_history(friend_user_id):
     standalone_expenses = SharedExpense.query.filter_by(
         group_id=None, friend_user_low_id=low, friend_user_high_id=high
     ).all()
-    group_expenses = (
+    group_expenses_all = (
         SharedExpense.query.filter(SharedExpense.group_id.in_(shared_group_ids)).all() if shared_group_ids else []
     )
+    group_expenses = [
+        e
+        for e in group_expenses_all
+        if str(e.paid_by_id) == str(friend_user_id)
+        or any(str(p.user_id) == str(friend_user_id) for p in e.participants)
+    ]
 
     standalone_settlements = Settlement.query.filter_by(
         group_id=None, friend_user_low_id=low, friend_user_high_id=high
     ).all()
-    group_settlements = (
+    group_settlements_all = (
         Settlement.query.filter(Settlement.group_id.in_(shared_group_ids)).all() if shared_group_ids else []
     )
+    group_settlements = [
+        s
+        for s in group_settlements_all
+        if str(s.payer_id) == str(friend_user_id) or str(s.receiver_id) == str(friend_user_id)
+    ]
 
     items = [
         {"type": "expense", "date": e.date.isoformat(), "created_at": e.created_at, "data": e.to_dict()}
