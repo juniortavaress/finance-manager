@@ -58,18 +58,27 @@ def _resolve_shares(total_amount, split_mode, participants):
 
     try:
         if split_mode == "equal":
-            return split_equal(total_amount, participant_ids)
-        if split_mode == "value":
+            shares = split_equal(total_amount, participant_ids)
+        elif split_mode == "value":
             shares = {p["user_id"]: Decimal(str(p["value"])).quantize(Decimal("0.01")) for p in participants}
             validate_value_split(total_amount, shares)
-            return shares
-        if split_mode == "percentage":
+        elif split_mode == "percentage":
             percentages = {p["user_id"]: Decimal(str(p["percentage"])) for p in participants}
-            return split_by_percentage(total_amount, percentages)
+            shares = split_by_percentage(total_amount, percentages)
+        else:
+            raise ApiError("Modo de divisao invalido", 400)
     except ValueError as exc:
         raise ApiError(str(exc), 400)
 
-    raise ApiError("Modo de divisao invalido", 400)
+    if any(v <= 0 for v in shares.values()):
+        raise ApiError(
+            "O valor e pequeno demais para ser dividido entre todos os participantes "
+            "(algum participante ficaria com R$ 0,00). Reduza o numero de participantes "
+            "ou aumente o valor.",
+            400,
+        )
+
+    return shares
 
 
 @shared_expenses_bp.post("/")
