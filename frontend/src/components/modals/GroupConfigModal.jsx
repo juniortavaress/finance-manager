@@ -1,4 +1,4 @@
-import { IconCheck } from '../icons';
+import { IconCheck, IconPencil } from '../icons';
 import ModalShell from './ModalShell';
 
 export default function GroupConfigModal({
@@ -6,6 +6,7 @@ export default function GroupConfigModal({
   onClose,
   simplified,
   onToggleSimplified,
+  onEditGroup,
   onDeleteGroup,
   deleteDisabled,
 }) {
@@ -21,6 +22,10 @@ export default function GroupConfigModal({
           </span>
         </div>
         <div className="modal-body">
+          <button type="button" className="group-config-item" onClick={onEditGroup}>
+            <span>Editar nome, ícone e cor</span>
+            <IconPencil style={{ width: 14, height: 14, color: 'var(--ink-faint)' }} />
+          </button>
           <button type="button" className="group-config-item" onClick={onToggleSimplified}>
             <span>Simplificar dívidas</span>
             {simplified && <IconCheck style={{ width: 14, height: 14, color: 'var(--teal)' }} />}

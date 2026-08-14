@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { groupsApi } from '../api/resources';
 import { fmt } from '../utils/format';
+import { IconPencil } from '../components/icons';
 import NewGroupModal from '../components/modals/NewGroupModal';
 
 export default function Groups() {
   const [groups, setGroups] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState(null);
 
   const load = useCallback(async () => {
     const res = await groupsApi.list();
@@ -17,11 +19,23 @@ export default function Groups() {
     load();
   }, [load]);
 
+  function openCreate() {
+    setEditingGroup(null);
+    setModalOpen(true);
+  }
+
+  function openEdit(e, group) {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingGroup(group);
+    setModalOpen(true);
+  }
+
   return (
     <div className="screen">
       <div className="topbar">
         <h1>Grupos</h1>
-        <div className="period" onClick={() => setModalOpen(true)}>
+        <div className="period" onClick={openCreate}>
           + novo grupo
         </div>
       </div>
@@ -33,10 +47,19 @@ export default function Groups() {
           const color = g.my_balance > 0 ? 'var(--teal)' : g.my_balance < 0 ? 'var(--brick)' : 'var(--ink-faint)';
           const sub = g.my_balance > 0 ? 'a receber' : g.my_balance < 0 ? 'você deve' : 'quites';
           return (
-            <Link to={`/amigos/grupos/${g.id}`} className="group-card" key={g.id}>
+            <Link to={`/amigos/grupos/${g.id}`} className="group-card" key={g.id} style={{ position: 'relative' }}>
+              <button
+                type="button"
+                className="group-config-trigger"
+                style={{ position: 'absolute', top: 12, right: 12 }}
+                onClick={(e) => openEdit(e, g)}
+                aria-label="Editar grupo"
+              >
+                <IconPencil />
+              </button>
               <div className="group-card-head">
-                <div className="group-icon" style={{ background: 'var(--gold-soft)' }}>
-                  👥
+                <div className="group-icon" style={{ background: `${g.color_hex}22`, color: g.color_hex }}>
+                  {g.icon}
                 </div>
               </div>
               <div className="group-name">{g.name}</div>
@@ -53,7 +76,8 @@ export default function Groups() {
       <NewGroupModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        onCreated={() => {
+        group={editingGroup}
+        onSaved={() => {
           setModalOpen(false);
           load();
         }}

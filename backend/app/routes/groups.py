@@ -48,6 +48,8 @@ def create_group():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     member_ids = data.get("member_ids") or []
+    icon = data.get("icon") or "\U0001F465"
+    color_hex = data.get("color_hex") or "#0F5C5C"
 
     if not name:
         raise ApiError("Nome do grupo e obrigatorio", 400)
@@ -56,7 +58,7 @@ def create_group():
         if not are_friends(g.current_user.id, member_id):
             raise ApiError("So e possivel adicionar amigos aceitos ao grupo", 400)
 
-    group = Group(name=name, created_by=g.current_user.id)
+    group = Group(name=name, created_by=g.current_user.id, icon=icon, color_hex=color_hex)
     db.session.add(group)
     db.session.flush()
 
@@ -81,8 +83,14 @@ def get_group(group_id):
     net = compute_group_net_balances(group.id)
     members = [{**m.to_dict(), "balance": float(net.get(m.user_id, 0))} for m in group.members]
 
-    expenses = SharedExpense.query.filter_by(group_id=group.id).order_by(SharedExpense.date.desc()).all()
-    settlements = Settlement.query.filter_by(group_id=group.id).order_by(Settlement.date.desc()).all()
+    expenses = (
+        SharedExpense.query.filter_by(group_id=group.id)
+        .order_by(SharedExpense.created_at.desc())
+        .all()
+    )
+    settlements = (
+        Settlement.query.filter_by(group_id=group.id).order_by(Settlement.created_at.desc()).all()
+    )
 
     data = group.to_dict()
     data["members"] = members
@@ -108,6 +116,10 @@ def update_group(group_id):
         group.name = name
     if "simplify_debts" in data:
         group.simplify_debts = bool(data["simplify_debts"])
+    if "icon" in data:
+        group.icon = data["icon"] or "\U0001F465"
+    if "color_hex" in data:
+        group.color_hex = data["color_hex"] or "#0F5C5C"
 
     db.session.commit()
     return {"group": group.to_dict()}

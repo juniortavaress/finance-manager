@@ -41,6 +41,8 @@ class Group(BaseModel):
     created_by = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False, index=True)
     archived = db.Column(db.Boolean, nullable=False, default=False)
     simplify_debts = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    icon = db.Column(db.Text, nullable=False, default="\U0001F465", server_default="\U0001F465")
+    color_hex = db.Column(db.Text, nullable=False, default="#0F5C5C", server_default="#0F5C5C")
 
     members = db.relationship("GroupMember", backref="group", cascade="all, delete-orphan")
 
@@ -51,6 +53,8 @@ class Group(BaseModel):
             "created_by": str(self.created_by),
             "archived": self.archived,
             "simplify_debts": self.simplify_debts,
+            "icon": self.icon,
+            "color_hex": self.color_hex,
         }
 
 
@@ -114,6 +118,8 @@ class SharedExpense(BaseModel):
             "id": str(self.id),
             "group_id": str(self.group_id) if self.group_id else None,
             "group_name": self.group.name if self.group else None,
+            "group_icon": self.group.icon if self.group else None,
+            "group_color_hex": self.group.color_hex if self.group else None,
             "friend_user_low_id": str(self.friend_user_low_id) if self.friend_user_low_id else None,
             "friend_user_high_id": str(self.friend_user_high_id) if self.friend_user_high_id else None,
             "description": self.description,
@@ -205,6 +211,8 @@ class Settlement(BaseModel):
             "id": str(self.id),
             "group_id": str(self.group_id) if self.group_id else None,
             "group_name": self.group.name if self.group else None,
+            "group_icon": self.group.icon if self.group else None,
+            "group_color_hex": self.group.color_hex if self.group else None,
             "friend_user_low_id": str(self.friend_user_low_id) if self.friend_user_low_id else None,
             "friend_user_high_id": str(self.friend_user_high_id) if self.friend_user_high_id else None,
             "payer_id": str(self.payer_id),

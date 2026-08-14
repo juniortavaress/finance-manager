@@ -246,8 +246,13 @@ export default function Transactions() {
           return (
             <div className="tx-row" key={t.id}>
               <div className="tx-left">
-                <div className="tx-icon" style={{ background: pos ? 'var(--teal-soft)' : 'var(--bg)' }}>
-                  {category?.icon || '📁'}
+                <div
+                  className="tx-icon"
+                  style={{
+                    background: t.group_color_hex ? `${t.group_color_hex}22` : pos ? 'var(--teal-soft)' : 'var(--bg)',
+                  }}
+                >
+                  {t.group_icon || category?.icon || '📁'}
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

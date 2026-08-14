@@ -13,6 +13,7 @@ import MemberPairsModal from '../components/modals/MemberPairsModal';
 import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal';
 import AddGroupMemberModal from '../components/modals/AddGroupMemberModal';
 import GroupConfigModal from '../components/modals/GroupConfigModal';
+import NewGroupModal from '../components/modals/NewGroupModal';
 
 function initials(name) {
   if (!name) return '?';
@@ -46,6 +47,7 @@ export default function GroupDetail() {
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [deleteGroupOpen, setDeleteGroupOpen] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
+  const [editGroupOpen, setEditGroupOpen] = useState(false);
 
   async function toggleSimplified() {
     try {
@@ -140,8 +142,11 @@ export default function GroupDetail() {
 
       <div className="topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div className="group-icon" style={{ width: 44, height: 44, fontSize: 20, background: 'var(--gold-soft)' }}>
-            👥
+          <div
+            className="group-icon"
+            style={{ width: 44, height: 44, fontSize: 20, background: `${group.color_hex}22`, color: group.color_hex }}
+          >
+            {group.icon}
           </div>
           <div>
             <h1 style={{ fontSize: 22 }}>{group.name}</h1>
@@ -233,10 +238,23 @@ export default function GroupDetail() {
             );
           })}
         </div>
-        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
-          <div className="label">Total gasto no grupo</div>
-          <div className="value num">{fmt(group.shared_expenses.reduce((s, e) => s + e.total_amount, 0))}</div>
-          <div className="delta">{group.shared_expenses.length} despesa(s) registrada(s)</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, height: '100%' }}>
+          <div className="card stat-card" style={{ '--stripe': '#0F5C5C', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="label">Total gasto no grupo</div>
+            <div className="value num">{fmt(group.shared_expenses.reduce((s, e) => s + e.total_amount, 0))}</div>
+            <div className="delta">{group.shared_expenses.length} despesa(s) registrada(s)</div>
+          </div>
+          <div className="card stat-card" style={{ '--stripe': '#C0912F', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div className="label">Sua fatia no grupo</div>
+            <div className="value num">
+              {fmt(
+                group.shared_expenses.reduce((s, e) => {
+                  const mine = e.participants.find((p) => p.user_id === user?.id);
+                  return s + (mine ? mine.share_amount : 0);
+                }, 0)
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -350,9 +368,23 @@ export default function GroupDetail() {
         simplified={group.simplify_debts}
         onToggleSimplified={toggleSimplified}
         deleteDisabled={group.members.some((m) => m.balance !== 0)}
+        onEditGroup={() => {
+          setConfigOpen(false);
+          setEditGroupOpen(true);
+        }}
         onDeleteGroup={() => {
           setConfigOpen(false);
           setDeleteGroupOpen(true);
+        }}
+      />
+
+      <NewGroupModal
+        open={editGroupOpen}
+        onClose={() => setEditGroupOpen(false)}
+        group={group}
+        onSaved={() => {
+          setEditGroupOpen(false);
+          load();
         }}
       />
     </div>

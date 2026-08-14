@@ -43,7 +43,12 @@ export default function ExpenseScopePickerModal({ open, onClose, groups, onPickF
               {groups.map((g) => (
                 <div className="friend-row" key={g.id} style={{ cursor: 'pointer' }} onClick={() => onPickGroup(g.id)}>
                   <div className="friend-left">
-                    <div className="friend-avatar">👥</div>
+                    <div
+                      className="friend-avatar"
+                      style={g.color_hex ? { background: `${g.color_hex}22`, color: g.color_hex } : undefined}
+                    >
+                      {g.icon || '👥'}
+                    </div>
                     <div>
                       <div className="friend-name">{g.name}</div>
                     </div>

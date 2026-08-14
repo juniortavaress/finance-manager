@@ -6,7 +6,7 @@ from flask import Blueprint, g, request
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import Account, Category, InstallmentPlan, Transaction
+from app.models import Account, Category, InstallmentPlan, SharedExpense, Settlement, Transaction
 from app.models.transaction import TRANSACTION_STATUSES
 from app.services.finance_service import (
     add_months,
@@ -67,11 +67,59 @@ def list_transactions():
     items = query.offset((page - 1) * page_size).limit(page_size).all()
 
     return {
-        "transactions": [t.to_dict() for t in items],
+        "transactions": _transactions_with_group([t for t in items]),
         "total": total,
         "page": page,
         "page_size": page_size,
     }
+
+
+def _transactions_with_group(items):
+    """Quando a transacao veio de uma despesa dividida ou acerto de contas de
+    grupo, anexa o icone/cor do grupo -- pra tela de Transacoes mostrar o
+    visual do grupo especifico em vez do icone generico da categoria
+    'Despesas compartilhadas'/'Recebimento de amigos'. Busca tudo em lote (2
+    queries) em vez de uma query por transacao."""
+    tx_ids = [t.id for t in items]
+    if not tx_ids:
+        return []
+
+    group_by_tx_id = {}
+
+    expenses = (
+        SharedExpense.query.filter(SharedExpense.transaction_id.in_(tx_ids), SharedExpense.group_id.isnot(None))
+        .all()
+    )
+    for e in expenses:
+        if e.group:
+            group_by_tx_id[e.transaction_id] = e.group
+
+    settlements = (
+        Settlement.query.filter(
+            db.or_(
+                Settlement.payer_transaction_id.in_(tx_ids),
+                Settlement.receiver_transaction_id.in_(tx_ids),
+            ),
+            Settlement.group_id.isnot(None),
+        )
+        .all()
+    )
+    for s in settlements:
+        if s.group:
+            if s.payer_transaction_id in tx_ids:
+                group_by_tx_id[s.payer_transaction_id] = s.group
+            if s.receiver_transaction_id in tx_ids:
+                group_by_tx_id[s.receiver_transaction_id] = s.group
+
+    result = []
+    for t in items:
+        data = t.to_dict()
+        group = group_by_tx_id.get(t.id)
+        if group:
+            data["group_icon"] = group.icon
+            data["group_color_hex"] = group.color_hex
+        result.append(data)
+    return result
 
 
 @transactions_bp.post("/")
