@@ -238,10 +238,10 @@ export default function Investments() {
       </div>
 
       <div className="grid grid-2" style={{ marginBottom: 20 }}>
-        {evolution.length > 0 && (
-          <div className="card">
-            <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span>Evolução do patrimônio investido</span>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>Evolução do patrimônio investido</span>
+            {evolution.length > 0 && (
               <span style={{ display: 'flex', gap: 12, textTransform: 'none', letterSpacing: 0 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--ink-soft)' }}>
                   <span style={{ width: 14, height: 2, background: 'var(--teal)', display: 'inline-block' }} />
@@ -259,10 +259,16 @@ export default function Investments() {
                   Aportado
                 </span>
               </span>
-            </h3>
+            )}
+          </h3>
+          {evolution.length > 0 ? (
             <InvestmentEvolutionChart periods={evolution} />
-          </div>
-        )}
+          ) : (
+            <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              Nenhuma compra registrada ainda.
+            </div>
+          )}
+        </div>
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
           <h3>Próximos dividendos</h3>
           <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
