@@ -25,16 +25,17 @@ export default function Accounts() {
 
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
   const investmentAccounts = useMemo(() => accounts.filter((a) => a.type === 'investment'), [accounts]);
-  const { data: investmentsData, reload: reloadInvestments } = useFetch(() => investmentsApi.list(), []);
+  const { data: assetsData, reload: reloadAssets } = useFetch(() => investmentsApi.listAssets(), []);
   const investedByAccountId = useMemo(() => {
     const map = {};
-    (investmentsData?.investments || []).forEach((inv) => {
-      const account = investmentAccounts.find((a) => a.investment_account?.id === inv.investment_account_id);
+    (assetsData?.assets || []).forEach((asset) => {
+      const account = investmentAccounts.find((a) => a.investment_account?.id === asset.investment_account_id);
       if (!account) return;
-      map[account.id] = (map[account.id] || 0) + inv.current_amount;
+      const value = asset.position.current_amount != null ? asset.position.current_amount : asset.position.invested_amount;
+      map[account.id] = (map[account.id] || 0) + value;
     });
     return map;
-  }, [investmentsData, investmentAccounts]);
+  }, [assetsData, investmentAccounts]);
 
   function openNewBank() {
     setEditingBank(null);
@@ -347,7 +348,7 @@ export default function Accounts() {
         onCreated={() => {
           setTransferModalOpen(false);
           reloadAll();
-          reloadInvestments();
+          reloadAssets();
         }}
       />
     </div>
