@@ -59,9 +59,15 @@ export const creditCardsApi = {
 };
 
 export const investmentsApi = {
-  list: () => api.get('/investments/'),
-  create: (data) => api.post('/investments/', data),
-  update: (id, data) => api.patch(`/investments/${id}`, data),
+  summary: (bankId) => api.get('/investments/summary', { bank_id: bankId || undefined }),
+  listAssets: () => api.get('/investments/assets'),
+  createAsset: (data) => api.post('/investments/assets', data),
+  updateAsset: (id, data) => api.patch(`/investments/assets/${id}`, data),
+  removeAsset: (id) => api.delete(`/investments/assets/${id}`),
+  buy: (assetId, data) => api.post(`/investments/assets/${assetId}/buy`, data),
+  sell: (assetId, data) => api.post(`/investments/assets/${assetId}/sell`, data),
+  listAssetTransactions: (limit) => api.get('/investments/asset-transactions', { limit }),
+  removeAssetTransaction: (id) => api.delete(`/investments/asset-transactions/${id}`),
 };
 
 export const dashboardApi = {
