@@ -9,6 +9,7 @@ import './styles/login.css';
 import './styles/loading.css';
 import './styles/toast.css';
 import './styles/friends.css';
+import './styles/investments.css';
 import App from './App.jsx';
 
 createRoot(document.getElementById('root')).render(

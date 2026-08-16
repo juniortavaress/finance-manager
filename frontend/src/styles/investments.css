@@ -1,0 +1,94 @@
+/* carteira de investimentos — tabela de ativos */
+.tipo-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+.tipo-tag .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.asset-table-wrap {
+  overflow-x: auto;
+}
+.asset-row {
+  display: grid;
+  grid-template-columns: 1.8fr 1fr 1fr 0.7fr 1fr 1fr 1fr 1fr 0.8fr;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
+  min-width: 760px;
+}
+.asset-row:last-child {
+  border-bottom: none;
+}
+.asset-head {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-faint);
+  font-weight: 500;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.asset-head .a-sortable {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.asset-head .a-sortable:hover {
+  color: var(--ink-soft);
+}
+.asset-head .a-sortable .arrow {
+  opacity: 0;
+  font-size: 9px;
+}
+.asset-head .a-sortable.sorted .arrow {
+  opacity: 1;
+  color: var(--teal);
+}
+.asset-row .a-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+.asset-row .a-sub {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: 1px;
+}
+.asset-row .a-num {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+}
+.asset-row .a-rent {
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
+}
+.asset-row .a-rent.up {
+  color: var(--teal);
+}
+.asset-row .a-rent.down {
+  color: var(--brick);
+}
+.bank-chip-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.bank-chip-mini .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
