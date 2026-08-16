@@ -285,12 +285,15 @@ def update_transaction(transaction_id):
         ).first()
         if new_account is None:
             raise ApiError("Conta nao encontrada", 404)
-        if tx.payment_method == "credit":
-            if new_account.type != "credit_card" or not new_account.credit_card:
-                raise ApiError("Conta selecionada nao e um cartao de credito", 400)
-        elif new_account.type == "credit_card":
-            raise ApiError("Conta selecionada nao e valida para esta transacao", 400)
+        is_credit = new_account.type == "credit_card"
+        if is_credit and not new_account.credit_card:
+            raise ApiError("Conta selecionada nao e um cartao de credito", 400)
+        if is_credit and tx.type == "income":
+            raise ApiError("Receitas nao podem ser vinculadas a cartao de credito", 400)
         tx.account_id = new_account.id
+        tx.payment_method = "credit" if is_credit else "debit"
+        if not is_credit:
+            tx.credit_card_invoice_id = None
         account_changed = True
 
     if "date" in data:

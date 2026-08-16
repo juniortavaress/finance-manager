@@ -93,7 +93,6 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   const isInstallmentConfirmed = isInstallment && transaction.status === 'confirmed';
   const isInvoicePayment = isEditing && !!transaction.is_invoice_payment;
   const canChangeAccount = !isEditing || (!isInstallment && !isInvoicePayment);
-  const editingPaymentMethod = isEditing ? transaction.payment_method : null;
 
   async function handleDelete() {
     if (isInstallment) {
@@ -255,7 +254,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
             <div className="field">
               <label>{installmentOnly ? 'Cartão' : 'Conta / Cartão'}</label>
               <select value={accountRef} onChange={(e) => setAccountRef(e.target.value)}>
-                {!installmentOnly && editingPaymentMethod !== 'credit' && (
+                {!installmentOnly && (
                   <optgroup label="Contas correntes">
                     {checkingAccounts.map((a) => (
                       <option key={a.id} value={`checking:${a.id}`}>
@@ -264,7 +263,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
                     ))}
                   </optgroup>
                 )}
-                {(installmentOnly || tipo === 'despesa' || editingPaymentMethod === 'credit') && (
+                {(installmentOnly || tipo === 'despesa') && (
                   <optgroup label="Cartões de crédito">
                     {creditCardAccounts.map((a) => (
                       <option key={a.id} value={`credit:${a.id}`}>
