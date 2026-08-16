@@ -17,6 +17,7 @@ class Asset(BaseModel):
     code = db.Column(db.Text, nullable=True)
     name = db.Column(db.Text, nullable=False)
     current_unit_price = db.Column(db.Numeric(14, 6), nullable=True)
+    archived = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
 
     asset_transactions = db.relationship(
         "AssetTransaction", backref="asset", cascade="all, delete-orphan", order_by="AssetTransaction.date"
@@ -30,6 +31,7 @@ class Asset(BaseModel):
             "code": self.code,
             "name": self.name,
             "current_unit_price": float(self.current_unit_price) if self.current_unit_price is not None else None,
+            "archived": self.archived,
         }
 
 

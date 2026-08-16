@@ -71,6 +71,33 @@
   opacity: 0.35;
   cursor: not-allowed;
 }
+.modal-archive-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+}
+.modal-archive-trigger svg {
+  width: 15px;
+  height: 15px;
+}
+.modal-archive-trigger:hover:not(:disabled) {
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.modal-archive-trigger.active {
+  color: var(--teal);
+}
+.modal-archive-trigger:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 .modal-close {
   cursor: pointer;
   color: var(--ink-faint);

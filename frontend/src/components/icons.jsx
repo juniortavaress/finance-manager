@@ -100,6 +100,14 @@ export const IconTrash = (props) => (
   </svg>
 );
 
+export const IconArchive = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <rect x="3" y="3" width="18" height="5" rx="1.5" />
+    <path d="M5 8v11a2 2 0 002 2h10a2 2 0 002-2V8" />
+    <path d="M10 13h4" />
+  </svg>
+);
+
 export const IconEye = (props) => (
   <svg viewBox="0 0 24 24" {...base} {...props}>
     <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z" />

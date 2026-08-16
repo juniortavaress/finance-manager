@@ -85,8 +85,13 @@ def _asset_to_dict(asset: Asset):
 @login_required
 def list_assets():
     inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
+    show_archived = request.args.get("archived") == "true"
     assets = (
-        Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all() if inv_account_ids else []
+        Asset.query.filter(
+            Asset.investment_account_id.in_(inv_account_ids), Asset.archived.is_(show_archived)
+        ).all()
+        if inv_account_ids
+        else []
     )
     return {"assets": [_asset_to_dict(a) for a in assets]}
 
@@ -147,13 +152,14 @@ def investments_summary():
         account = accounts_by_ia_id[asset.investment_account_id]
         if bank_filter and str(account.bank_id) != bank_filter:
             continue
-        bank = Bank.query.get(account.bank_id)
-        data = asset.to_dict()
-        data["position"] = _asset_position(asset)
-        data["bank_id"] = str(account.bank_id)
-        data["bank_name"] = bank.name if bank else None
-        data["bank_color"] = bank.color_hex if bank else None
-        assets_result.append(data)
+        if not asset.archived:
+            bank = Bank.query.get(account.bank_id)
+            data = asset.to_dict()
+            data["position"] = _asset_position(asset)
+            data["bank_id"] = str(account.bank_id)
+            data["bank_name"] = bank.name if bank else None
+            data["bank_color"] = bank.color_hex if bank else None
+            assets_result.append(data)
         for tx in asset.asset_transactions:
             if earliest_date is None or tx.date < earliest_date:
                 earliest_date = tx.date
@@ -278,6 +284,15 @@ def update_asset(asset_id):
     if "current_unit_price" in data:
         price = data["current_unit_price"]
         asset.current_unit_price = Decimal(str(price)) if price not in (None, "") else None
+    if "investment_account_id" in data:
+        ia = InvestmentAccount.query.join(Account, Account.id == InvestmentAccount.account_id).filter(
+            InvestmentAccount.id == data["investment_account_id"], Account.user_id == g.current_user.id
+        ).first()
+        if ia is None:
+            raise ApiError("Conta de investimento não encontrada", 404)
+        asset.investment_account_id = ia.id
+    if "archived" in data:
+        asset.archived = bool(data["archived"])
 
     db.session.commit()
     return {"asset": _asset_to_dict(asset)}

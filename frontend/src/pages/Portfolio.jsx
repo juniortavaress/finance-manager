@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import { fmt } from '../utils/format';
 import { maskToNumber, numberToMasked } from '../utils/currency';
-import { IconSearch } from '../components/icons';
+import { IconSearch, IconPencil } from '../components/icons';
 import CurrencyInput from '../components/CurrencyInput';
 import PickAssetModal from '../components/modals/PickAssetModal';
 import NewAssetModal from '../components/modals/NewAssetModal';
@@ -41,7 +41,11 @@ const COLUMNS = [
 ];
 
 export default function Portfolio() {
-  const { data: assetsData, reload: reloadAssets } = useFetch(() => investmentsApi.listAssets(), []);
+  const [showArchived, setShowArchived] = useState(false);
+  const { data: assetsData, reload: reloadAssets } = useFetch(
+    () => investmentsApi.listAssets(showArchived),
+    [showArchived]
+  );
   const { banks, investmentAccounts, bankById, reloadAll } = useData();
   const { showSuccess, showError } = useToast();
 
@@ -52,12 +56,19 @@ export default function Portfolio() {
 
   const [pickModalOpen, setPickModalOpen] = useState(false);
   const [newAssetModalOpen, setNewAssetModalOpen] = useState(false);
+  const [editingAsset, setEditingAsset] = useState(null);
   const [tradingAsset, setTradingAsset] = useState(null);
   const [editingPriceId, setEditingPriceId] = useState(null);
   const [editingPriceValue, setEditingPriceValue] = useState('');
   const [savingPrice, setSavingPrice] = useState(false);
 
   const assets = assetsData?.assets || [];
+
+  useEffect(() => {
+    setSearch('');
+    setBankFilter('');
+    setTypeFilter('');
+  }, [showArchived]);
 
   function reload() {
     reloadAssets();
@@ -94,7 +105,6 @@ export default function Portfolio() {
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return enriched.filter((a) => {
-      if (a.position.quantity <= 0) return false;
       if (term && !(a.code || '').toLowerCase().includes(term) && !a.name.toLowerCase().includes(term)) return false;
       if (bankFilter && a.bankName !== bankFilter) return false;
       if (typeFilter && a.type !== typeFilter) return false;
@@ -169,9 +179,11 @@ export default function Portfolio() {
     <div className="screen active">
       <div className="topbar">
         <h1>Carteira</h1>
-        <div className="period" onClick={() => setPickModalOpen(true)}>
-          + nova compra
-        </div>
+        {!showArchived && (
+          <div className="period" onClick={() => setPickModalOpen(true)}>
+            + nova compra
+          </div>
+        )}
       </div>
 
       <div className="fatura-note show" style={{ marginBottom: 16 }}>
@@ -222,6 +234,15 @@ export default function Portfolio() {
         </div>
       </div>
 
+      <div className="seg" style={{ marginBottom: 16, maxWidth: 280 }}>
+        <div className={`seg-opt${!showArchived ? ' active' : ''}`} onClick={() => setShowArchived(false)}>
+          Ativos
+        </div>
+        <div className={`seg-opt${showArchived ? ' active' : ''}`} onClick={() => setShowArchived(true)}>
+          Arquivados
+        </div>
+      </div>
+
       <div className="card">
         <div className="asset-table-wrap">
           <div className="asset-row asset-head">
@@ -235,11 +256,12 @@ export default function Portfolio() {
                 <span className="arrow">{sort.key === c.key && sort.dir === 'asc' ? '▴' : '▾'}</span>
               </div>
             ))}
+            <div />
           </div>
 
           {sorted.length === 0 && (
             <div style={{ padding: '20px 4px', fontSize: 12.5, color: 'var(--ink-faint)' }}>
-              Nenhum ativo encontrado com esses filtros.
+              {showArchived ? 'Nenhum ativo arquivado.' : 'Nenhum ativo encontrado com esses filtros.'}
             </div>
           )}
 
@@ -294,6 +316,25 @@ export default function Portfolio() {
                 <div className={`a-rent ${a.rent == null ? '' : a.rent >= 0 ? 'up' : 'down'}`}>
                   {a.rent == null ? '—' : `${a.rent >= 0 ? '+' : ''}${a.rent.toFixed(1)}%`}
                 </div>
+                <button
+                  type="button"
+                  title="Editar ativo"
+                  onClick={() => setEditingAsset(a)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 26,
+                    height: 26,
+                    borderRadius: 7,
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'var(--ink-faint)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <IconPencil style={{ width: 13, height: 13 }} />
+                </button>
               </div>
             );
           })}
@@ -325,6 +366,18 @@ export default function Portfolio() {
           setNewAssetModalOpen(false);
           reloadAssets();
           setTradingAsset({ ...asset, position: { quantity: 0, avg_unit_price: 0, invested_amount: 0, current_amount: null } });
+        }}
+      />
+
+      <NewAssetModal
+        open={!!editingAsset}
+        asset={editingAsset}
+        banks={banks}
+        investmentAccounts={investmentAccounts}
+        onClose={() => setEditingAsset(null)}
+        onSaved={() => {
+          setEditingAsset(null);
+          reload();
         }}
       />
 
