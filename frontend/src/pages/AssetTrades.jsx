@@ -20,8 +20,9 @@ export default function AssetTrades() {
   const { data: tradesData, reload: reloadTrades } = useFetch(() => investmentsApi.listAssetTransactions(), []);
   const { banks, investmentAccounts, bankById, reloadAll } = useData();
   const [pickModalOpen, setPickModalOpen] = useState(false);
+  const [pickKind, setPickKind] = useState('buy');
   const [newAssetModalOpen, setNewAssetModalOpen] = useState(false);
-  const [tradingAsset, setTradingAsset] = useState(null);
+  const [tradeState, setTradeState] = useState(null);
 
   const assets = assetsData?.assets || [];
   const trades = tradesData?.asset_transactions || [];
@@ -33,6 +34,7 @@ export default function AssetTrades() {
   }
 
   const purchases = useMemo(() => trades.filter((t) => t.type === 'buy'), [trades]);
+  const sales = useMemo(() => trades.filter((t) => t.type === 'sell'), [trades]);
 
   const totalThisMonth = useMemo(() => {
     const currentMonth = todayIso().slice(0, 7);
@@ -40,6 +42,11 @@ export default function AssetTrades() {
       .filter((t) => t.date.slice(0, 7) === currentMonth)
       .reduce((s, t) => s + t.total_amount, 0);
   }, [purchases]);
+
+  function openPick(kind) {
+    setPickKind(kind);
+    setPickModalOpen(true);
+  }
 
   function bankNameFor(assetSnapshot) {
     const account = investmentAccounts.find((a) => a.investment_account?.id === assetSnapshot.investment_account_id);
@@ -55,13 +62,18 @@ export default function AssetTrades() {
   return (
     <div className="screen active">
       <div className="topbar">
-        <h1>Compras</h1>
-        <div
-          className="period"
-          style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
-          onClick={() => setPickModalOpen(true)}
-        >
-          + nova compra
+        <h1>Compras e vendas</h1>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div
+            className="period"
+            style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
+            onClick={() => openPick('buy')}
+          >
+            + nova compra
+          </div>
+          <div className="period" onClick={() => openPick('sell')}>
+            + nova venda
+          </div>
         </div>
       </div>
 
@@ -96,15 +108,42 @@ export default function AssetTrades() {
         ))}
       </div>
 
+      <div className="card" style={{ marginTop: 20 }}>
+        <h3>Histórico de vendas</h3>
+        {sales.length === 0 && <div className="empty-state">Nenhuma venda registrada ainda.</div>}
+        {sales.map((t) => (
+          <div className="compra-row" key={t.id}>
+            <div className="compra-left">
+              <div className="compra-icon" style={{ background: 'var(--brick-soft)', color: 'var(--brick)' }}>
+                {initials(t.asset.code || t.asset.name)}
+              </div>
+              <div>
+                <div className="compra-desc">{t.asset.code || t.asset.name}</div>
+                <div className="compra-meta">
+                  {bankNameFor(t.asset)} · {fmtDateShort(t.date)}
+                </div>
+              </div>
+            </div>
+            <div className="compra-val">
+              <div className="compra-total num">{fmt(t.total_amount)}</div>
+              <div className="compra-unit">
+                {t.quantity} × {fmt(t.unit_price)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       <PickAssetModal
         open={pickModalOpen}
+        kind={pickKind}
         assets={assets}
         investmentAccounts={investmentAccounts}
         bankById={bankById}
         onClose={() => setPickModalOpen(false)}
         onPick={(asset) => {
           setPickModalOpen(false);
-          setTradingAsset(asset);
+          setTradeState({ asset, kind: pickKind });
         }}
         onNewAsset={() => {
           setPickModalOpen(false);
@@ -120,18 +159,21 @@ export default function AssetTrades() {
         onCreated={(asset) => {
           setNewAssetModalOpen(false);
           reloadAssets();
-          setTradingAsset({ ...asset, position: { quantity: 0, avg_unit_price: 0, invested_amount: 0, current_amount: null } });
+          setTradeState({
+            asset: { ...asset, position: { quantity: 0, avg_unit_price: 0, invested_amount: 0, current_amount: null } },
+            kind: 'buy',
+          });
         }}
       />
 
       <TradeAssetModal
-        open={!!tradingAsset}
-        asset={tradingAsset}
-        kind="buy"
-        accountBalance={tradingAsset ? accountBalanceFor(tradingAsset) : null}
-        onClose={() => setTradingAsset(null)}
+        open={!!tradeState}
+        asset={tradeState?.asset}
+        kind={tradeState?.kind}
+        accountBalance={tradeState?.asset ? accountBalanceFor(tradeState.asset) : null}
+        onClose={() => setTradeState(null)}
         onSaved={() => {
-          setTradingAsset(null);
+          setTradeState(null);
           reload();
         }}
       />

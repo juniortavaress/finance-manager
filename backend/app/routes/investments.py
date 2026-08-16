@@ -316,18 +316,22 @@ def _create_asset_transaction(asset, kind, data):
     quantity = Decimal(str(quantity))
     unit_price = Decimal(str(unit_price))
     fee_amount = Decimal(str(fee_amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    total_amount = (quantity * unit_price + fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    base_amount = quantity * unit_price
     trade_date = dt.date.fromisoformat(date_raw)
 
     account = asset.investment_account.account
     category = _get_or_create_transfer_category(g.current_user.id)
 
     if kind == "buy":
+        total_amount = (base_amount + fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         if total_amount > account.balance:
             raise ApiError("Saldo insuficiente na conta de investimento", 400)
         tx_type = "expense"
         description = f"Compra {asset.code or asset.name}"
     else:
+        if fee_amount > base_amount:
+            raise ApiError("Taxa não pode ser maior que o valor da venda", 400)
+        total_amount = (base_amount - fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         position = _asset_position(asset)
         if quantity > Decimal(str(position["quantity"])):
             raise ApiError("Quantidade insuficiente do ativo para vender", 400)

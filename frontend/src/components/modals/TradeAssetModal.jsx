@@ -38,33 +38,34 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
 
   const numericQuantity = Number(String(quantity).replace(',', '.')) || 0;
   const numericUnitPrice = maskToNumber(unitPrice);
-  const numericFee = isSell ? 0 : maskToNumber(feeAmount);
+  const numericFee = maskToNumber(feeAmount);
   const baseAmount = numericQuantity * numericUnitPrice;
-  const numericTotal = isSell ? baseAmount : maskToNumber(totalAmount);
+  const numericTotal = maskToNumber(totalAmount);
+  const feeSign = isSell ? -1 : 1;
 
   function handleQuantityChange(v) {
     const clean = v.replace(/[^\d,.]/g, '');
     setQuantity(clean);
     const qty = Number(clean.replace(',', '.')) || 0;
-    setTotalAmount(numberToMasked(qty * numericUnitPrice + numericFee));
+    setTotalAmount(numberToMasked(qty * numericUnitPrice + feeSign * numericFee));
   }
 
   function handleUnitPriceChange(v) {
     setUnitPrice(v);
     const price = maskToNumber(v);
-    setTotalAmount(numberToMasked(numericQuantity * price + numericFee));
+    setTotalAmount(numberToMasked(numericQuantity * price + feeSign * numericFee));
   }
 
   function handleFeeChange(v) {
     setFeeAmount(v);
     const fee = maskToNumber(v);
-    setTotalAmount(numberToMasked(baseAmount + fee));
+    setTotalAmount(numberToMasked(baseAmount + feeSign * fee));
   }
 
   function handleTotalChange(v) {
     setTotalAmount(v);
     const total = maskToNumber(v);
-    setFeeAmount(numberToMasked(Math.max(0, total - baseAmount)));
+    setFeeAmount(numberToMasked(Math.max(0, feeSign * (total - baseAmount))));
   }
 
   async function handleSubmit(e) {
@@ -147,18 +148,16 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
             </div>
           </div>
 
-          {!isSell && (
-            <div className="field-row">
-              <div className="field">
-                <label>Taxa</label>
-                <CurrencyInput value={feeAmount} onChange={handleFeeChange} />
-              </div>
-              <div className="field">
-                <label>Valor final</label>
-                <CurrencyInput value={totalAmount} onChange={handleTotalChange} />
-              </div>
+          <div className="field-row">
+            <div className="field">
+              <label>Taxa</label>
+              <CurrencyInput value={feeAmount} onChange={handleFeeChange} />
             </div>
-          )}
+            <div className="field">
+              <label>Valor final</label>
+              <CurrencyInput value={totalAmount} onChange={handleTotalChange} />
+            </div>
+          </div>
 
           <div className="modal-actions">
             <div className="btn btn-ghost" onClick={onClose}>

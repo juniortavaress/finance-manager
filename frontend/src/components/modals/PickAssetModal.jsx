@@ -2,16 +2,28 @@ import { useEffect, useState } from 'react';
 import ModalShell from './ModalShell';
 
 /**
- * Passo 1 de "nova compra": escolher em qual ativo a compra entra, ou ir
- * cadastrar um novo ativo primeiro (NewAssetModal). Depois de escolhido,
- * quem abriu este modal segue pro TradeAssetModal com o ativo definido.
+ * Passo 1 de "nova compra/venda": escolher em qual ativo a operação entra, ou ir
+ * cadastrar um novo ativo primeiro (NewAssetModal, só disponível para compra).
+ * Depois de escolhido, quem abriu este modal segue pro TradeAssetModal com o ativo definido.
  */
-export default function PickAssetModal({ open, onClose, onPick, onNewAsset, assets = [], investmentAccounts = [], bankById }) {
+export default function PickAssetModal({
+  open,
+  onClose,
+  onPick,
+  onNewAsset,
+  assets = [],
+  investmentAccounts = [],
+  bankById,
+  kind = 'buy',
+}) {
+  const isSell = kind === 'sell';
+  const pickableAssets = isSell ? assets.filter((a) => (a.position?.quantity || 0) > 0) : assets;
   const [selectedAssetId, setSelectedAssetId] = useState('');
 
   useEffect(() => {
     if (!open) return;
-    setSelectedAssetId(assets[0]?.id || '');
+    setSelectedAssetId(pickableAssets[0]?.id || '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, assets]);
 
   if (!open) return null;
@@ -24,7 +36,7 @@ export default function PickAssetModal({ open, onClose, onPick, onNewAsset, asse
 
   function handleContinue(e) {
     e.preventDefault();
-    const asset = assets.find((a) => a.id === selectedAssetId);
+    const asset = pickableAssets.find((a) => a.id === selectedAssetId);
     if (asset) onPick(asset);
   }
 
@@ -32,21 +44,23 @@ export default function PickAssetModal({ open, onClose, onPick, onNewAsset, asse
     <ModalShell open={open} onClose={onClose}>
       <div className="modal">
         <div className="modal-head">
-          <h2>Nova compra</h2>
+          <h2>{isSell ? 'Nova venda' : 'Nova compra'}</h2>
           <button className="modal-close" onClick={onClose}>
             ✕
           </button>
         </div>
         <form className="modal-body" onSubmit={handleContinue}>
-          {assets.length === 0 ? (
+          {pickableAssets.length === 0 ? (
             <div className="empty-hint" style={{ marginBottom: 16 }}>
-              Você ainda não tem nenhum ativo cadastrado. Cadastre um para começar a registrar compras.
+              {isSell
+                ? 'Você não tem nenhum ativo com posição disponível para vender.'
+                : 'Você ainda não tem nenhum ativo cadastrado. Cadastre um para começar a registrar compras.'}
             </div>
           ) : (
             <div className="field">
               <label>Ativo</label>
               <select value={selectedAssetId} onChange={(e) => setSelectedAssetId(e.target.value)}>
-                {assets.map((a) => (
+                {pickableAssets.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.code || a.name} — {bankNameFor(a)}
                   </option>
@@ -55,18 +69,20 @@ export default function PickAssetModal({ open, onClose, onPick, onNewAsset, asse
             </div>
           )}
 
-          <div
-            style={{ fontSize: 12.5, color: 'var(--teal)', cursor: 'pointer', marginBottom: 4 }}
-            onClick={onNewAsset}
-          >
-            + cadastrar novo ativo
-          </div>
+          {!isSell && (
+            <div
+              style={{ fontSize: 12.5, color: 'var(--teal)', cursor: 'pointer', marginBottom: 4 }}
+              onClick={onNewAsset}
+            >
+              + cadastrar novo ativo
+            </div>
+          )}
 
           <div className="modal-actions" style={{ marginTop: 20 }}>
             <div className="btn btn-ghost" onClick={onClose}>
               Cancelar
             </div>
-            <button className="btn btn-primary" type="submit" disabled={assets.length === 0}>
+            <button className="btn btn-primary" type="submit" disabled={pickableAssets.length === 0}>
               Continuar
             </button>
           </div>
