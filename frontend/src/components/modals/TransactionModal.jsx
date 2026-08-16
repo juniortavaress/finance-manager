@@ -92,7 +92,8 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   const isInstallment = isEditing && !!transaction.installment_plan_id;
   const isInstallmentConfirmed = isInstallment && transaction.status === 'confirmed';
   const isInvoicePayment = isEditing && !!transaction.is_invoice_payment;
-  const canChangeAccount = !isEditing || (!isInstallment && !isInvoicePayment);
+  const isTransfer = isEditing && !!transaction.is_transfer;
+  const canChangeAccount = !isEditing || (!isInstallment && !isInvoicePayment && !isTransfer);
 
   async function handleDelete() {
     if (isInstallment) {
@@ -111,10 +112,12 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
     setError('');
 
     if (!description.trim()) return setError('Informe uma descrição.');
-    if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
-    if (!isInvoicePayment && !categoryId) return setError('Selecione uma categoria.');
-    if (!accountRef) return setError('Selecione uma conta ou cartão.');
-    if (customInstallments && installments < 13) return setError('Informe a quantidade de parcelas.');
+    if (!isTransfer) {
+      if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
+      if (!isInvoicePayment && !categoryId) return setError('Selecione uma categoria.');
+      if (!accountRef) return setError('Selecione uma conta ou cartão.');
+      if (customInstallments && installments < 13) return setError('Informe a quantidade de parcelas.');
+    }
 
     setSubmitting(true);
     try {
@@ -122,10 +125,14 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
         const [, accId] = accountRef.split(':');
         await transactionsApi.update(transaction.id, {
           description: description.trim(),
-          amount: numericAmount,
-          date,
-          ...(isInvoicePayment ? {} : { category_id: categoryId }),
-          ...(canChangeAccount ? { account_id: accId } : {}),
+          ...(isTransfer
+            ? {}
+            : {
+                amount: numericAmount,
+                date,
+                ...(isInvoicePayment ? {} : { category_id: categoryId }),
+                ...(canChangeAccount ? { account_id: accId } : {}),
+              }),
         });
         showSuccess('Transação atualizada com sucesso.');
       } else if (recorrente) {
@@ -176,7 +183,15 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
     <ModalShell open={open} onClose={onClose}>
       <div className="modal">
         <div className="modal-head">
-          <h2>{isEditing ? 'Editar transação' : installmentOnly ? 'Nova compra parcelada' : 'Nova transação'}</h2>
+          <h2>
+            {isEditing
+              ? isTransfer
+                ? 'Transferência entre contas'
+                : 'Editar transação'
+              : installmentOnly
+              ? 'Nova compra parcelada'
+              : 'Nova transação'}
+          </h2>
           <div className="modal-head-actions">
             {isEditing && (
               <button
@@ -229,15 +244,22 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
           <div className="field-row">
             <div className="field">
               <label>Valor</label>
-              <CurrencyInput value={amount} onChange={setAmount} />
+              <CurrencyInput value={amount} onChange={setAmount} disabled={isTransfer} />
             </div>
             <div className="field">
               <label>Data</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={isTransfer} />
             </div>
           </div>
 
-          {!isInvoicePayment && (
+          {isTransfer && (
+            <div className="fatura-note show" style={{ background: 'var(--bg)', color: 'var(--ink-soft)' }}>
+              Esta é uma transferência entre contas — não afeta receitas ou despesas. Para corrigir valor, data ou
+              contas, exclua e crie uma nova transferência.
+            </div>
+          )}
+
+          {!isInvoicePayment && !isTransfer && (
             <div className="field">
               <label>Categoria</label>
               <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
@@ -250,7 +272,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
             </div>
           )}
 
-          {(!isEditing || canChangeAccount) && (
+          {!isTransfer && (!isEditing || canChangeAccount) && (
             <div className="field">
               <label>{installmentOnly ? 'Cartão' : 'Conta / Cartão'}</label>
               <select value={accountRef} onChange={(e) => setAccountRef(e.target.value)}>
@@ -381,6 +403,8 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
           message={
             isInstallment
               ? `Esta transação faz parte de um parcelamento. Cancelar a parcela ${transaction.installment_number} e as seguintes? Esta ação não pode ser desfeita.`
+              : isTransfer
+              ? 'Esta é uma transferência entre contas. Excluir vai remover o lançamento nas duas contas. Esta ação não pode ser desfeita.'
               : 'Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.'
           }
         />

@@ -37,12 +37,15 @@ class Transaction(BaseModel):
     invoice_payment_for_id = db.Column(
         UUID(as_uuid=True), db.ForeignKey("credit_card_invoices.id"), nullable=True, index=True
     )
+    is_transfer = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    transfer_pair_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"), nullable=True, index=True)
 
     account = db.relationship("Account", backref="transactions")
     category = db.relationship("Category", backref="transactions")
     invoice_payment_for = db.relationship(
         "CreditCardInvoice", backref="payment_transactions", foreign_keys=[invoice_payment_for_id]
     )
+    transfer_pair = db.relationship("Transaction", remote_side="Transaction.id", foreign_keys=[transfer_pair_id])
 
     def to_dict(self):
         return {
@@ -62,6 +65,8 @@ class Transaction(BaseModel):
             "notes": self.notes,
             "is_invoice_payment": self.is_invoice_payment,
             "invoice_payment_for_id": str(self.invoice_payment_for_id) if self.invoice_payment_for_id else None,
+            "is_transfer": self.is_transfer,
+            "transfer_pair_id": str(self.transfer_pair_id) if self.transfer_pair_id else None,
             "category": self.category.to_dict() if self.category else None,
             "account": self.account.to_dict() if self.account else None,
         }

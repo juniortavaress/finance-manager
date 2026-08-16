@@ -23,6 +23,24 @@ from app.services.finance_service import (
 
 transactions_bp = Blueprint("transactions", __name__)
 
+TRANSFER_CATEGORY_NAME = "Transferência entre contas"
+
+
+def _get_or_create_transfer_category(user_id):
+    category = Category.query.filter_by(user_id=user_id, name=TRANSFER_CATEGORY_NAME, archived=True).first()
+    if category is None:
+        category = Category(
+            user_id=user_id,
+            name=TRANSFER_CATEGORY_NAME,
+            icon="\U0001F501",
+            color_hex="#8B9A97",
+            kind="both",
+            archived=True,
+        )
+        db.session.add(category)
+        db.session.flush()
+    return category
+
 
 def _parse_filters():
     filters = []
@@ -34,6 +52,7 @@ def _parse_filters():
     date_to = request.args.get("date_to")
     status = request.args.get("status")
     is_invoice_payment = request.args.get("is_invoice_payment")
+    is_transfer = request.args.get("is_transfer")
 
     if account_id:
         filters.append(Transaction.account_id == account_id)
@@ -51,6 +70,8 @@ def _parse_filters():
         filters.append(Transaction.date <= dt.date.fromisoformat(date_to))
     if is_invoice_payment is not None:
         filters.append(Transaction.is_invoice_payment.is_(is_invoice_payment.lower() == "true"))
+    if is_transfer is not None:
+        filters.append(Transaction.is_transfer.is_(is_transfer.lower() == "true"))
     return filters
 
 
@@ -257,6 +278,79 @@ def create_transaction():
     return {"transaction": tx.to_dict()}, 201
 
 
+@transactions_bp.post("/transfer")
+@login_required
+def create_transfer():
+    data = request.get_json(silent=True) or {}
+
+    description = (data.get("description") or "").strip() or "Transferência entre contas"
+    amount = data.get("amount")
+    from_account_id = data.get("from_account_id")
+    to_account_id = data.get("to_account_id")
+    date_raw = data.get("date")
+
+    if not amount or Decimal(str(amount)) <= 0:
+        raise ApiError("Valor deve ser maior que zero", 400)
+    if not date_raw:
+        raise ApiError("Data é obrigatória", 400)
+    if not from_account_id or not to_account_id:
+        raise ApiError("Selecione as contas de origem e destino", 400)
+    if from_account_id == to_account_id:
+        raise ApiError("As contas de origem e destino devem ser diferentes", 400)
+
+    from_account = Account.query.filter_by(
+        id=from_account_id, user_id=g.current_user.id, type="checking", archived=False
+    ).first()
+    if from_account is None:
+        raise ApiError("Conta de origem não encontrada", 404)
+    to_account = Account.query.filter_by(
+        id=to_account_id, user_id=g.current_user.id, type="checking", archived=False
+    ).first()
+    if to_account is None:
+        raise ApiError("Conta de destino não encontrada", 404)
+
+    transfer_date = dt.date.fromisoformat(date_raw)
+    amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    category = _get_or_create_transfer_category(g.current_user.id)
+
+    tx_out = Transaction(
+        user_id=g.current_user.id,
+        account_id=from_account.id,
+        category_id=category.id,
+        description=description,
+        amount=amount,
+        type="expense",
+        date=transfer_date,
+        payment_method="debit",
+        status="confirmed",
+        is_transfer=True,
+    )
+    tx_in = Transaction(
+        user_id=g.current_user.id,
+        account_id=to_account.id,
+        category_id=category.id,
+        description=description,
+        amount=amount,
+        type="income",
+        date=transfer_date,
+        payment_method="debit",
+        status="confirmed",
+        is_transfer=True,
+    )
+    db.session.add(tx_out)
+    db.session.add(tx_in)
+    db.session.flush()
+
+    tx_out.transfer_pair_id = tx_in.id
+    tx_in.transfer_pair_id = tx_out.id
+    db.session.flush()
+
+    recalc_account_balance(from_account)
+    recalc_account_balance(to_account)
+    db.session.commit()
+    return {"transaction_out": tx_out.to_dict(), "transaction_in": tx_in.to_dict()}, 201
+
+
 @transactions_bp.patch("/<uuid:transaction_id>")
 @login_required
 def update_transaction(transaction_id):
@@ -265,11 +359,15 @@ def update_transaction(transaction_id):
         raise ApiError("Transação não encontrada", 404)
 
     data = request.get_json(silent=True) or {}
+    if tx.is_transfer and any(f in data for f in ("amount", "date", "account_id", "category_id")):
+        raise ApiError("Não é possível editar valor, data, conta ou categoria de uma transferência. Exclua e crie novamente.", 400)
     if "status" in data and data["status"] not in TRANSACTION_STATUSES:
         raise ApiError("Status inválido", 400)
     for field in ("description", "notes", "status"):
         if field in data:
             setattr(tx, field, data[field])
+    if tx.is_transfer and tx.transfer_pair and "description" in data:
+        tx.transfer_pair.description = tx.description
     if "amount" in data:
         tx.amount = Decimal(str(data["amount"])).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -335,10 +433,17 @@ def delete_transaction(transaction_id):
     account = tx.account
     invoice = tx.credit_card_invoice
     payment_for_invoice = tx.invoice_payment_for if tx.is_invoice_payment else None
+    pair = tx.transfer_pair if tx.is_transfer else None
+    pair_account = pair.account if pair else None
+
+    if pair:
+        db.session.delete(pair)
     db.session.delete(tx)
     db.session.flush()
 
     recalc_account_balance(account)
+    if pair_account:
+        recalc_account_balance(pair_account)
     if invoice:
         recalc_invoice_total(invoice)
         recalc_credit_card_used_amount(invoice.credit_card)

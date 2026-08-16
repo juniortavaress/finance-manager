@@ -77,8 +77,12 @@ export default function Transactions() {
     });
   }, [transactions, bankFilter, accountTypeFilter, accountById]);
 
-  const entradas = filteredByBank.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const saidas = filteredByBank.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const entradas = filteredByBank
+    .filter((t) => t.type === 'income' && !t.is_transfer)
+    .reduce((s, t) => s + t.amount, 0);
+  const saidas = filteredByBank
+    .filter((t) => t.type === 'expense' && !t.is_transfer)
+    .reduce((s, t) => s + t.amount, 0);
 
   const hasActiveFilters = !!(
     search ||
@@ -249,10 +253,16 @@ export default function Transactions() {
                 <div
                   className="tx-icon"
                   style={{
-                    background: t.group_color_hex ? `${t.group_color_hex}22` : pos ? 'var(--teal-soft)' : 'var(--bg)',
+                    background: t.is_transfer
+                      ? 'var(--bg)'
+                      : t.group_color_hex
+                      ? `${t.group_color_hex}22`
+                      : pos
+                      ? 'var(--teal-soft)'
+                      : 'var(--bg)',
                   }}
                 >
-                  {t.group_icon || category?.icon || '📁'}
+                  {t.is_transfer ? '🔁' : t.group_icon || category?.icon || '📁'}
                 </div>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -267,7 +277,12 @@ export default function Transactions() {
                   </div>
                 </div>
               </div>
-              <div className={`tx-val num ${pos ? 'pos' : 'neg'}`}>{fmt(pos ? t.amount : -t.amount)}</div>
+              <div
+                className={`tx-val num ${t.is_transfer ? '' : pos ? 'pos' : 'neg'}`}
+                style={t.is_transfer ? { color: 'var(--ink-soft)' } : undefined}
+              >
+                {fmt(pos ? t.amount : -t.amount)}
+              </div>
             </div>
           );
         })}

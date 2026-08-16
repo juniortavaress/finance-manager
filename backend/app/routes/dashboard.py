@@ -59,6 +59,7 @@ def summary():
                 Transaction.date <= d_end,
                 Transaction.status == "confirmed",
                 Transaction.is_invoice_payment.is_(False),
+                Transaction.is_transfer.is_(False),
             )
             .group_by(Transaction.type)
             .all()
@@ -78,6 +79,8 @@ def summary():
             Transaction.date >= start,
             Transaction.date <= end,
             Transaction.status == "confirmed",
+            Transaction.is_invoice_payment.is_(False),
+            Transaction.is_transfer.is_(False),
         ).count()
     )
 
@@ -119,6 +122,7 @@ def spending_by_category():
             Transaction.date >= start,
             Transaction.date <= end,
             Transaction.is_invoice_payment.is_(False),
+            Transaction.is_transfer.is_(False),
         )
         .group_by(Category.id)
         .order_by(db.func.sum(Transaction.amount).desc())
@@ -170,6 +174,7 @@ def income_vs_expense():
             Transaction.date >= start_date,
             Transaction.status == "confirmed",
             Transaction.is_invoice_payment.is_(False),
+            Transaction.is_transfer.is_(False),
         )
         .group_by(
             db.func.extract("year", Transaction.date),

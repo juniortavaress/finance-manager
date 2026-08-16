@@ -4,8 +4,9 @@ import { creditCardsApi } from '../api/resources';
 import { fmt, monthLabel } from '../utils/format';
 import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
+import TransferModal from '../components/modals/TransferModal';
 import InvoiceHistoryChart from '../components/charts/InvoiceHistoryChart';
-import { IconPencil } from '../components/icons';
+import { IconPencil, IconSwap } from '../components/icons';
 
 const FALLBACK_COLOR = '#0F5C5C';
 
@@ -19,6 +20,7 @@ export default function Accounts() {
   const [editingBank, setEditingBank] = useState(null);
   const [payingCard, setPayingCard] = useState(null);
   const [highlightedCardId, setHighlightedCardId] = useState(null);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
 
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
 
@@ -119,8 +121,14 @@ export default function Accounts() {
     <div className="screen active">
       <div className="topbar">
         <h1>Contas &amp; Bancos</h1>
-        <div className="period" onClick={openNewBank}>
-          + novo banco
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div className="period" onClick={() => setTransferModalOpen(true)}>
+            <IconSwap style={{ width: 13, height: 13, marginRight: 5, verticalAlign: -2 }} />
+            transferir
+          </div>
+          <div className="period" onClick={openNewBank}>
+            + novo banco
+          </div>
         </div>
       </div>
 
@@ -311,6 +319,15 @@ export default function Accounts() {
         onClose={() => setPayingCard(null)}
         onPaid={() => {
           setPayingCard(null);
+          reloadAll();
+        }}
+      />
+
+      <TransferModal
+        open={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        onCreated={() => {
+          setTransferModalOpen(false);
           reloadAll();
         }}
       />

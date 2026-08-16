@@ -35,6 +35,7 @@ export const transactionsApi = {
   create: (data) => api.post('/transactions/', data),
   update: (id, data) => api.patch(`/transactions/${id}`, data),
   remove: (id) => api.delete(`/transactions/${id}`),
+  transfer: (data) => api.post('/transactions/transfer', data),
 };
 
 export const recurringApi = {

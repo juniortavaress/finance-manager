@@ -327,8 +327,11 @@ export default function Dashboard() {
               return (
                 <div className="tx-row" key={t.id}>
                   <div className="tx-left">
-                    <div className="tx-icon" style={{ background: pos ? 'var(--teal-soft)' : 'var(--bg)' }}>
-                      {category?.icon || '📁'}
+                    <div
+                      className="tx-icon"
+                      style={{ background: t.is_transfer ? 'var(--bg)' : pos ? 'var(--teal-soft)' : 'var(--bg)' }}
+                    >
+                      {t.is_transfer ? '🔁' : category?.icon || '📁'}
                     </div>
                     <div>
                       <div className="tx-desc">{t.description}</div>
@@ -337,7 +340,12 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className={`tx-val num ${pos ? 'pos' : 'neg'}`}>{fmt(pos ? t.amount : -t.amount)}</div>
+                  <div
+                    className={`tx-val num ${t.is_transfer ? '' : pos ? 'pos' : 'neg'}`}
+                    style={t.is_transfer ? { color: 'var(--ink-soft)' } : undefined}
+                  >
+                    {fmt(pos ? t.amount : -t.amount)}
+                  </div>
                 </div>
               );
             })}
