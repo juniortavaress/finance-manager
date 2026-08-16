@@ -276,6 +276,7 @@ def update_transaction(transaction_id):
     old_account = tx.account
     old_invoice = tx.credit_card_invoice
     account_changed = False
+    current_account = tx.account
 
     if "account_id" in data and data["account_id"] != str(tx.account_id):
         if tx.installment_plan_id or tx.is_invoice_payment:
@@ -295,12 +296,13 @@ def update_transaction(transaction_id):
         if not is_credit:
             tx.credit_card_invoice_id = None
         account_changed = True
+        current_account = new_account
 
     if "date" in data:
         tx.date = dt.date.fromisoformat(data["date"])
-    if (account_changed or "date" in data) and tx.payment_method == "credit" and tx.account.credit_card:
-        ref_month = invoice_month_for_date(tx.account.credit_card, tx.date)
-        new_invoice = get_or_create_invoice(tx.account.credit_card, ref_month)
+    if (account_changed or "date" in data) and tx.payment_method == "credit" and current_account.credit_card:
+        ref_month = invoice_month_for_date(current_account.credit_card, tx.date)
+        new_invoice = get_or_create_invoice(current_account.credit_card, ref_month)
         tx.credit_card_invoice_id = new_invoice.id
     if "category_id" in data and not tx.is_invoice_payment:
         category = Category.query.filter_by(
@@ -311,7 +313,7 @@ def update_transaction(transaction_id):
         tx.category_id = category.id
 
     db.session.flush()
-    apply_transaction_side_effects(tx, tx.account)
+    apply_transaction_side_effects(tx, current_account)
     if account_changed:
         recalc_account_balance(old_account)
     if old_invoice and old_invoice.id != tx.credit_card_invoice_id:
