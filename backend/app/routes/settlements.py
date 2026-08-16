@@ -9,7 +9,14 @@ from app.extensions import db
 from app.models import Account, Category, GroupMember, Settlement
 from app.models.transaction import Transaction
 from app.routes.friends import are_friends
-from app.services.finance_service import apply_transaction_side_effects, recalc_account_balance
+from app.services.finance_service import (
+    apply_transaction_side_effects,
+    get_or_create_invoice,
+    invoice_month_for_date,
+    recalc_account_balance,
+    recalc_credit_card_used_amount,
+    recalc_invoice_total,
+)
 
 settlements_bp = Blueprint("settlements", __name__)
 
@@ -100,6 +107,10 @@ def create_settlement():
             raise ApiError("Conta nao encontrada", 404)
 
         category = _resolve_category(category_id, "expense")
+        is_credit = account.type == "credit_card"
+        if is_credit and not account.credit_card:
+            raise ApiError("Conta selecionada nao e um cartao de credito", 400)
+
         tx = Transaction(
             user_id=g.current_user.id,
             account_id=account.id,
@@ -108,12 +119,20 @@ def create_settlement():
             amount=amount,
             type="expense",
             date=settlement.date,
-            payment_method="debit",
+            payment_method="credit" if is_credit else "debit",
             status="confirmed",
         )
+        if is_credit:
+            ref_month = invoice_month_for_date(account.credit_card, settlement.date)
+            invoice = get_or_create_invoice(account.credit_card, ref_month)
+            tx.credit_card_invoice_id = invoice.id
+
         db.session.add(tx)
         db.session.flush()
         apply_transaction_side_effects(tx, account)
+        if is_credit:
+            recalc_invoice_total(tx.credit_card_invoice)
+            recalc_credit_card_used_amount(account.credit_card)
 
         settlement.payer_account_id = account.id
         settlement.payer_transaction_id = tx.id

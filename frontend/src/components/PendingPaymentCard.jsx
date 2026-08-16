@@ -10,7 +10,7 @@ import { fmt } from '../utils/format';
  * botao confirmar. `kind` define se a categoria e de despesa ou receita.
  */
 export default function PendingPaymentCard({ label, amount, accountIdDefault, kind = 'expense', onConfirm }) {
-  const { checkingAccounts, expenseCategories, incomeCategories } = useData();
+  const { checkingAccounts, creditCardAccounts, expenseCategories, incomeCategories } = useData();
   const categories = kind === 'income' ? incomeCategories : expenseCategories;
   const [accountId, setAccountId] = useState(accountIdDefault || checkingAccounts[0]?.id || '');
   const [categoryId, setCategoryId] = useState('');
@@ -34,11 +34,22 @@ export default function PendingPaymentCard({ label, amount, accountIdDefault, ki
       </div>
       <div className="pending-payment-actions">
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-          {checkingAccounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
+          <optgroup label="Contas correntes">
+            {checkingAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </optgroup>
+          {kind === 'expense' && (
+            <optgroup label="Cartões de crédito">
+              {creditCardAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
           <option value="">Categoria...</option>

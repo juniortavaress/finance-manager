@@ -23,7 +23,7 @@ function todayIso() {
  * (`groupId` presente) sempre cria um unico settlement escopado aquele grupo.
  */
 export default function SettleUpModal({ open, onClose, onSaved, groupId, friendUserId, counterpartyName, suggestedAmount, breakdown }) {
-  const { checkingAccounts, expenseCategories } = useData();
+  const { checkingAccounts, creditCardAccounts, expenseCategories } = useData();
   const { showSuccess, showError } = useToast();
 
   const [amount, setAmount] = useState('');
@@ -122,11 +122,20 @@ export default function SettleUpModal({ open, onClose, onSaved, groupId, friendU
             <div className="field">
               <label>Sua conta de saída</label>
               <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                {checkingAccounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
+                <optgroup label="Contas correntes">
+                  {checkingAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Cartões de crédito">
+                  {creditCardAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
             <div className="field">

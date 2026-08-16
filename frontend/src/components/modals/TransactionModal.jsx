@@ -92,6 +92,8 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   const isInstallment = isEditing && !!transaction.installment_plan_id;
   const isInstallmentConfirmed = isInstallment && transaction.status === 'confirmed';
   const isInvoicePayment = isEditing && !!transaction.is_invoice_payment;
+  const canChangeAccount = !isEditing || (!isInstallment && !isInvoicePayment);
+  const editingPaymentMethod = isEditing ? transaction.payment_method : null;
 
   async function handleDelete() {
     if (isInstallment) {
@@ -118,11 +120,13 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
     setSubmitting(true);
     try {
       if (isEditing) {
+        const [, accId] = accountRef.split(':');
         await transactionsApi.update(transaction.id, {
           description: description.trim(),
           amount: numericAmount,
           date,
           ...(isInvoicePayment ? {} : { category_id: categoryId }),
+          ...(canChangeAccount ? { account_id: accId } : {}),
         });
         showSuccess('Transação atualizada com sucesso.');
       } else if (recorrente) {
@@ -247,11 +251,11 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
             </div>
           )}
 
-          {!isEditing && (
+          {(!isEditing || canChangeAccount) && (
             <div className="field">
               <label>{installmentOnly ? 'Cartão' : 'Conta / Cartão'}</label>
               <select value={accountRef} onChange={(e) => setAccountRef(e.target.value)}>
-                {!installmentOnly && (
+                {!installmentOnly && editingPaymentMethod !== 'credit' && (
                   <optgroup label="Contas correntes">
                     {checkingAccounts.map((a) => (
                       <option key={a.id} value={`checking:${a.id}`}>
@@ -260,7 +264,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
                     ))}
                   </optgroup>
                 )}
-                {(installmentOnly || tipo === 'despesa') && (
+                {(installmentOnly || tipo === 'despesa' || editingPaymentMethod === 'credit') && (
                   <optgroup label="Cartões de crédito">
                     {creditCardAccounts.map((a) => (
                       <option key={a.id} value={`credit:${a.id}`}>

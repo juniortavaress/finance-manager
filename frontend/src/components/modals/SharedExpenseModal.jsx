@@ -35,7 +35,7 @@ export default function SharedExpenseModal({
   groups = [],
 }) {
   const { user } = useAuth();
-  const { friends, checkingAccounts, expenseCategories } = useData();
+  const { friends, checkingAccounts, creditCardAccounts, expenseCategories } = useData();
   const { showSuccess, showError } = useToast();
   const isEditing = !!expense;
 
@@ -363,11 +363,20 @@ export default function SharedExpenseModal({
                 <label>Conta de saída (opcional)</label>
                 <select value={payerAccountId} onChange={(e) => setPayerAccountId(e.target.value)}>
                   <option value="">Não vincular a uma conta agora</option>
-                  {checkingAccounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
+                  <optgroup label="Contas correntes">
+                    {checkingAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Cartões de crédito">
+                    {creditCardAccounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
               </div>
               {payerAccountId && (

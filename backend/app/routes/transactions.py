@@ -273,14 +273,32 @@ def update_transaction(transaction_id):
     if "amount" in data:
         tx.amount = Decimal(str(data["amount"])).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
+    old_account = tx.account
     old_invoice = tx.credit_card_invoice
+    account_changed = False
+
+    if "account_id" in data and data["account_id"] != str(tx.account_id):
+        if tx.installment_plan_id or tx.is_invoice_payment:
+            raise ApiError("Nao e possivel trocar a conta desta transacao", 400)
+        new_account = Account.query.filter_by(
+            id=data["account_id"], user_id=g.current_user.id, archived=False
+        ).first()
+        if new_account is None:
+            raise ApiError("Conta nao encontrada", 404)
+        if tx.payment_method == "credit":
+            if new_account.type != "credit_card" or not new_account.credit_card:
+                raise ApiError("Conta selecionada nao e um cartao de credito", 400)
+        elif new_account.type == "credit_card":
+            raise ApiError("Conta selecionada nao e valida para esta transacao", 400)
+        tx.account_id = new_account.id
+        account_changed = True
 
     if "date" in data:
         tx.date = dt.date.fromisoformat(data["date"])
-        if tx.payment_method == "credit" and tx.account.credit_card:
-            ref_month = invoice_month_for_date(tx.account.credit_card, tx.date)
-            new_invoice = get_or_create_invoice(tx.account.credit_card, ref_month)
-            tx.credit_card_invoice_id = new_invoice.id
+    if (account_changed or "date" in data) and tx.payment_method == "credit" and tx.account.credit_card:
+        ref_month = invoice_month_for_date(tx.account.credit_card, tx.date)
+        new_invoice = get_or_create_invoice(tx.account.credit_card, ref_month)
+        tx.credit_card_invoice_id = new_invoice.id
     if "category_id" in data and not tx.is_invoice_payment:
         category = Category.query.filter_by(
             id=data["category_id"], user_id=g.current_user.id, archived=False
@@ -291,6 +309,8 @@ def update_transaction(transaction_id):
 
     db.session.flush()
     apply_transaction_side_effects(tx, tx.account)
+    if account_changed:
+        recalc_account_balance(old_account)
     if old_invoice and old_invoice.id != tx.credit_card_invoice_id:
         recalc_invoice_total(old_invoice)
         recalc_credit_card_used_amount(old_invoice.credit_card)

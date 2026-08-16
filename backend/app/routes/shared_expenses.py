@@ -8,7 +8,14 @@ from app.errors import ApiError
 from app.extensions import db
 from app.models import Account, Category, ExpenseParticipant, Group, GroupMember, SharedExpense
 from app.routes.friends import are_friends
-from app.services.finance_service import apply_transaction_side_effects, recalc_account_balance
+from app.services.finance_service import (
+    apply_transaction_side_effects,
+    get_or_create_invoice,
+    invoice_month_for_date,
+    recalc_account_balance,
+    recalc_credit_card_used_amount,
+    recalc_invoice_total,
+)
 from app.services.split_service import (
     split_by_percentage,
     split_equal,
@@ -162,6 +169,10 @@ def _link_payment(expense, account_id, category_id):
         raise ApiError("Conta nao encontrada", 404)
 
     category = _resolve_category(category_id)
+    is_credit = account.type == "credit_card"
+    if is_credit and not account.credit_card:
+        raise ApiError("Conta selecionada nao e um cartao de credito", 400)
+
     tx = Transaction(
         user_id=g.current_user.id,
         account_id=account.id,
@@ -170,12 +181,20 @@ def _link_payment(expense, account_id, category_id):
         amount=expense.total_amount,
         type="expense",
         date=expense.date,
-        payment_method="debit",
+        payment_method="credit" if is_credit else "debit",
         status="confirmed",
     )
+    if is_credit:
+        ref_month = invoice_month_for_date(account.credit_card, expense.date)
+        invoice = get_or_create_invoice(account.credit_card, ref_month)
+        tx.credit_card_invoice_id = invoice.id
+
     db.session.add(tx)
     db.session.flush()
     apply_transaction_side_effects(tx, account)
+    if is_credit:
+        recalc_invoice_total(tx.credit_card_invoice)
+        recalc_credit_card_used_amount(account.credit_card)
 
     expense.payer_account_id = account.id
     expense.transaction_id = tx.id
