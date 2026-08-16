@@ -43,6 +43,7 @@ class AssetTransaction(BaseModel):
     quantity = db.Column(db.Numeric(18, 8), nullable=False)
     unit_price = db.Column(db.Numeric(14, 6), nullable=False)
     total_amount = db.Column(db.Numeric(14, 2), nullable=False)
+    fee_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0, server_default="0")
     note_id = db.Column(db.Text, nullable=True)
 
     def to_dict(self):
@@ -55,5 +56,6 @@ class AssetTransaction(BaseModel):
             "quantity": float(self.quantity),
             "unit_price": float(self.unit_price),
             "total_amount": float(self.total_amount),
+            "fee_amount": float(self.fee_amount),
             "note_id": self.note_id,
         }

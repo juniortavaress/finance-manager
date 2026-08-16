@@ -58,7 +58,7 @@ def _asset_position(asset: Asset):
 
     for tx in asset.asset_transactions:
         if tx.type == "buy":
-            cost_basis += tx.quantity * tx.unit_price
+            cost_basis += tx.quantity * tx.unit_price + tx.fee_amount
             quantity += tx.quantity
             avg_price = (cost_basis / quantity) if quantity > 0 else Decimal("0")
         else:
@@ -301,6 +301,7 @@ def _create_asset_transaction(asset, kind, data):
     date_raw = data.get("date")
     quantity = data.get("quantity")
     unit_price = data.get("unit_price")
+    fee_amount = data.get("fee_amount") or 0
     note_id = (data.get("note_id") or "").strip() or None
 
     if not date_raw:
@@ -309,10 +310,13 @@ def _create_asset_transaction(asset, kind, data):
         raise ApiError("Quantidade deve ser maior que zero", 400)
     if not unit_price or Decimal(str(unit_price)) <= 0:
         raise ApiError("Valor unitário deve ser maior que zero", 400)
+    if Decimal(str(fee_amount)) < 0:
+        raise ApiError("Taxa não pode ser negativa", 400)
 
     quantity = Decimal(str(quantity))
     unit_price = Decimal(str(unit_price))
-    total_amount = (quantity * unit_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    fee_amount = Decimal(str(fee_amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    total_amount = (quantity * unit_price + fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     trade_date = dt.date.fromisoformat(date_raw)
 
     account = asset.investment_account.account
@@ -353,6 +357,7 @@ def _create_asset_transaction(asset, kind, data):
         quantity=quantity,
         unit_price=unit_price,
         total_amount=total_amount,
+        fee_amount=fee_amount,
         note_id=note_id,
     )
     db.session.add(asset_tx)

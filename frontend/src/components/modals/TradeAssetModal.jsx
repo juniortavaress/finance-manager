@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { investmentsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
-import { maskToNumber } from '../../utils/currency';
+import { maskToNumber, numberToMasked } from '../../utils/currency';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
 
@@ -17,6 +17,8 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
   const [date, setDate] = useState(todayIso());
   const [quantity, setQuantity] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
+  const [feeAmount, setFeeAmount] = useState('');
+  const [totalAmount, setTotalAmount] = useState('');
   const [noteId, setNoteId] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -26,6 +28,8 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
     setDate(todayIso());
     setQuantity('');
     setUnitPrice('');
+    setFeeAmount('');
+    setTotalAmount('');
     setNoteId('');
     setError('');
   }, [open]);
@@ -34,7 +38,34 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
 
   const numericQuantity = Number(String(quantity).replace(',', '.')) || 0;
   const numericUnitPrice = maskToNumber(unitPrice);
-  const totalAmount = numericQuantity * numericUnitPrice;
+  const numericFee = isSell ? 0 : maskToNumber(feeAmount);
+  const baseAmount = numericQuantity * numericUnitPrice;
+  const numericTotal = isSell ? baseAmount : maskToNumber(totalAmount);
+
+  function handleQuantityChange(v) {
+    const clean = v.replace(/[^\d,.]/g, '');
+    setQuantity(clean);
+    const qty = Number(clean.replace(',', '.')) || 0;
+    setTotalAmount(numberToMasked(qty * numericUnitPrice + numericFee));
+  }
+
+  function handleUnitPriceChange(v) {
+    setUnitPrice(v);
+    const price = maskToNumber(v);
+    setTotalAmount(numberToMasked(numericQuantity * price + numericFee));
+  }
+
+  function handleFeeChange(v) {
+    setFeeAmount(v);
+    const fee = maskToNumber(v);
+    setTotalAmount(numberToMasked(baseAmount + fee));
+  }
+
+  function handleTotalChange(v) {
+    setTotalAmount(v);
+    const total = maskToNumber(v);
+    setFeeAmount(numberToMasked(Math.max(0, total - baseAmount)));
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -42,7 +73,7 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
 
     if (numericQuantity <= 0) return setError('Informe uma quantidade maior que zero.');
     if (numericUnitPrice <= 0) return setError('Informe o valor unitário.');
-    if (!isSell && accountBalance != null && totalAmount > accountBalance) {
+    if (!isSell && accountBalance != null && numericTotal > accountBalance) {
       showError(`Saldo insuficiente. Disponível: ${fmt(accountBalance)}.`);
       return;
     }
@@ -56,6 +87,7 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
         date,
         quantity: numericQuantity,
         unit_price: numericUnitPrice,
+        fee_amount: numericFee,
         note_id: noteId.trim() || undefined,
       };
       if (isSell) {
@@ -88,6 +120,16 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
         <form className="modal-body" onSubmit={handleSubmit}>
           {error && <div className="form-error-banner">{error}</div>}
 
+          <div className="field">
+            <label>Nº da nota (opcional)</label>
+            <input type="text" placeholder="Ex.: 123456" value={noteId} onChange={(e) => setNoteId(e.target.value)} />
+          </div>
+
+          <div className="field">
+            <label>Data da {isSell ? 'venda' : 'compra'}</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+
           <div className="field-row">
             <div className="field">
               <label>Quantidade</label>
@@ -96,32 +138,27 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
                 inputMode="decimal"
                 placeholder="0"
                 value={quantity}
-                onChange={(e) => setQuantity(e.target.value.replace(/[^\d,.]/g, ''))}
+                onChange={(e) => handleQuantityChange(e.target.value)}
               />
             </div>
             <div className="field">
               <label>Preço unitário</label>
-              <CurrencyInput value={unitPrice} onChange={setUnitPrice} />
+              <CurrencyInput value={unitPrice} onChange={handleUnitPriceChange} />
             </div>
           </div>
 
-          <div
-            className="fatura-note show"
-            style={{ background: 'var(--teal-soft)', color: 'var(--teal)', fontWeight: 600 }}
-          >
-            Total: {fmt(totalAmount)}
-            {!isSell && accountBalance != null && ` · Saldo disponível: ${fmt(accountBalance)}`}
-          </div>
-
-          <div className="field" style={{ marginTop: 14 }}>
-            <label>Data da {isSell ? 'venda' : 'compra'}</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-
-          <div className="field">
-            <label>Nº da nota (opcional)</label>
-            <input type="text" placeholder="Ex.: 123456" value={noteId} onChange={(e) => setNoteId(e.target.value)} />
-          </div>
+          {!isSell && (
+            <div className="field-row">
+              <div className="field">
+                <label>Taxa</label>
+                <CurrencyInput value={feeAmount} onChange={handleFeeChange} />
+              </div>
+              <div className="field">
+                <label>Valor final</label>
+                <CurrencyInput value={totalAmount} onChange={handleTotalChange} />
+              </div>
+            </div>
+          )}
 
           <div className="modal-actions">
             <div className="btn btn-ghost" onClick={onClose}>
