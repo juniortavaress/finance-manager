@@ -4,6 +4,8 @@ from decimal import Decimal
 from app.extensions import db
 from app.models import (
     Account,
+    Asset,
+    AssetTransaction,
     Bank,
     Category,
     CreditCard,
@@ -11,9 +13,7 @@ from app.models import (
     Friendship,
     Group,
     GroupMember,
-    Investment,
     InvestmentAccount,
-    InvestmentSnapshot,
     SharedExpense,
     Transaction,
     User,

@@ -93,7 +93,7 @@ class InvestmentAccount(BaseModel):
     account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("accounts.id"), nullable=False, unique=True)
     broker_name = db.Column(db.Text, nullable=True)
 
-    investments = db.relationship("Investment", backref="investment_account", cascade="all, delete-orphan")
+    assets = db.relationship("Asset", backref="investment_account", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {

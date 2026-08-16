@@ -4,7 +4,7 @@ from app.models.category import Category
 from app.models.transaction import Transaction, RecurringTransaction
 from app.models.credit_card_invoice import CreditCardInvoice
 from app.models.installment import InstallmentPlan
-from app.models.investment import Investment, InvestmentSnapshot
+from app.models.investment import Asset, AssetTransaction
 from app.models.budget import Budget
 from app.models.friends import Friendship, Group, GroupMember, SharedExpense, ExpenseParticipant, Settlement
 
@@ -21,8 +21,8 @@ __all__ = [
     "RecurringTransaction",
     "CreditCardInvoice",
     "InstallmentPlan",
-    "Investment",
-    "InvestmentSnapshot",
+    "Asset",
+    "AssetTransaction",
     "Budget",
     "Friendship",
     "Group",
