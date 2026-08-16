@@ -200,6 +200,58 @@
   margin-top: 6px;
 }
 
+/* compras (investimentos) list */
+.compra-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  gap: 12px;
+}
+.compra-row:last-child {
+  border-bottom: none;
+}
+.compra-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.compra-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.compra-desc {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.compra-meta {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+.compra-val {
+  text-align: right;
+  flex-shrink: 0;
+}
+.compra-total {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.compra-unit {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+
 /* filter bar — transações */
 .filter-bar {
   display: flex;

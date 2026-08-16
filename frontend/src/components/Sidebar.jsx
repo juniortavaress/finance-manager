@@ -47,10 +47,10 @@ const NAV_GROUPS = [
   {
     label: 'Investimentos',
     items: [
-      { to: '/investimentos', label: 'Visão geral', icon: IconTrendUp },
-      { to: '/investimentos/carteira', label: 'Carteira', icon: IconTrendUp, disabled: true },
-      { to: '/investimentos/compras-vendas', label: 'Compras e vendas', icon: IconTrendUp, disabled: true },
-      { to: '/investimentos/dividendos', label: 'Dividendos', icon: IconTrendUp, disabled: false },
+      { to: '/investimentos', label: 'Visão geral', icon: IconTrendUp, end: true },
+      { to: '/investimentos/carteira', label: 'Carteira', icon: IconTrendUp, disabled: false   },
+      { to: '/investimentos/compras-vendas', label: 'Compras e vendas', icon: IconTrendUp, disabled: false },
+      { to: '/investimentos/dividendos', label: 'Dividendos', icon: IconTrendUp, disabled: true },
     ],
   },
   {
