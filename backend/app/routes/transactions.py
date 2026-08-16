@@ -369,8 +369,8 @@ def update_transaction(transaction_id):
         raise ApiError("Transação não encontrada", 404)
 
     data = request.get_json(silent=True) or {}
-    if tx.is_transfer and any(f in data for f in ("amount", "date", "account_id", "category_id")):
-        raise ApiError("Não é possível editar valor, data, conta ou categoria de uma transferência. Exclua e crie novamente.", 400)
+    if tx.is_transfer and any(f in data for f in ("amount", "account_id", "category_id")):
+        raise ApiError("Não é possível editar valor, conta ou categoria de uma transferência. Exclua e crie novamente.", 400)
     if "status" in data and data["status"] not in TRANSACTION_STATUSES:
         raise ApiError("Status inválido", 400)
     for field in ("description", "notes", "status"):
@@ -408,6 +408,8 @@ def update_transaction(transaction_id):
 
     if "date" in data:
         tx.date = dt.date.fromisoformat(data["date"])
+        if tx.is_transfer and tx.transfer_pair:
+            tx.transfer_pair.date = tx.date
     if (account_changed or "date" in data) and tx.payment_method == "credit" and current_account.credit_card:
         ref_month = invoice_month_for_date(current_account.credit_card, tx.date)
         new_invoice = get_or_create_invoice(current_account.credit_card, ref_month)

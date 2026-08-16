@@ -125,11 +125,11 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
         const [, accId] = accountRef.split(':');
         await transactionsApi.update(transaction.id, {
           description: description.trim(),
+          date,
           ...(isTransfer
             ? {}
             : {
                 amount: numericAmount,
-                date,
                 ...(isInvoicePayment ? {} : { category_id: categoryId }),
                 ...(canChangeAccount ? { account_id: accId } : {}),
               }),
@@ -248,14 +248,14 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
             </div>
             <div className="field">
               <label>Data</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={isTransfer} />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
           </div>
 
           {isTransfer && (
             <div className="fatura-note show" style={{ background: 'var(--bg)', color: 'var(--ink-soft)' }}>
-              Esta é uma transferência entre contas — não afeta receitas ou despesas. Para corrigir valor, data ou
-              contas, exclua e crie uma nova transferência.
+              Esta é uma transferência entre contas — não afeta receitas ou despesas. Para corrigir valor ou contas,
+              exclua e crie uma nova transferência.
             </div>
           )}
 

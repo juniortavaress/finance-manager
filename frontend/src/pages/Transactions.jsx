@@ -277,10 +277,7 @@ export default function Transactions() {
                   </div>
                 </div>
               </div>
-              <div
-                className={`tx-val num ${t.is_transfer ? '' : pos ? 'pos' : 'neg'}`}
-                style={t.is_transfer ? { color: 'var(--ink-soft)' } : undefined}
-              >
+              <div className={`tx-val num ${t.is_transfer ? '' : pos ? 'pos' : 'neg'}`}>
                 {fmt(pos ? t.amount : -t.amount)}
               </div>
             </div>
