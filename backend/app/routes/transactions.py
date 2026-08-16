@@ -298,19 +298,29 @@ def create_transfer():
     if from_account_id == to_account_id:
         raise ApiError("As contas de origem e destino devem ser diferentes", 400)
 
-    from_account = Account.query.filter_by(
-        id=from_account_id, user_id=g.current_user.id, type="checking", archived=False
+    from_account = Account.query.filter(
+        Account.id == from_account_id,
+        Account.user_id == g.current_user.id,
+        Account.type.in_(("checking", "investment")),
+        Account.archived.is_(False),
     ).first()
     if from_account is None:
         raise ApiError("Conta de origem não encontrada", 404)
-    to_account = Account.query.filter_by(
-        id=to_account_id, user_id=g.current_user.id, type="checking", archived=False
+    to_account = Account.query.filter(
+        Account.id == to_account_id,
+        Account.user_id == g.current_user.id,
+        Account.type.in_(("checking", "investment")),
+        Account.archived.is_(False),
     ).first()
     if to_account is None:
         raise ApiError("Conta de destino não encontrada", 404)
 
     transfer_date = dt.date.fromisoformat(date_raw)
     amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    if amount > from_account.balance:
+        raise ApiError("Saldo insuficiente na conta de origem", 400)
+
     category = _get_or_create_transfer_category(g.current_user.id)
 
     tx_out = Transaction(

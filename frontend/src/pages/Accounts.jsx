@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useData } from '../context/DataContext';
-import { creditCardsApi } from '../api/resources';
+import { creditCardsApi, investmentsApi } from '../api/resources';
+import { useFetch } from '../hooks/useFetch';
 import { fmt, monthLabel } from '../utils/format';
 import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
@@ -23,6 +24,17 @@ export default function Accounts() {
   const [transferModalOpen, setTransferModalOpen] = useState(false);
 
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
+  const investmentAccounts = useMemo(() => accounts.filter((a) => a.type === 'investment'), [accounts]);
+  const { data: investmentsData, reload: reloadInvestments } = useFetch(() => investmentsApi.list(), []);
+  const investedByAccountId = useMemo(() => {
+    const map = {};
+    (investmentsData?.investments || []).forEach((inv) => {
+      const account = investmentAccounts.find((a) => a.investment_account?.id === inv.investment_account_id);
+      if (!account) return;
+      map[account.id] = (map[account.id] || 0) + inv.current_amount;
+    });
+    return map;
+  }, [investmentsData, investmentAccounts]);
 
   function openNewBank() {
     setEditingBank(null);
@@ -291,8 +303,14 @@ export default function Accounts() {
               </div>
               <div className="acct-type-card">
                 <div className="t-label">Investimento</div>
-                <div className="t-val num">{investment ? fmt(investment.balance) : '—'}</div>
-                <div className="t-sub">saldo aplicado</div>
+                <div className="t-val num">
+                  {investment ? fmt(investment.balance + (investedByAccountId[investment.id] || 0)) : '—'}
+                </div>
+                <div className="t-sub">
+                  {investment && investment.balance > 0
+                    ? `${fmt(investment.balance)} não alocado`
+                    : 'saldo aplicado'}
+                </div>
               </div>
             </div>
           </div>
@@ -329,6 +347,7 @@ export default function Accounts() {
         onCreated={() => {
           setTransferModalOpen(false);
           reloadAll();
+          reloadInvestments();
         }}
       />
     </div>

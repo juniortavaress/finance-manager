@@ -3,6 +3,7 @@ import { useData } from '../../context/DataContext';
 import { transactionsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { maskToNumber } from '../../utils/currency';
+import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
 
@@ -11,7 +12,7 @@ function todayIso() {
 }
 
 export default function TransferModal({ open, onClose, onCreated }) {
-  const { checkingAccounts } = useData();
+  const { checkingAccounts, investmentAccounts } = useData();
   const { showSuccess, showError } = useToast();
 
   const [fromAccountId, setFromAccountId] = useState('');
@@ -22,16 +23,29 @@ export default function TransferModal({ open, onClose, onCreated }) {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  const allAccounts = [...checkingAccounts, ...investmentAccounts];
+  const destinationOptions = allAccounts.filter((a) => a.id !== fromAccountId);
+  const fromAccount = allAccounts.find((a) => a.id === fromAccountId);
+
   useEffect(() => {
     if (!open) return;
     setFromAccountId(checkingAccounts[0]?.id || '');
-    setToAccountId(checkingAccounts[1]?.id || '');
+    setToAccountId(checkingAccounts[1]?.id || investmentAccounts[0]?.id || '');
     setAmount('');
     setDate(todayIso());
     setDescription('');
     setError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (toAccountId === fromAccountId) {
+      const fallback = destinationOptions[0]?.id || '';
+      setToAccountId(fallback);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromAccountId]);
 
   if (!open) return null;
 
@@ -44,6 +58,10 @@ export default function TransferModal({ open, onClose, onCreated }) {
     if (!fromAccountId || !toAccountId) return setError('Selecione as contas de origem e destino.');
     if (fromAccountId === toAccountId) return setError('As contas de origem e destino devem ser diferentes.');
     if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
+    if (fromAccount && numericAmount > fromAccount.balance) {
+      showError(`Saldo insuficiente. Disponível em ${fromAccount.name}: ${fmt(fromAccount.balance)}.`);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -76,31 +94,62 @@ export default function TransferModal({ open, onClose, onCreated }) {
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
           {error && <div className="form-error-banner">{error}</div>}
-          {checkingAccounts.length < 2 && (
+          {allAccounts.length < 2 && (
             <div className="form-error-banner">
-              Você precisa de pelo menos duas contas correntes para transferir dinheiro entre elas.
+              Você precisa de pelo menos duas contas (corrente ou investimento) para transferir dinheiro.
             </div>
           )}
 
           <div className="field">
             <label>De</label>
             <select value={fromAccountId} onChange={(e) => setFromAccountId(e.target.value)}>
-              {checkingAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
+              <optgroup label="Contas correntes">
+                {checkingAccounts
+                  .filter((a) => a.id !== toAccountId)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+              </optgroup>
+              <optgroup label="Investimentos">
+                {investmentAccounts
+                  .filter((a) => a.id !== toAccountId)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+              </optgroup>
             </select>
+            {fromAccount && (
+              <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 4 }}>
+                Saldo disponível: {fmt(fromAccount.balance)}
+              </div>
+            )}
           </div>
 
           <div className="field">
             <label>Para</label>
             <select value={toAccountId} onChange={(e) => setToAccountId(e.target.value)}>
-              {checkingAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
+              <optgroup label="Contas correntes">
+                {checkingAccounts
+                  .filter((a) => a.id !== fromAccountId)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+              </optgroup>
+              <optgroup label="Investimentos">
+                {investmentAccounts
+                  .filter((a) => a.id !== fromAccountId)
+                  .map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+              </optgroup>
             </select>
           </div>
 
@@ -129,7 +178,11 @@ export default function TransferModal({ open, onClose, onCreated }) {
             <div className="btn btn-ghost" onClick={onClose}>
               Cancelar
             </div>
-            <button className="btn btn-primary" type="submit" disabled={submitting || checkingAccounts.length < 2}>
+            <button
+              className="btn btn-primary"
+              type="submit"
+              disabled={submitting || allAccounts.length < 2}
+            >
               {submitting ? 'Transferindo...' : 'Transferir'}
             </button>
           </div>

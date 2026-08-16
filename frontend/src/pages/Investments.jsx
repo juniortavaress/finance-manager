@@ -4,6 +4,8 @@ import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt } from '../utils/format';
 import NewInvestmentModal from '../components/modals/NewInvestmentModal';
+import TransferModal from '../components/modals/TransferModal';
+import { IconSwap } from '../components/icons';
 
 const TYPE_LABELS = {
   renda_fixa: 'Renda fixa',
@@ -21,15 +23,22 @@ const TYPE_COLORS = {
 };
 
 export default function Investments() {
-  const { data, reload } = useFetch(() => investmentsApi.list(), []);
-  const { banks, investmentAccounts, bankById } = useData();
+  const { data, reload: reloadInvestments } = useFetch(() => investmentsApi.list(), []);
+  const { banks, investmentAccounts, bankById, reloadAll } = useData();
   const [modalOpen, setModalOpen] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
 
   const investments = data?.investments || [];
 
   const totalInvested = investments.reduce((s, i) => s + i.invested_amount, 0);
   const totalCurrent = investments.reduce((s, i) => s + i.current_amount, 0);
   const rentabilidade = totalInvested > 0 ? ((totalCurrent - totalInvested) / totalInvested) * 100 : 0;
+  const saldoNaoAlocado = investmentAccounts.reduce((s, a) => s + a.balance, 0);
+
+  function reload() {
+    reloadInvestments();
+    reloadAll();
+  }
 
   const byBank = useMemo(() => {
     const map = {};
@@ -37,7 +46,7 @@ export default function Investments() {
       const account = investmentAccounts.find((a) => a.investment_account?.id === inv.investment_account_id);
       const bankId = account?.bank_id;
       if (!bankId) return;
-      map[bankId] = (map[bankId] || 0) + inv.current_amount;
+      map[bankId] = (map[bankId] || 0) + inv.invested_amount;
     });
     return Object.entries(map).map(([bankId, total]) => ({ bank: bankById(bankId), total }));
   }, [investments, investmentAccounts, bankById]);
@@ -60,8 +69,14 @@ export default function Investments() {
             — versão inicial
           </span>
         </h1>
-        <div className="period" onClick={() => setModalOpen(true)}>
-          + novo investimento
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div className="period" onClick={() => setTransferModalOpen(true)}>
+            <IconSwap style={{ width: 13, height: 13, marginRight: 5, verticalAlign: -2 }} />
+            transferir
+          </div>
+          <div className="period" onClick={() => setModalOpen(true)}>
+            + novo investimento
+          </div>
         </div>
       </div>
 
@@ -82,6 +97,26 @@ export default function Investments() {
           </div>
         </div>
       </div>
+
+      {saldoNaoAlocado > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <h3>Saldo não alocado</h3>
+          {investmentAccounts
+            .filter((a) => a.balance > 0)
+            .map((a) => {
+              const bank = bankById(a.bank_id);
+              return (
+                <div className="bank-row" key={a.id}>
+                  <div className="bank-id">
+                    <span className="bank-chip" style={{ background: bank?.color_hex }} />
+                    <div className="bank-name">{bank?.name || a.name}</div>
+                  </div>
+                  <div className="bank-val num">{fmt(a.balance)}</div>
+                </div>
+              );
+            })}
+        </div>
+      )}
 
       <div className="grid grid-2">
         <div className="card">
@@ -130,6 +165,15 @@ export default function Investments() {
         }}
         banks={banks}
         investmentAccounts={investmentAccounts}
+      />
+
+      <TransferModal
+        open={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        onCreated={() => {
+          setTransferModalOpen(false);
+          reload();
+        }}
       />
     </div>
   );
