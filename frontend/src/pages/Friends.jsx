@@ -88,11 +88,7 @@ export default function Friends() {
             — visão geral
           </span>
         </h1>
-        <div
-          className="period"
-          style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
-          onClick={() => setScopePickerOpen(true)}
-        >
+        <div className="period" onClick={() => setScopePickerOpen(true)}>
           + nova despesa dividida
         </div>
       </div>

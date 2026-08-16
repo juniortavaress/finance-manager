@@ -56,6 +56,21 @@ export const IconTrendUp = (props) => (
   </svg>
 );
 
+export const IconWallet = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <path d="M3 7a2 2 0 012-2h13a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+    <path d="M16 12h3" />
+    <path d="M3 8h18" />
+  </svg>
+);
+
+export const IconCoin = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v10M9.5 9.2c0-1.2 1.1-2.2 2.5-2.2s2.5.9 2.5 2c0 3-5 1.7-5 4.6 0 1.1 1.1 2 2.5 2s2.5-1 2.5-2.2" />
+  </svg>
+);
+
 export const IconChart = (props) => (
   <svg viewBox="0 0 24 24" {...base} {...props}>
     <path d="M4 20V10M12 20V4M20 20v-7" />

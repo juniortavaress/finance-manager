@@ -16,6 +16,7 @@ import Categories from './pages/Categories';
 import Investments from './pages/Investments';
 import Portfolio from './pages/Portfolio';
 import AssetTrades from './pages/AssetTrades';
+import Dividends from './pages/Dividends';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Friends from './pages/Friends';
@@ -59,6 +60,7 @@ export default function App() {
               <Route path="investimentos" element={<Investments />} />
               <Route path="investimentos/carteira" element={<Portfolio />} />
               <Route path="investimentos/compras-vendas" element={<AssetTrades />} />
+              <Route path="investimentos/dividendos" element={<Dividends />} />
               <Route path="relatorios" element={<Reports />} />
               <Route path="configuracoes" element={<Settings />} />
             </Route>

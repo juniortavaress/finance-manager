@@ -36,6 +36,7 @@ export const transactionsApi = {
   update: (id, data) => api.patch(`/transactions/${id}`, data),
   remove: (id) => api.delete(`/transactions/${id}`),
   transfer: (data) => api.post('/transactions/transfer', data),
+  updateTransfer: (id, data) => api.patch(`/transactions/transfer/${id}`, data),
 };
 
 export const recurringApi = {
@@ -68,6 +69,17 @@ export const investmentsApi = {
   sell: (assetId, data) => api.post(`/investments/assets/${assetId}/sell`, data),
   listAssetTransactions: (limit) => api.get('/investments/asset-transactions', { limit }),
   removeAssetTransaction: (id) => api.delete(`/investments/asset-transactions/${id}`),
+};
+
+export const dividendsApi = {
+  list: (limit) => api.get('/dividends/', { limit }),
+  create: (data) => api.post('/dividends/', data),
+  update: (id, data) => api.patch(`/dividends/${id}`, data),
+  remove: (id) => api.delete(`/dividends/${id}`),
+  listSchedules: () => api.get('/dividends/schedules'),
+  createSchedule: (data) => api.post('/dividends/schedules', data),
+  updateSchedule: (id, data) => api.patch(`/dividends/schedules/${id}`, data),
+  removeSchedule: (id) => api.delete(`/dividends/schedules/${id}`),
 };
 
 export const dashboardApi = {

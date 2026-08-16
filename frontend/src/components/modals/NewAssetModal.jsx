@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { investmentsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
-import { IconTrash, IconArchive } from '../icons';
+import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 
@@ -16,9 +16,10 @@ const TYPE_OPTIONS = [
 
 /**
  * Modal unico para criar OU editar um ativo.
- * Se `asset` for passado, edita (nome/codigo/categoria/corretora), permite
- * arquivar/desarquivar e excluir (excluir so funciona sem compras/vendas,
- * validado pelo backend). Sem `asset`, cria um ativo novo.
+ * Se `asset` for passado, edita (nome/codigo/categoria/corretora) e permite
+ * excluir (so funciona sem compras/vendas, validado pelo backend). Sem
+ * `asset`, cria um ativo novo. Arquivamento e automatico: um ativo some da
+ * carteira ativa e cai em "arquivados" quando sua quantidade zera.
  */
 export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks, investmentAccounts, asset }) {
   const isEditing = !!asset;
@@ -30,7 +31,6 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -93,19 +93,6 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
     }
   }
 
-  async function handleToggleArchive() {
-    setArchiving(true);
-    try {
-      const { asset: updated } = await investmentsApi.updateAsset(asset.id, { archived: !asset.archived });
-      showSuccess(asset.archived ? 'Ativo desarquivado com sucesso.' : 'Ativo arquivado com sucesso.');
-      onSaved?.(updated);
-    } catch (err) {
-      showError(err.message || 'Não foi possível arquivar o ativo.');
-    } finally {
-      setArchiving(false);
-    }
-  }
-
   async function handleDelete() {
     await investmentsApi.removeAsset(asset.id);
     showSuccess('Ativo excluído com sucesso.');
@@ -119,17 +106,6 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
         <div className="modal-head">
           <h2>{isEditing ? 'Editar ativo' : 'Novo ativo'}</h2>
           <div className="modal-head-actions">
-            {isEditing && (
-              <button
-                type="button"
-                className={`modal-archive-trigger${asset.archived ? ' active' : ''}`}
-                title={asset.archived ? 'Desarquivar ativo' : 'Arquivar ativo'}
-                disabled={archiving}
-                onClick={handleToggleArchive}
-              >
-                <IconArchive />
-              </button>
-            )}
             {isEditing && (
               <button type="button" className="modal-delete-trigger" title="Excluir" onClick={() => setDeleteModalOpen(true)}>
                 <IconTrash />

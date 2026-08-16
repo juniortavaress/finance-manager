@@ -17,9 +17,10 @@ function todayIso() {
 }
 
 export default function TransactionModal({ open, onClose, onCreated, onDeleted, transaction, installmentOnly = false }) {
-  const { checkingAccounts, creditCardAccounts, expenseCategories, incomeCategories } = useData();
+  const { checkingAccounts, creditCardAccounts, investmentAccounts, expenseCategories, incomeCategories } = useData();
   const { showSuccess, showError } = useToast();
   const isEditing = !!transaction;
+  const isTransfer = isEditing && !!transaction?.is_transfer;
 
   const [tipo, setTipo] = useState('despesa');
   const [description, setDescription] = useState('');
@@ -27,6 +28,8 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   const [date, setDate] = useState(todayIso());
   const [categoryId, setCategoryId] = useState('');
   const [accountRef, setAccountRef] = useState(''); // "checking:<id>" ou "credit:<id>"
+  const [fromAccountId, setFromAccountId] = useState('');
+  const [toAccountId, setToAccountId] = useState('');
   const [installments, setInstallments] = useState(1);
   const [customInstallments, setCustomInstallments] = useState(false);
   const [recorrente, setRecorrente] = useState(false);
@@ -37,6 +40,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const categories = tipo === 'despesa' ? expenseCategories : incomeCategories;
+  const transferAccounts = [...checkingAccounts, ...investmentAccounts];
 
   useEffect(() => {
     if (!open) return;
@@ -50,6 +54,11 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
       setAccountRef(
         transaction.payment_method === 'credit' ? `credit:${transaction.account_id}` : `checking:${transaction.account_id}`
       );
+      if (transaction.is_transfer) {
+        const isOutgoing = transaction.type === 'expense';
+        setFromAccountId(isOutgoing ? transaction.account_id : transaction.transfer_pair_account_id);
+        setToAccountId(isOutgoing ? transaction.transfer_pair_account_id : transaction.account_id);
+      }
       setInstallments(1);
       setCustomInstallments(false);
       setRecorrente(false);
@@ -92,7 +101,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
   const isInstallment = isEditing && !!transaction.installment_plan_id;
   const isInstallmentConfirmed = isInstallment && transaction.status === 'confirmed';
   const isInvoicePayment = isEditing && !!transaction.is_invoice_payment;
-  const isTransfer = isEditing && !!transaction.is_transfer;
+  const hasSystemCategory = isEditing && !!transaction.category?.archived;
   const canChangeAccount = !isEditing || (!isInstallment && !isInvoicePayment && !isTransfer);
 
   async function handleDelete() {
@@ -112,27 +121,36 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
     setError('');
 
     if (!description.trim()) return setError('Informe uma descrição.');
-    if (!isTransfer) {
+    if (isTransfer) {
       if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
-      if (!isInvoicePayment && !categoryId) return setError('Selecione uma categoria.');
+      if (!fromAccountId || !toAccountId) return setError('Selecione as contas de origem e destino.');
+      if (fromAccountId === toAccountId) return setError('As contas de origem e destino devem ser diferentes.');
+    } else {
+      if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
+      if (!isInvoicePayment && !hasSystemCategory && !categoryId) return setError('Selecione uma categoria.');
       if (!accountRef) return setError('Selecione uma conta ou cartão.');
       if (customInstallments && installments < 13) return setError('Informe a quantidade de parcelas.');
     }
 
     setSubmitting(true);
     try {
-      if (isEditing) {
+      if (isTransfer) {
+        await transactionsApi.updateTransfer(transaction.id, {
+          description: description.trim(),
+          date,
+          amount: numericAmount,
+          from_account_id: fromAccountId,
+          to_account_id: toAccountId,
+        });
+        showSuccess('Transferência atualizada com sucesso.');
+      } else if (isEditing) {
         const [, accId] = accountRef.split(':');
         await transactionsApi.update(transaction.id, {
           description: description.trim(),
           date,
-          ...(isTransfer
-            ? {}
-            : {
-                amount: numericAmount,
-                ...(isInvoicePayment ? {} : { category_id: categoryId }),
-                ...(canChangeAccount ? { account_id: accId } : {}),
-              }),
+          amount: numericAmount,
+          ...(isInvoicePayment || hasSystemCategory ? {} : { category_id: categoryId }),
+          ...(canChangeAccount ? { account_id: accId } : {}),
         });
         showSuccess('Transação atualizada com sucesso.');
       } else if (recorrente) {
@@ -244,7 +262,7 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
           <div className="field-row">
             <div className="field">
               <label>Valor</label>
-              <CurrencyInput value={amount} onChange={setAmount} disabled={isTransfer} />
+              <CurrencyInput value={amount} onChange={setAmount} />
             </div>
             <div className="field">
               <label>Data</label>
@@ -253,13 +271,31 @@ export default function TransactionModal({ open, onClose, onCreated, onDeleted, 
           </div>
 
           {isTransfer && (
-            <div className="fatura-note show" style={{ background: 'var(--bg)', color: 'var(--ink-soft)' }}>
-              Esta é uma transferência entre contas — não afeta receitas ou despesas. Para corrigir valor ou contas,
-              exclua e crie uma nova transferência.
+            <div className="field-row">
+              <div className="field">
+                <label>De</label>
+                <select value={fromAccountId} onChange={(e) => setFromAccountId(e.target.value)}>
+                  {transferAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Para</label>
+                <select value={toAccountId} onChange={(e) => setToAccountId(e.target.value)}>
+                  {transferAccounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 
-          {!isInvoicePayment && !isTransfer && (
+          {!isInvoicePayment && !isTransfer && !hasSystemCategory && (
             <div className="field">
               <label>Categoria</label>
               <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>

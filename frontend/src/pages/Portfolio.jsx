@@ -7,9 +7,7 @@ import { fmt } from '../utils/format';
 import { maskToNumber, numberToMasked } from '../utils/currency';
 import { IconSearch, IconPencil } from '../components/icons';
 import CurrencyInput from '../components/CurrencyInput';
-import PickAssetModal from '../components/modals/PickAssetModal';
 import NewAssetModal from '../components/modals/NewAssetModal';
-import TradeAssetModal from '../components/modals/TradeAssetModal';
 
 const TYPE_LABELS = {
   renda_fixa: 'Renda fixa',
@@ -37,6 +35,7 @@ const COLUMNS = [
   { key: 'current_unit_price', label: 'Preço atual' },
   { key: 'invested_amount', label: 'Investido' },
   { key: 'current_amount', label: 'Atual' },
+  { key: 'dividends_total', label: 'Dividendos' },
   { key: 'rent', label: 'Rent.' },
 ];
 
@@ -46,6 +45,7 @@ export default function Portfolio() {
     () => investmentsApi.listAssets(showArchived),
     [showArchived]
   );
+  const { data: archivedData, reload: reloadArchivedCheck } = useFetch(() => investmentsApi.listAssets(true), []);
   const { banks, investmentAccounts, bankById, reloadAll } = useData();
   const { showSuccess, showError } = useToast();
 
@@ -54,15 +54,13 @@ export default function Portfolio() {
   const [typeFilter, setTypeFilter] = useState('');
   const [sort, setSort] = useState({ key: 'current_amount', dir: 'desc' });
 
-  const [pickModalOpen, setPickModalOpen] = useState(false);
-  const [newAssetModalOpen, setNewAssetModalOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState(null);
-  const [tradingAsset, setTradingAsset] = useState(null);
   const [editingPriceId, setEditingPriceId] = useState(null);
   const [editingPriceValue, setEditingPriceValue] = useState('');
   const [savingPrice, setSavingPrice] = useState(false);
 
   const assets = assetsData?.assets || [];
+  const hasArchived = (archivedData?.assets || []).length > 0;
 
   useEffect(() => {
     setSearch('');
@@ -70,8 +68,14 @@ export default function Portfolio() {
     setTypeFilter('');
   }, [showArchived]);
 
+  useEffect(() => {
+    if (!hasArchived && showArchived) setShowArchived(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasArchived]);
+
   function reload() {
     reloadAssets();
+    reloadArchivedCheck();
     reloadAll();
   }
 
@@ -80,23 +84,14 @@ export default function Portfolio() {
     return account ? bankById(account.bank_id) : null;
   }
 
-  function accountBalanceFor(asset) {
-    const account = investmentAccounts.find((a) => a.investment_account?.id === asset.investment_account_id);
-    return account ? account.balance : null;
-  }
-
   const enriched = useMemo(() => {
     return assets.map((a) => {
       const bank = bankFor(a);
-      const rent =
-        a.position.avg_unit_price > 0 && a.current_unit_price != null
-          ? (a.current_unit_price / a.position.avg_unit_price - 1) * 100
-          : null;
       return {
         ...a,
         bankName: bank?.name || '',
         bankColor: bank?.color_hex || '#8B9A97',
-        rent,
+        rent: a.position.total_return_pct,
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,6 +117,7 @@ export default function Portfolio() {
       current_unit_price: (a) => a.current_unit_price ?? -Infinity,
       invested_amount: (a) => a.position.invested_amount,
       current_amount: (a) => a.position.current_amount ?? a.position.invested_amount,
+      dividends_total: (a) => a.position.dividends_total,
       rent: (a) => (a.rent != null ? a.rent : -Infinity),
     }[sort.key];
 
@@ -179,11 +175,6 @@ export default function Portfolio() {
     <div className="screen active">
       <div className="topbar">
         <h1>Carteira</h1>
-        {!showArchived && (
-          <div className="period" onClick={() => setPickModalOpen(true)}>
-            + nova compra
-          </div>
-        )}
       </div>
 
       <div className="fatura-note show" style={{ marginBottom: 16 }}>
@@ -234,14 +225,16 @@ export default function Portfolio() {
         </div>
       </div>
 
-      <div className="seg" style={{ marginBottom: 16, maxWidth: 280 }}>
-        <div className={`seg-opt${!showArchived ? ' active' : ''}`} onClick={() => setShowArchived(false)}>
-          Ativos
+      {hasArchived && (
+        <div className="seg" style={{ marginBottom: 16, maxWidth: 280 }}>
+          <div className={`seg-opt${!showArchived ? ' active' : ''}`} onClick={() => setShowArchived(false)}>
+            Ativos
+          </div>
+          <div className={`seg-opt${showArchived ? ' active' : ''}`} onClick={() => setShowArchived(true)}>
+            Arquivados
+          </div>
         </div>
-        <div className={`seg-opt${showArchived ? ' active' : ''}`} onClick={() => setShowArchived(true)}>
-          Arquivados
-        </div>
-      </div>
+      )}
 
       <div className="card">
         <div className="asset-table-wrap">
@@ -313,6 +306,9 @@ export default function Portfolio() {
                 )}
                 <div className="a-num">{fmt(a.position.invested_amount)}</div>
                 <div className="a-num">{fmt(currentAmount)}</div>
+                <div className="a-num" style={{ color: a.position.dividends_total > 0 ? 'var(--gold)' : undefined }}>
+                  {fmt(a.position.dividends_total)}
+                </div>
                 <div className={`a-rent ${a.rent == null ? '' : a.rent >= 0 ? 'up' : 'down'}`}>
                   {a.rent == null ? '—' : `${a.rent >= 0 ? '+' : ''}${a.rent.toFixed(1)}%`}
                 </div>
@@ -341,34 +337,6 @@ export default function Portfolio() {
         </div>
       </div>
 
-      <PickAssetModal
-        open={pickModalOpen}
-        assets={assets}
-        investmentAccounts={investmentAccounts}
-        bankById={bankById}
-        onClose={() => setPickModalOpen(false)}
-        onPick={(asset) => {
-          setPickModalOpen(false);
-          setTradingAsset(asset);
-        }}
-        onNewAsset={() => {
-          setPickModalOpen(false);
-          setNewAssetModalOpen(true);
-        }}
-      />
-
-      <NewAssetModal
-        open={newAssetModalOpen}
-        banks={banks}
-        investmentAccounts={investmentAccounts}
-        onClose={() => setNewAssetModalOpen(false)}
-        onCreated={(asset) => {
-          setNewAssetModalOpen(false);
-          reloadAssets();
-          setTradingAsset({ ...asset, position: { quantity: 0, avg_unit_price: 0, invested_amount: 0, current_amount: null } });
-        }}
-      />
-
       <NewAssetModal
         open={!!editingAsset}
         asset={editingAsset}
@@ -377,18 +345,6 @@ export default function Portfolio() {
         onClose={() => setEditingAsset(null)}
         onSaved={() => {
           setEditingAsset(null);
-          reload();
-        }}
-      />
-
-      <TradeAssetModal
-        open={!!tradingAsset}
-        asset={tradingAsset}
-        kind="buy"
-        accountBalance={tradingAsset ? accountBalanceFor(tradingAsset) : null}
-        onClose={() => setTradingAsset(null)}
-        onSaved={() => {
-          setTradingAsset(null);
           reload();
         }}
       />

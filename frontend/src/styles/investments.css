@@ -19,12 +19,12 @@
 }
 .asset-row {
   display: grid;
-  grid-template-columns: 1.8fr 1fr 1fr 0.7fr 1fr 1fr 1fr 1fr 0.8fr 32px;
+  grid-template-columns: 1.8fr 1fr 1fr 0.7fr 1fr 1fr 1fr 1fr 1fr 0.8fr 32px;
   gap: 10px;
   align-items: center;
   padding: 12px 4px;
   border-bottom: 1px solid var(--line);
-  min-width: 790px;
+  min-width: 870px;
 }
 .asset-row:last-child {
   border-bottom: none;
@@ -91,4 +91,59 @@
   width: 7px;
   height: 7px;
   border-radius: 2px;
+}
+
+/* dividendos & proventos */
+.div-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+.div-row:last-child {
+  border-bottom: none;
+}
+.div-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.div-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  background: var(--gold-soft);
+  font-weight: 700;
+  color: var(--gold);
+}
+.div-desc {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.div-meta {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+}
+.div-right {
+  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.div-val {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--teal);
+}
+.div-next {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: 2px;
 }

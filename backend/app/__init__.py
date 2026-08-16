@@ -32,6 +32,7 @@ def create_app():
     from app.routes.installments import installments_bp
     from app.routes.credit_cards import credit_cards_bp
     from app.routes.investments import investments_bp
+    from app.routes.dividends import dividends_bp
     from app.routes.dashboard import dashboard_bp
     from app.routes.reports import reports_bp
     from app.routes.friends import friends_bp
@@ -48,6 +49,7 @@ def create_app():
     app.register_blueprint(installments_bp, url_prefix="/api/installments")
     app.register_blueprint(credit_cards_bp, url_prefix="/api/credit-cards")
     app.register_blueprint(investments_bp, url_prefix="/api/investments")
+    app.register_blueprint(dividends_bp, url_prefix="/api/dividends")
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
     app.register_blueprint(reports_bp, url_prefix="/api/reports")
     app.register_blueprint(friends_bp, url_prefix="/api/friends")

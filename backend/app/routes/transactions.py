@@ -6,7 +6,7 @@ from flask import Blueprint, g, request
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import Account, Category, InstallmentPlan, SharedExpense, Settlement, Transaction
+from app.models import Account, Category, Dividend, InstallmentPlan, SharedExpense, Settlement, Transaction
 from app.models.transaction import TRANSACTION_STATUSES
 from app.services.finance_service import (
     add_months,
@@ -361,6 +361,87 @@ def create_transfer():
     return {"transaction_out": tx_out.to_dict(), "transaction_in": tx_in.to_dict()}, 201
 
 
+@transactions_bp.patch("/transfer/<uuid:transaction_id>")
+@login_required
+def update_transfer(transaction_id):
+    tx = Transaction.query.filter_by(id=transaction_id, user_id=g.current_user.id, is_transfer=True).first()
+    if tx is None or tx.transfer_pair is None:
+        raise ApiError("Transferência não encontrada", 404)
+
+    data = request.get_json(silent=True) or {}
+    out_tx = tx if tx.type == "expense" else tx.transfer_pair
+    in_tx = tx.transfer_pair if tx.type == "expense" else tx
+
+    old_from_account = out_tx.account
+    old_to_account = in_tx.account
+
+    description = data.get("description")
+    amount = data.get("amount")
+    date_raw = data.get("date")
+    from_account_id = data.get("from_account_id")
+    to_account_id = data.get("to_account_id")
+
+    new_from_account = old_from_account
+    new_to_account = old_to_account
+
+    if from_account_id and from_account_id != str(old_from_account.id):
+        new_from_account = Account.query.filter(
+            Account.id == from_account_id,
+            Account.user_id == g.current_user.id,
+            Account.type.in_(("checking", "investment")),
+            Account.archived.is_(False),
+        ).first()
+        if new_from_account is None:
+            raise ApiError("Conta de origem não encontrada", 404)
+    if to_account_id and to_account_id != str(old_to_account.id):
+        new_to_account = Account.query.filter(
+            Account.id == to_account_id,
+            Account.user_id == g.current_user.id,
+            Account.type.in_(("checking", "investment")),
+            Account.archived.is_(False),
+        ).first()
+        if new_to_account is None:
+            raise ApiError("Conta de destino não encontrada", 404)
+    if new_from_account.id == new_to_account.id:
+        raise ApiError("As contas de origem e destino devem ser diferentes", 400)
+
+    if amount is not None:
+        if Decimal(str(amount)) <= 0:
+            raise ApiError("Valor deve ser maior que zero", 400)
+        new_amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    else:
+        new_amount = out_tx.amount
+
+    if description is not None:
+        desc = description.strip() or "Transferência entre contas"
+        out_tx.description = desc
+        in_tx.description = desc
+    if date_raw:
+        new_date = dt.date.fromisoformat(date_raw)
+        out_tx.date = new_date
+        in_tx.date = new_date
+
+    out_tx.amount = new_amount
+    in_tx.amount = new_amount
+    out_tx.account_id = new_from_account.id
+    in_tx.account_id = new_to_account.id
+
+    db.session.flush()
+
+    touched_accounts = {old_from_account.id: old_from_account, old_to_account.id: old_to_account}
+    touched_accounts[new_from_account.id] = new_from_account
+    touched_accounts[new_to_account.id] = new_to_account
+    for account in touched_accounts.values():
+        recalc_account_balance(account)
+
+    if new_from_account.balance < 0:
+        db.session.rollback()
+        raise ApiError("Saldo insuficiente na conta de origem", 400)
+
+    db.session.commit()
+    return {"transaction_out": out_tx.to_dict(), "transaction_in": in_tx.to_dict()}
+
+
 @transactions_bp.patch("/<uuid:transaction_id>")
 @login_required
 def update_transaction(transaction_id):
@@ -370,9 +451,12 @@ def update_transaction(transaction_id):
 
     data = request.get_json(silent=True) or {}
     if tx.is_transfer and any(f in data for f in ("amount", "account_id", "category_id")):
-        raise ApiError("Não é possível editar valor, conta ou categoria de uma transferência. Exclua e crie novamente.", 400)
+        raise ApiError("Não é possível editar valor, conta ou categoria de uma transferência por aqui.", 400)
     if "status" in data and data["status"] not in TRANSACTION_STATUSES:
         raise ApiError("Status inválido", 400)
+
+    dividend = Dividend.query.filter_by(transaction_id=tx.id).first()
+
     for field in ("description", "notes", "status"):
         if field in data:
             setattr(tx, field, data[field])
@@ -380,6 +464,8 @@ def update_transaction(transaction_id):
         tx.transfer_pair.description = tx.description
     if "amount" in data:
         tx.amount = Decimal(str(data["amount"])).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if dividend:
+            dividend.amount = tx.amount
 
     old_account = tx.account
     old_invoice = tx.credit_card_invoice
@@ -410,6 +496,8 @@ def update_transaction(transaction_id):
         tx.date = dt.date.fromisoformat(data["date"])
         if tx.is_transfer and tx.transfer_pair:
             tx.transfer_pair.date = tx.date
+        if dividend:
+            dividend.date = tx.date
     if (account_changed or "date" in data) and tx.payment_method == "credit" and current_account.credit_card:
         ref_month = invoice_month_for_date(current_account.credit_card, tx.date)
         new_invoice = get_or_create_invoice(current_account.credit_card, ref_month)
@@ -449,6 +537,9 @@ def delete_transaction(transaction_id):
     pair_account = pair.account if pair else None
 
     if pair:
+        tx.transfer_pair_id = None
+        pair.transfer_pair_id = None
+        db.session.flush()
         db.session.delete(pair)
     db.session.delete(tx)
     db.session.flush()

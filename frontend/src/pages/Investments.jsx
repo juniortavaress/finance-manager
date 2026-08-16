@@ -1,15 +1,25 @@
 import { useMemo, useState } from 'react';
-import { investmentsApi } from '../api/resources';
+import { useNavigate } from 'react-router-dom';
+import { investmentsApi, dividendsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import { fmt } from '../utils/format';
-import NewAssetModal from '../components/modals/NewAssetModal';
 import TradeAssetModal from '../components/modals/TradeAssetModal';
-import TransferModal from '../components/modals/TransferModal';
 import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal';
 import InvestmentEvolutionChart from '../components/charts/InvestmentEvolutionChart';
-import { IconSwap, IconTrash } from '../components/icons';
+import UpcomingDividendsChart from '../components/charts/UpcomingDividendsChart';
+import { IconTrash } from '../components/icons';
+
+const FREQUENCY_MONTHS = {
+  monthly: 1,
+  quarterly: 3,
+  semiannual: 6,
+  yearly: 12,
+};
+
+const PROJECTION_MONTHS = 6;
+const PROJECTION_OCCURRENCES_CAP = 24;
 
 const TYPE_LABELS = {
   renda_fixa: 'Renda fixa',
@@ -29,35 +39,80 @@ const TYPE_COLORS = {
 };
 
 export default function Investments() {
-  const { banks, investmentAccounts, bankById, reloadAll } = useData();
-  const { showSuccess, showInfo } = useToast();
+  const navigate = useNavigate();
+  const { investmentAccounts, bankById, reloadAll } = useData();
+  const { showSuccess } = useToast();
   const [bankFilter, setBankFilter] = useState('');
   const { data: summaryData, reload: reloadSummary } = useFetch(
     () => investmentsApi.summary(bankFilter || undefined),
     [bankFilter]
   );
-  const [modalOpen, setModalOpen] = useState(false);
-  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const { data: dividendsData, reload: reloadDividends } = useFetch(() => dividendsApi.list(), []);
+  const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
   const [tradeState, setTradeState] = useState(null); // { asset, kind }
   const [deletingAsset, setDeletingAsset] = useState(null);
 
   const assets = summaryData?.assets || [];
   const unallocatedByBank = summaryData?.unallocated_by_bank || [];
   const evolution = summaryData?.evolution || [];
+  const dividends = dividendsData?.dividends || [];
+  const schedules = schedulesData?.dividend_schedules || [];
 
   function reload() {
     reloadSummary();
+    reloadDividends();
+    reloadSchedules();
     reloadAll();
   }
 
   const activeAssets = useMemo(() => assets.filter((a) => a.position.quantity > 0), [assets]);
+
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const dividendsThisMonth = useMemo(
+    () => dividends.filter((d) => d.date.slice(0, 7) === currentMonth).reduce((s, d) => s + d.amount, 0),
+    [dividends, currentMonth]
+  );
+
+  const upcomingDividends = useMemo(() => {
+    const today = new Date();
+    const monthBuckets = [];
+    for (let i = 0; i < PROJECTION_MONTHS; i += 1) {
+      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      monthBuckets.push({ year: d.getFullYear(), month: d.getMonth() + 1, total: 0 });
+    }
+    const bucketIndex = new Map(monthBuckets.map((b, i) => [`${b.year}-${b.month}`, i]));
+    const horizonEnd = new Date(today.getFullYear(), today.getMonth() + PROJECTION_MONTHS, 1);
+
+    schedules
+      .filter((s) => s.active)
+      .forEach((s) => {
+        const asset = assets.find((a) => a.id === s.asset_id);
+        const quantity = asset?.position?.quantity || 0;
+        const value = s.calc_mode === 'fixed' ? s.fixed_amount || 0 : (s.amount_per_share || 0) * quantity;
+        if (value <= 0) return;
+
+        const step = FREQUENCY_MONTHS[s.frequency] || 1;
+        let cursor = new Date(`${s.next_due_date}T00:00:00`);
+        let guard = 0;
+        while (cursor < horizonEnd && guard < PROJECTION_OCCURRENCES_CAP) {
+          const key = `${cursor.getFullYear()}-${cursor.getMonth() + 1}`;
+          if (bucketIndex.has(key)) monthBuckets[bucketIndex.get(key)].total += value;
+          cursor = new Date(cursor.getFullYear(), cursor.getMonth() + step, cursor.getDate());
+          guard += 1;
+        }
+      });
+
+    return monthBuckets;
+  }, [schedules, assets]);
 
   const totalInvested = activeAssets.reduce((s, a) => s + a.position.invested_amount, 0);
   const totalCurrent = activeAssets.reduce(
     (s, a) => s + (a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount),
     0
   );
-  const rentabilidade = totalInvested > 0 ? ((totalCurrent - totalInvested) / totalInvested) * 100 : 0;
+  const totalDividends = activeAssets.reduce((s, a) => s + (a.position.dividends_total || 0), 0);
+  const rentabilidade =
+    totalInvested > 0 ? ((totalCurrent + totalDividends - totalInvested) / totalInvested) * 100 : 0;
 
   const byType = useMemo(() => {
     const map = {};
@@ -134,17 +189,10 @@ export default function Investments() {
               ))}
             </select>
           </div>
-          <div className="period" onClick={() => setTransferModalOpen(true)}>
-            <IconSwap style={{ width: 13, height: 13, marginRight: 5, verticalAlign: -2 }} />
-            transferir
-          </div>
-          <div className="period" onClick={() => setModalOpen(true)}>
-            + novo ativo
-          </div>
         </div>
       </div>
 
-      <div className="grid grid-3" style={{ marginBottom: 20 }}>
+      <div className="grid grid-4" style={{ marginBottom: 20 }}>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
           <div className="label">Total investido</div>
           <div className="value num">{fmt(totalInvested)}</div>
@@ -154,25 +202,14 @@ export default function Investments() {
           <div className="value num">{fmt(totalCurrent)}</div>
         </div>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
-          <div className="label">
-            Rentabilidade
-            <span
-              style={{
-                marginLeft: 8,
-                fontSize: 10,
-                fontWeight: 500,
-                color: 'var(--ink-faint)',
-                cursor: 'pointer',
-                textTransform: 'none',
-              }}
-              onClick={() => showInfo('Dividendos em breve.')}
-            >
-              · dividendos em breve
-            </span>
-          </div>
+          <div className="label">Rentabilidade</div>
           <div className="value num">
             {activeAssets.length ? `${rentabilidade >= 0 ? '+' : ''}${rentabilidade.toFixed(1)}%` : '—'}
           </div>
+        </div>
+        <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
+          <div className="label">Dividendos este mês</div>
+          <div className="value num">{fmt(dividendsThisMonth)}</div>
         </div>
       </div>
 
@@ -270,10 +307,19 @@ export default function Investments() {
           )}
         </div>
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-          <h3>Próximos dividendos</h3>
-          <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            Dividendos em breve.
-          </div>
+          <h3>
+            Próximos dividendos{' '}
+            <span className="action" onClick={() => navigate('/investimentos/dividendos')}>
+              ver todos →
+            </span>
+          </h3>
+          {upcomingDividends.every((p) => p.total === 0) ? (
+            <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              Nenhum provento recorrente ativo.
+            </div>
+          ) : (
+            <UpcomingDividendsChart periods={upcomingDividends} />
+          )}
         </div>
       </div>
 
@@ -298,27 +344,9 @@ export default function Investments() {
                   </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ textAlign: 'right' }}>
-                  <div className="tx-val num">{fmt(pos.current_amount != null ? pos.current_amount : pos.invested_amount)}</div>
-                  <div className="tx-meta">investido {fmt(pos.invested_amount)}</div>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ padding: '6px 10px', fontSize: 12 }}
-                  onClick={() => setTradeState({ asset, kind: 'buy' })}
-                >
-                  Comprar
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  style={{ padding: '6px 10px', fontSize: 12 }}
-                  onClick={() => setTradeState({ asset, kind: 'sell' })}
-                >
-                  Vender
-                </button>
+              <div style={{ textAlign: 'right' }}>
+                <div className="tx-val num">{fmt(pos.current_amount != null ? pos.current_amount : pos.invested_amount)}</div>
+                <div className="tx-meta">investido {fmt(pos.invested_amount)}</div>
               </div>
             </div>
           );
@@ -375,17 +403,6 @@ export default function Investments() {
         </div>
       )}
 
-      <NewAssetModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onCreated={() => {
-          setModalOpen(false);
-          reload();
-        }}
-        banks={banks}
-        investmentAccounts={investmentAccounts}
-      />
-
       <TradeAssetModal
         open={!!tradeState}
         asset={tradeState?.asset}
@@ -394,15 +411,6 @@ export default function Investments() {
         onClose={() => setTradeState(null)}
         onSaved={() => {
           setTradeState(null);
-          reload();
-        }}
-      />
-
-      <TransferModal
-        open={transferModalOpen}
-        onClose={() => setTransferModalOpen(false)}
-        onCreated={() => {
-          setTransferModalOpen(false);
           reload();
         }}
       />

@@ -64,15 +64,15 @@ export default function AssetTrades() {
       <div className="topbar">
         <h1>Compras e vendas</h1>
         <div style={{ display: 'flex', gap: 8 }}>
+          <div className="period" onClick={() => openPick('sell')}>
+            + nova venda
+          </div>
           <div
             className="period"
             style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
             onClick={() => openPick('buy')}
           >
             + nova compra
-          </div>
-          <div className="period" onClick={() => openPick('sell')}>
-            + nova venda
           </div>
         </div>
       </div>

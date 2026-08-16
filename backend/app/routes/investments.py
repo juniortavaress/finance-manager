@@ -51,7 +51,8 @@ def _owned_asset(asset_id):
 def _asset_position(asset: Asset):
     """Quantidade, custo total e preco medio a partir do historico de compras/vendas.
     Vendas reduzem a quantidade mas nao alteram o preco medio das compras restantes
-    (metodo de custo medio, sem FIFO/LIFO)."""
+    (metodo de custo medio, sem FIFO/LIFO). Rentabilidade e "total return":
+    considera valorizacao do ativo + dividendos recebidos sobre o valor investido."""
     quantity = Decimal("0")
     cost_basis = Decimal("0")
     avg_price = Decimal("0")
@@ -66,18 +67,27 @@ def _asset_position(asset: Asset):
             quantity -= tx.quantity
 
     current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
+    dividends_total = sum((d.amount for d in asset.dividends), Decimal("0"))
+
+    base_value = current_value if current_value is not None else cost_basis
+    total_return_pct = (
+        float(((base_value + dividends_total) / cost_basis - 1) * 100) if cost_basis > 0 else None
+    )
 
     return {
         "quantity": float(quantity),
         "avg_unit_price": float(avg_price),
         "invested_amount": float(cost_basis),
         "current_amount": float(current_value) if current_value is not None else None,
+        "dividends_total": float(dividends_total),
+        "total_return_pct": total_return_pct,
     }
 
 
 def _asset_to_dict(asset: Asset):
     data = asset.to_dict()
     data["position"] = _asset_position(asset)
+    data["archived"] = data["position"]["quantity"] <= 0
     return data
 
 
@@ -86,14 +96,15 @@ def _asset_to_dict(asset: Asset):
 def list_assets():
     inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
     show_archived = request.args.get("archived") == "true"
-    assets = (
-        Asset.query.filter(
-            Asset.investment_account_id.in_(inv_account_ids), Asset.archived.is_(show_archived)
-        ).all()
-        if inv_account_ids
-        else []
-    )
-    return {"assets": [_asset_to_dict(a) for a in assets]}
+    all_assets = Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all() if inv_account_ids else []
+
+    result = []
+    for asset in all_assets:
+        data = _asset_to_dict(asset)
+        is_archived = data["position"]["quantity"] <= 0
+        if is_archived == show_archived:
+            result.append(data)
+    return {"assets": result}
 
 
 @investments_bp.get("/asset-transactions")
@@ -152,14 +163,13 @@ def investments_summary():
         account = accounts_by_ia_id[asset.investment_account_id]
         if bank_filter and str(account.bank_id) != bank_filter:
             continue
-        if not asset.archived:
-            bank = Bank.query.get(account.bank_id)
-            data = asset.to_dict()
-            data["position"] = _asset_position(asset)
-            data["bank_id"] = str(account.bank_id)
-            data["bank_name"] = bank.name if bank else None
-            data["bank_color"] = bank.color_hex if bank else None
-            assets_result.append(data)
+        bank = Bank.query.get(account.bank_id)
+        data = asset.to_dict()
+        data["position"] = _asset_position(asset)
+        data["bank_id"] = str(account.bank_id)
+        data["bank_name"] = bank.name if bank else None
+        data["bank_color"] = bank.color_hex if bank else None
+        assets_result.append(data)
         for tx in asset.asset_transactions:
             if earliest_date is None or tx.date < earliest_date:
                 earliest_date = tx.date
@@ -291,8 +301,6 @@ def update_asset(asset_id):
         if ia is None:
             raise ApiError("Conta de investimento não encontrada", 404)
         asset.investment_account_id = ia.id
-    if "archived" in data:
-        asset.archived = bool(data["archived"])
 
     db.session.commit()
     return {"asset": _asset_to_dict(asset)}
@@ -428,9 +436,10 @@ def delete_asset_transaction(asset_transaction_id):
     account = tx.account if tx else None
 
     db.session.delete(asset_tx)
+    db.session.flush()
     if tx:
         db.session.delete(tx)
-    db.session.flush()
+        db.session.flush()
 
     if account:
         recalc_account_balance(account)
