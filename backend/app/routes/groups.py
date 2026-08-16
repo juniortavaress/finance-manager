@@ -21,7 +21,7 @@ def _get_member(group_id, user_id):
 def _require_membership(group_id):
     membership = _get_member(group_id, g.current_user.id)
     if membership is None:
-        raise ApiError("Grupo nao encontrado", 404)
+        raise ApiError("Grupo não encontrado", 404)
     return membership
 
 
@@ -52,11 +52,11 @@ def create_group():
     color_hex = data.get("color_hex") or "#0F5C5C"
 
     if not name:
-        raise ApiError("Nome do grupo e obrigatorio", 400)
+        raise ApiError("Nome do grupo é obrigatório", 400)
 
     for member_id in member_ids:
         if not are_friends(g.current_user.id, member_id):
-            raise ApiError("So e possivel adicionar amigos aceitos ao grupo", 400)
+            raise ApiError("Só é possível adicionar amigos aceitos ao grupo", 400)
 
     group = Group(name=name, created_by=g.current_user.id, icon=icon, color_hex=color_hex)
     db.session.add(group)
@@ -78,7 +78,7 @@ def get_group(group_id):
     _require_membership(group_id)
     group = Group.query.get(group_id)
     if group is None:
-        raise ApiError("Grupo nao encontrado", 404)
+        raise ApiError("Grupo não encontrado", 404)
 
     net = compute_group_net_balances(group.id)
     members = [{**m.to_dict(), "balance": float(net.get(m.user_id, 0))} for m in group.members]
@@ -106,13 +106,13 @@ def update_group(group_id):
     _require_membership(group_id)
     group = Group.query.get(group_id)
     if group is None:
-        raise ApiError("Grupo nao encontrado", 404)
+        raise ApiError("Grupo não encontrado", 404)
 
     data = request.get_json(silent=True) or {}
     if "name" in data:
         name = (data["name"] or "").strip()
         if not name:
-            raise ApiError("Nome do grupo e obrigatorio", 400)
+            raise ApiError("Nome do grupo é obrigatório", 400)
         group.name = name
     if "simplify_debts" in data:
         group.simplify_debts = bool(data["simplify_debts"])
@@ -132,17 +132,17 @@ def add_member(group_id):
     data = request.get_json(silent=True) or {}
     user_id = data.get("user_id")
     if not user_id:
-        raise ApiError("Informe o usuario a adicionar", 400)
+        raise ApiError("Informe o usuário a adicionar", 400)
 
     if not are_friends(g.current_user.id, user_id):
-        raise ApiError("So e possivel adicionar amigos aceitos ao grupo", 400)
+        raise ApiError("Só é possível adicionar amigos aceitos ao grupo", 400)
 
     if _get_member(group_id, user_id) is not None:
-        raise ApiError("Essa pessoa ja e membro do grupo", 400)
+        raise ApiError("Essa pessoa já é membro do grupo", 400)
 
     user = User.query.filter_by(id=user_id).first()
     if user is None or user.deleted_at is not None:
-        raise ApiError("Usuario nao encontrado", 404)
+        raise ApiError("Usuário não encontrado", 404)
 
     member = GroupMember(group_id=group_id, user_id=user_id)
     db.session.add(member)
@@ -156,7 +156,7 @@ def remove_member(group_id, user_id):
     _require_membership(group_id)
     member = _get_member(group_id, user_id)
     if member is None:
-        raise ApiError("Membro nao encontrado", 404)
+        raise ApiError("Membro não encontrado", 404)
 
     net = compute_group_net_balances(group_id)
     balance = net.get(user_id, 0)
@@ -174,11 +174,11 @@ def delete_group(group_id):
     _require_membership(group_id)
     group = Group.query.get(group_id)
     if group is None:
-        raise ApiError("Grupo nao encontrado", 404)
+        raise ApiError("Grupo não encontrado", 404)
 
     net = compute_group_net_balances(group_id)
     if any(balance != 0 for balance in net.values()):
-        raise ApiError("Quite todos os saldos do grupo antes de exclui-lo", 400)
+        raise ApiError("Quite todos os saldos do grupo antes de excluí-lo", 400)
 
     expense_ids = [e.id for e in SharedExpense.query.filter_by(group_id=group_id).all()]
     if expense_ids:

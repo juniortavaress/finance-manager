@@ -48,13 +48,13 @@ def create_account():
     name = (data.get("name") or "").strip()
 
     if acc_type not in ("checking", "credit_card", "investment"):
-        raise ApiError("Tipo de conta invalido", 400)
+        raise ApiError("Tipo de conta inválido", 400)
     if not name:
-        raise ApiError("Nome da conta e obrigatorio", 400)
+        raise ApiError("Nome da conta é obrigatório", 400)
 
     bank = Bank.query.filter_by(id=bank_id, user_id=g.current_user.id).first()
     if bank is None:
-        raise ApiError("Banco nao encontrado", 404)
+        raise ApiError("Banco não encontrado", 404)
 
     opening_balance = data.get("opening_balance", 0) or 0
     opening_date_raw = data.get("opening_balance_date")
@@ -76,7 +76,7 @@ def create_account():
     if acc_type == "credit_card":
         cc = data.get("credit_card") or {}
         if not cc.get("closing_day") or not cc.get("due_day"):
-            raise ApiError("Informe dia de fechamento e vencimento do cartao", 400)
+            raise ApiError("Informe dia de fechamento e vencimento do cartão", 400)
         credit_card = CreditCard(
             account_id=account.id,
             credit_limit=cc.get("credit_limit", 0) or 0,
@@ -100,7 +100,7 @@ def create_account():
 def update_account(account_id):
     account = Account.query.filter_by(id=account_id, user_id=g.current_user.id).first()
     if account is None:
-        raise ApiError("Conta nao encontrada", 404)
+        raise ApiError("Conta não encontrada", 404)
 
     data = request.get_json(silent=True) or {}
     for field in ("name", "currency", "archived"):
@@ -122,7 +122,7 @@ def update_account(account_id):
 def account_usage(account_id):
     account = Account.query.filter_by(id=account_id, user_id=g.current_user.id).first()
     if account is None:
-        raise ApiError("Conta nao encontrada", 404)
+        raise ApiError("Conta não encontrada", 404)
 
     counts = _account_usage_counts(g.current_user.id, account_id)
     return {"total": sum(counts.values()), "counts": counts}
@@ -133,7 +133,7 @@ def account_usage(account_id):
 def delete_account(account_id):
     account = Account.query.filter_by(id=account_id, user_id=g.current_user.id).first()
     if account is None:
-        raise ApiError("Conta nao encontrada", 404)
+        raise ApiError("Conta não encontrada", 404)
 
     _delete_account_cascade(account)
     db.session.commit()

@@ -43,18 +43,18 @@ def create_category():
     kind = data.get("kind")
 
     if not name:
-        raise ApiError("Nome da categoria e obrigatorio", 400)
+        raise ApiError("Nome da categoria é obrigatório", 400)
     if kind not in ("expense", "income", "both"):
-        raise ApiError("Tipo de categoria invalido", 400)
+        raise ApiError("Tipo de categoria inválido", 400)
 
     budget_amount = data.get("budget_amount")
     if budget_amount is not None:
         try:
             budget_amount = float(budget_amount)
         except (TypeError, ValueError):
-            raise ApiError("Valor meta invalido", 400)
+            raise ApiError("Valor meta inválido", 400)
         if budget_amount < 0:
-            raise ApiError("Valor meta invalido", 400)
+            raise ApiError("Valor meta inválido", 400)
 
     category = Category(
         user_id=g.current_user.id,
@@ -74,7 +74,7 @@ def create_category():
 def update_category(category_id):
     category = Category.query.filter_by(id=category_id, user_id=g.current_user.id).first()
     if category is None:
-        raise ApiError("Categoria nao encontrada", 404)
+        raise ApiError("Categoria não encontrada", 404)
 
     data = request.get_json(silent=True) or {}
     if "budget_amount" in data:
@@ -83,9 +83,9 @@ def update_category(category_id):
             try:
                 budget_amount = float(budget_amount)
             except (TypeError, ValueError):
-                raise ApiError("Valor meta invalido", 400)
+                raise ApiError("Valor meta inválido", 400)
             if budget_amount < 0:
-                raise ApiError("Valor meta invalido", 400)
+                raise ApiError("Valor meta inválido", 400)
         data["budget_amount"] = budget_amount
 
     for field in ("name", "icon", "color_hex", "kind", "archived", "budget_amount"):
@@ -100,7 +100,7 @@ def update_category(category_id):
 def category_usage(category_id):
     category = Category.query.filter_by(id=category_id, user_id=g.current_user.id).first()
     if category is None:
-        raise ApiError("Categoria nao encontrada", 404)
+        raise ApiError("Categoria não encontrada", 404)
 
     counts = _usage_counts(g.current_user.id, category_id)
     return {"total": sum(counts.values()), "counts": counts}
@@ -111,7 +111,7 @@ def category_usage(category_id):
 def delete_category(category_id):
     category = Category.query.filter_by(id=category_id, user_id=g.current_user.id).first()
     if category is None:
-        raise ApiError("Categoria nao encontrada", 404)
+        raise ApiError("Categoria não encontrada", 404)
 
     data = request.get_json(silent=True) or {}
     reassign_to = data.get("reassign_to")
@@ -121,13 +121,13 @@ def delete_category(category_id):
 
     if total > 0:
         if not reassign_to:
-            raise ApiError("Esta categoria esta em uso. Informe reassign_to para migrar os registros.", 400)
+            raise ApiError("Esta categoria está em uso. Informe reassign_to para migrar os registros.", 400)
         if str(reassign_to) == str(category_id):
             raise ApiError("Escolha uma categoria diferente para reatribuir.", 400)
 
         target = Category.query.filter_by(id=reassign_to, user_id=g.current_user.id, archived=False).first()
         if target is None:
-            raise ApiError("Categoria de destino invalida", 400)
+            raise ApiError("Categoria de destino inválida", 400)
 
         Transaction.query.filter_by(user_id=g.current_user.id, category_id=category_id).update(
             {"category_id": reassign_to}

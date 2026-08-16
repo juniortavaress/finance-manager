@@ -33,7 +33,7 @@ def _resolve_category(category_id, kind):
         raise ApiError("Selecione a categoria", 400)
     category = Category.query.filter_by(id=category_id, user_id=g.current_user.id, archived=False).first()
     if category is None or category.kind not in (kind, "both"):
-        raise ApiError("Categoria invalida", 400)
+        raise ApiError("Categoria inválida", 400)
     return category
 
 
@@ -42,18 +42,18 @@ def _resolve_scope(data):
     friend_user_id = data.get("friend_user_id")
 
     if group_id and friend_user_id:
-        raise ApiError("Informe apenas grupo ou amigo, nao os dois", 400)
+        raise ApiError("Informe apenas grupo ou amigo, não os dois", 400)
 
     if group_id:
         membership = GroupMember.query.filter_by(group_id=group_id, user_id=g.current_user.id).first()
         if membership is None:
-            raise ApiError("Grupo nao encontrado", 404)
+            raise ApiError("Grupo não encontrado", 404)
         member_ids = {str(m.user_id) for m in GroupMember.query.filter_by(group_id=group_id).all()}
         return group_id, None, None, member_ids
 
     if friend_user_id:
         if not are_friends(g.current_user.id, friend_user_id):
-            raise ApiError("Voces nao sao amigos", 404)
+            raise ApiError("Vocês não são amigos", 404)
         low, high = _friend_pair(g.current_user.id, friend_user_id)
         return None, low, high, {str(g.current_user.id), str(friend_user_id)}
 
@@ -73,7 +73,7 @@ def create_settlement():
     category_id = data.get("category_id")
 
     if str(payer_id) != str(g.current_user.id):
-        raise ApiError("So e possivel registrar um acerto em que voce e quem pagou", 400)
+        raise ApiError("Só é possível registrar um acerto em que você é quem pagou", 400)
     if not receiver_id:
         raise ApiError("Informe quem recebeu o pagamento", 400)
     if str(receiver_id) == str(payer_id):
@@ -81,7 +81,7 @@ def create_settlement():
     if not amount or Decimal(str(amount)) <= 0:
         raise ApiError("Valor deve ser maior que zero", 400)
     if not date_raw:
-        raise ApiError("Data e obrigatoria", 400)
+        raise ApiError("Data é obrigatória", 400)
 
     amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     group_id, friend_low, friend_high, allowed_ids = _resolve_scope(data)
@@ -104,12 +104,12 @@ def create_settlement():
     if payer_account_id:
         account = Account.query.filter_by(id=payer_account_id, user_id=g.current_user.id, archived=False).first()
         if account is None:
-            raise ApiError("Conta nao encontrada", 404)
+            raise ApiError("Conta não encontrada", 404)
 
         category = _resolve_category(category_id, "expense")
         is_credit = account.type == "credit_card"
         if is_credit and not account.credit_card:
-            raise ApiError("Conta selecionada nao e um cartao de credito", 400)
+            raise ApiError("Conta selecionada não é um cartão de crédito", 400)
 
         tx = Transaction(
             user_id=g.current_user.id,
@@ -164,7 +164,7 @@ def register_receipt_directly():
     if not amount or Decimal(str(amount)) <= 0:
         raise ApiError("Valor deve ser maior que zero", 400)
     if not date_raw:
-        raise ApiError("Data e obrigatoria", 400)
+        raise ApiError("Data é obrigatória", 400)
     if not receiver_account_id:
         raise ApiError("Informe a conta de entrada", 400)
 
@@ -178,7 +178,7 @@ def register_receipt_directly():
 
     account = Account.query.filter_by(id=receiver_account_id, user_id=g.current_user.id, archived=False).first()
     if account is None:
-        raise ApiError("Conta nao encontrada", 404)
+        raise ApiError("Conta não encontrada", 404)
 
     settlement = Settlement(
         group_id=group_id,
@@ -219,9 +219,9 @@ def register_receipt_directly():
 def record_receipt(settlement_id):
     settlement = Settlement.query.filter_by(id=settlement_id, receiver_id=g.current_user.id).first()
     if settlement is None:
-        raise ApiError("Acerto nao encontrado", 404)
+        raise ApiError("Acerto não encontrado", 404)
     if settlement.receiver_transaction_id is not None:
-        raise ApiError("Esse recebimento ja foi registrado", 400)
+        raise ApiError("Esse recebimento já foi registrado", 400)
 
     data = request.get_json(silent=True) or {}
     account_id = data.get("account_id")
@@ -233,7 +233,7 @@ def record_receipt(settlement_id):
 
     account = Account.query.filter_by(id=account_id, user_id=g.current_user.id, archived=False).first()
     if account is None:
-        raise ApiError("Conta nao encontrada", 404)
+        raise ApiError("Conta não encontrada", 404)
 
     tx = Transaction(
         user_id=g.current_user.id,
@@ -288,11 +288,11 @@ def pending_receipts():
 def delete_settlement(settlement_id):
     settlement = Settlement.query.get(settlement_id)
     if settlement is None:
-        raise ApiError("Acerto nao encontrado", 404)
+        raise ApiError("Acerto não encontrado", 404)
 
     me = str(g.current_user.id)
     if me not in (str(settlement.payer_id), str(settlement.receiver_id)):
-        raise ApiError("Acerto nao encontrado", 404)
+        raise ApiError("Acerto não encontrado", 404)
 
     payer_tx = Transaction.query.get(settlement.payer_transaction_id) if settlement.payer_transaction_id else None
     receiver_tx = (

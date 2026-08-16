@@ -35,7 +35,7 @@ def _resolve_category(category_id):
         raise ApiError("Selecione a categoria", 400)
     category = Category.query.filter_by(id=category_id, user_id=g.current_user.id, archived=False).first()
     if category is None or category.kind not in ("expense", "both"):
-        raise ApiError("Categoria invalida", 400)
+        raise ApiError("Categoria inválida", 400)
     return category
 
 
@@ -45,18 +45,18 @@ def _resolve_scope(data):
     friend_user_id = data.get("friend_user_id")
 
     if group_id and friend_user_id:
-        raise ApiError("Informe apenas grupo ou amigo, nao os dois", 400)
+        raise ApiError("Informe apenas grupo ou amigo, não os dois", 400)
 
     if group_id:
         membership = GroupMember.query.filter_by(group_id=group_id, user_id=g.current_user.id).first()
         if membership is None:
-            raise ApiError("Grupo nao encontrado", 404)
+            raise ApiError("Grupo não encontrado", 404)
         member_ids = {m.user_id for m in GroupMember.query.filter_by(group_id=group_id).all()}
         return group_id, None, None, member_ids
 
     if friend_user_id:
         if not are_friends(g.current_user.id, friend_user_id):
-            raise ApiError("Voces nao sao amigos", 404)
+            raise ApiError("Vocês não são amigos", 404)
         low, high = _friend_pair(g.current_user.id, friend_user_id)
         return None, low, high, {g.current_user.id, friend_user_id}
 
@@ -76,8 +76,8 @@ def _resolve_shares(total_amount, split_mode, participants):
             shares = split_equal(total_amount, participant_ids)
             if any(v <= 0 for v in shares.values()):
                 raise ApiError(
-                    "O valor e pequeno demais para ser dividido entre todos os participantes "
-                    "(algum participante ficaria com R$ 0,00). Reduza o numero de participantes "
+                    "O valor é pequeno demais para ser dividido entre todos os participantes "
+                    "(algum participante ficaria com R$ 0,00). Reduza o número de participantes "
                     "ou aumente o valor.",
                     400,
                 )
@@ -92,7 +92,7 @@ def _resolve_shares(total_amount, split_mode, participants):
             shares = split_by_percentage(total_amount, percentages)
             shares = {uid: v for uid, v in shares.items() if v > 0}
         else:
-            raise ApiError("Modo de divisao invalido", 400)
+            raise ApiError("Modo de divisão inválido", 400)
     except ValueError as exc:
         raise ApiError(str(exc), 400)
 
@@ -117,13 +117,13 @@ def create_shared_expense():
     payer_category_id = data.get("payer_category_id")
 
     if not description:
-        raise ApiError("Descricao e obrigatoria", 400)
+        raise ApiError("Descrição é obrigatória", 400)
     if not total_amount or Decimal(str(total_amount)) <= 0:
         raise ApiError("Valor deve ser maior que zero", 400)
     if not date_raw:
-        raise ApiError("Data e obrigatoria", 400)
+        raise ApiError("Data é obrigatória", 400)
     if split_mode not in ("equal", "value", "percentage"):
-        raise ApiError("Modo de divisao invalido", 400)
+        raise ApiError("Modo de divisão inválido", 400)
 
     total_amount = Decimal(str(total_amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -166,12 +166,12 @@ def create_shared_expense():
 def _link_payment(expense, account_id, category_id):
     account = Account.query.filter_by(id=account_id, user_id=g.current_user.id, archived=False).first()
     if account is None:
-        raise ApiError("Conta nao encontrada", 404)
+        raise ApiError("Conta não encontrada", 404)
 
     category = _resolve_category(category_id)
     is_credit = account.type == "credit_card"
     if is_credit and not account.credit_card:
-        raise ApiError("Conta selecionada nao e um cartao de credito", 400)
+        raise ApiError("Conta selecionada não é um cartão de crédito", 400)
 
     tx = Transaction(
         user_id=g.current_user.id,
@@ -205,9 +205,9 @@ def _link_payment(expense, account_id, category_id):
 def link_payment(expense_id):
     expense = SharedExpense.query.filter_by(id=expense_id, paid_by_id=g.current_user.id).first()
     if expense is None:
-        raise ApiError("Despesa nao encontrada", 404)
+        raise ApiError("Despesa não encontrada", 404)
     if expense.transaction_id is not None:
-        raise ApiError("Essa despesa ja esta vinculada a uma conta", 400)
+        raise ApiError("Essa despesa já está vinculada a uma conta", 400)
 
     data = request.get_json(silent=True) or {}
     account_id = data.get("account_id")
@@ -224,11 +224,11 @@ def _require_scope_membership(expense):
     if expense.group_id:
         membership = GroupMember.query.filter_by(group_id=expense.group_id, user_id=g.current_user.id).first()
         if membership is None:
-            raise ApiError("Despesa nao encontrada", 404)
+            raise ApiError("Despesa não encontrada", 404)
     else:
         me = str(g.current_user.id)
         if me not in (str(expense.friend_user_low_id), str(expense.friend_user_high_id)):
-            raise ApiError("Despesa nao encontrada", 404)
+            raise ApiError("Despesa não encontrada", 404)
 
 
 @shared_expenses_bp.patch("/<uuid:expense_id>")
@@ -236,7 +236,7 @@ def _require_scope_membership(expense):
 def update_shared_expense(expense_id):
     expense = SharedExpense.query.get(expense_id)
     if expense is None:
-        raise ApiError("Despesa nao encontrada", 404)
+        raise ApiError("Despesa não encontrada", 404)
     _require_scope_membership(expense)
 
     data = request.get_json(silent=True) or {}
@@ -285,7 +285,7 @@ def update_shared_expense(expense_id):
 def delete_shared_expense(expense_id):
     expense = SharedExpense.query.get(expense_id)
     if expense is None:
-        raise ApiError("Despesa nao encontrada", 404)
+        raise ApiError("Despesa não encontrada", 404)
     _require_scope_membership(expense)
 
     tx = Transaction.query.get(expense.transaction_id) if expense.transaction_id else None

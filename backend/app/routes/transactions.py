@@ -137,35 +137,35 @@ def create_transaction():
     installments_count = int(data.get("installments_count") or 1)
 
     if not description:
-        raise ApiError("Descricao e obrigatoria", 400)
+        raise ApiError("Descrição é obrigatória", 400)
     if tx_type not in ("income", "expense"):
-        raise ApiError("Tipo invalido", 400)
+        raise ApiError("Tipo inválido", 400)
     if payment_method not in ("debit", "credit", "pix", "other"):
-        raise ApiError("Forma de pagamento invalida", 400)
+        raise ApiError("Forma de pagamento inválida", 400)
     if not amount or Decimal(str(amount)) <= 0:
         raise ApiError("Valor deve ser maior que zero", 400)
     if not date_raw:
-        raise ApiError("Data e obrigatoria", 400)
+        raise ApiError("Data é obrigatória", 400)
 
     account = Account.query.filter_by(id=account_id, user_id=g.current_user.id).first()
     if account is None:
-        raise ApiError("Conta nao encontrada", 404)
+        raise ApiError("Conta não encontrada", 404)
     category = Category.query.filter_by(id=category_id, user_id=g.current_user.id, archived=False).first()
     if category is None:
-        raise ApiError("Categoria nao encontrada", 404)
+        raise ApiError("Categoria não encontrada", 404)
 
     purchase_date = dt.date.fromisoformat(date_raw)
     amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     if payment_method == "credit":
         if account.type != "credit_card" or not account.credit_card:
-            raise ApiError("Conta selecionada nao e um cartao de credito", 400)
+            raise ApiError("Conta selecionada não é um cartão de crédito", 400)
 
         credit_card = account.credit_card
 
         if installments_count > 1:
             if tx_type != "expense":
-                raise ApiError("Parcelamento so se aplica a despesas", 400)
+                raise ApiError("Parcelamento só se aplica a despesas", 400)
 
             installment_amount = (amount / installments_count).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             plan = InstallmentPlan(
@@ -262,11 +262,11 @@ def create_transaction():
 def update_transaction(transaction_id):
     tx = Transaction.query.filter_by(id=transaction_id, user_id=g.current_user.id).first()
     if tx is None:
-        raise ApiError("Transacao nao encontrada", 404)
+        raise ApiError("Transação não encontrada", 404)
 
     data = request.get_json(silent=True) or {}
     if "status" in data and data["status"] not in TRANSACTION_STATUSES:
-        raise ApiError("Status invalido", 400)
+        raise ApiError("Status inválido", 400)
     for field in ("description", "notes", "status"):
         if field in data:
             setattr(tx, field, data[field])
@@ -279,17 +279,17 @@ def update_transaction(transaction_id):
 
     if "account_id" in data and data["account_id"] != str(tx.account_id):
         if tx.installment_plan_id or tx.is_invoice_payment:
-            raise ApiError("Nao e possivel trocar a conta desta transacao", 400)
+            raise ApiError("Não é possível trocar a conta desta transação", 400)
         new_account = Account.query.filter_by(
             id=data["account_id"], user_id=g.current_user.id, archived=False
         ).first()
         if new_account is None:
-            raise ApiError("Conta nao encontrada", 404)
+            raise ApiError("Conta não encontrada", 404)
         is_credit = new_account.type == "credit_card"
         if is_credit and not new_account.credit_card:
-            raise ApiError("Conta selecionada nao e um cartao de credito", 400)
+            raise ApiError("Conta selecionada não é um cartão de crédito", 400)
         if is_credit and tx.type == "income":
-            raise ApiError("Receitas nao podem ser vinculadas a cartao de credito", 400)
+            raise ApiError("Receitas não podem ser vinculadas a cartão de crédito", 400)
         tx.account_id = new_account.id
         tx.payment_method = "credit" if is_credit else "debit"
         if not is_credit:
@@ -307,7 +307,7 @@ def update_transaction(transaction_id):
             id=data["category_id"], user_id=g.current_user.id, archived=False
         ).first()
         if category is None:
-            raise ApiError("Categoria nao encontrada", 404)
+            raise ApiError("Categoria não encontrada", 404)
         tx.category_id = category.id
 
     db.session.flush()
@@ -328,7 +328,7 @@ def update_transaction(transaction_id):
 def delete_transaction(transaction_id):
     tx = Transaction.query.filter_by(id=transaction_id, user_id=g.current_user.id).first()
     if tx is None:
-        raise ApiError("Transacao nao encontrada", 404)
+        raise ApiError("Transação não encontrada", 404)
 
     account = tx.account
     invoice = tx.credit_card_invoice

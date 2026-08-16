@@ -13,19 +13,19 @@ def login_required(fn):
     def wrapper(*args, **kwargs):
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
-            raise ApiError("Token de autenticacao ausente", 401)
+            raise ApiError("Token de autenticação ausente", 401)
 
         token = auth_header.split(" ", 1)[1].strip()
         try:
             payload = decode_token(token)
         except jwt.ExpiredSignatureError:
-            raise ApiError("Sessao expirada, faca login novamente", 401)
+            raise ApiError("Sessão expirada, faça login novamente", 401)
         except jwt.InvalidTokenError:
-            raise ApiError("Token invalido", 401)
+            raise ApiError("Token inválido", 401)
 
         user = User.query.get(payload["sub"])
         if user is None or user.deleted_at is not None:
-            raise ApiError("Usuario nao encontrado", 401)
+            raise ApiError("Usuário não encontrado", 401)
 
         g.current_user = user
         return fn(*args, **kwargs)

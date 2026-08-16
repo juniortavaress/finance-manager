@@ -35,15 +35,15 @@ def create_investment():
     inv_type = data.get("type")
 
     if not name:
-        raise ApiError("Nome do investimento e obrigatorio", 400)
+        raise ApiError("Nome do investimento é obrigatório", 400)
     if inv_type not in ("renda_fixa", "acoes", "fundos", "cripto", "outro"):
-        raise ApiError("Tipo de investimento invalido", 400)
+        raise ApiError("Tipo de investimento inválido", 400)
 
     ia = InvestmentAccount.query.join(Account, Account.id == InvestmentAccount.account_id).filter(
         InvestmentAccount.id == investment_account_id, Account.user_id == g.current_user.id
     ).first()
     if ia is None:
-        raise ApiError("Conta de investimento nao encontrada", 404)
+        raise ApiError("Conta de investimento não encontrada", 404)
 
     investment = Investment(
         investment_account_id=ia.id,
@@ -71,7 +71,7 @@ def update_investment(investment_id):
         .first()
     )
     if investment is None:
-        raise ApiError("Investimento nao encontrado", 404)
+        raise ApiError("Investimento não encontrado", 404)
 
     data = request.get_json(silent=True) or {}
     for field in ("name", "invested_amount", "current_amount"):

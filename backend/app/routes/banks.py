@@ -39,7 +39,7 @@ def create_bank():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if not name:
-        raise ApiError("Nome do banco e obrigatorio", 400)
+        raise ApiError("Nome do banco é obrigatório", 400)
 
     bank = Bank(
         user_id=g.current_user.id,
@@ -57,7 +57,7 @@ def create_bank():
 def update_bank(bank_id):
     bank = Bank.query.filter_by(id=bank_id, user_id=g.current_user.id).first()
     if bank is None:
-        raise ApiError("Banco nao encontrado", 404)
+        raise ApiError("Banco não encontrado", 404)
 
     data = request.get_json(silent=True) or {}
     for field in ("name", "color_hex", "logo_url", "archived"):
@@ -72,7 +72,7 @@ def update_bank(bank_id):
 def bank_usage(bank_id):
     bank = Bank.query.filter_by(id=bank_id, user_id=g.current_user.id).first()
     if bank is None:
-        raise ApiError("Banco nao encontrado", 404)
+        raise ApiError("Banco não encontrado", 404)
 
     counts = _bank_usage_counts(g.current_user.id, bank_id)
     return {"total": sum(counts.values()), "counts": counts}
@@ -85,7 +85,7 @@ def delete_bank(bank_id):
 
     bank = Bank.query.filter_by(id=bank_id, user_id=g.current_user.id).first()
     if bank is None:
-        raise ApiError("Banco nao encontrado", 404)
+        raise ApiError("Banco não encontrado", 404)
 
     accounts = Account.query.filter_by(user_id=g.current_user.id, bank_id=bank.id).all()
     for account in accounts:

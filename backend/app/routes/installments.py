@@ -32,7 +32,7 @@ def list_installments():
 def get_installment(plan_id):
     plan = InstallmentPlan.query.filter_by(id=plan_id, user_id=g.current_user.id).first()
     if plan is None:
-        raise ApiError("Parcelamento nao encontrado", 404)
+        raise ApiError("Parcelamento não encontrado", 404)
     return {"installment_plan": plan.to_dict(include_transactions=True)}
 
 
@@ -51,7 +51,7 @@ def _mark_completed_if_done(plan):
 def advance_installments(plan_id):
     plan = _get_owned_plan(plan_id)
     if plan is None:
-        raise ApiError("Parcelamento nao encontrado", 404)
+        raise ApiError("Parcelamento não encontrado", 404)
 
     data = request.get_json(silent=True) or {}
     count = int(data.get("count") or 0)
@@ -68,7 +68,7 @@ def advance_installments(plan_id):
         .first()
     )
     if open_invoice is None:
-        raise ApiError("Nao ha fatura aberta para este cartao", 400)
+        raise ApiError("Não há fatura aberta para este cartão", 400)
 
     scheduled = (
         Transaction.query.filter_by(installment_plan_id=plan.id, status="scheduled")
@@ -76,7 +76,7 @@ def advance_installments(plan_id):
         .all()
     )
     if len(scheduled) < count:
-        raise ApiError("Nao ha parcelas suficientes para adiantar", 400)
+        raise ApiError("Não há parcelas suficientes para adiantar", 400)
 
     selected = scheduled[:count]
     total_amount = Decimal(str(total_amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -116,15 +116,15 @@ def advance_installments(plan_id):
 def cancel_installments_from(plan_id, installment_number):
     plan = _get_owned_plan(plan_id)
     if plan is None:
-        raise ApiError("Parcelamento nao encontrado", 404)
+        raise ApiError("Parcelamento não encontrado", 404)
 
     to_cancel = Transaction.query.filter(
         Transaction.installment_plan_id == plan.id, Transaction.installment_number >= installment_number
     ).all()
     if not to_cancel:
-        raise ApiError("Nenhuma parcela encontrada a partir desse numero", 404)
+        raise ApiError("Nenhuma parcela encontrada a partir desse número", 404)
     if any(tx.status != "scheduled" for tx in to_cancel):
-        raise ApiError("Nao e possivel cancelar parcelas ja confirmadas/faturadas", 400)
+        raise ApiError("Não é possível cancelar parcelas já confirmadas/faturadas", 400)
 
     touched_invoice_ids = {tx.credit_card_invoice_id for tx in to_cancel if tx.credit_card_invoice_id}
     for tx in to_cancel:

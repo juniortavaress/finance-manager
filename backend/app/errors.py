@@ -21,11 +21,11 @@ def register_error_handlers(app):
 
     @app.errorhandler(404)
     def handle_404(err):
-        return jsonify({"error": "Recurso nao encontrado"}), 404
+        return jsonify({"error": "Recurso não encontrado"}), 404
 
     @app.errorhandler(405)
     def handle_405(err):
-        return jsonify({"error": "Metodo nao permitido"}), 405
+        return jsonify({"error": "Método não permitido"}), 405
 
     @app.errorhandler(500)
     def handle_500(err):

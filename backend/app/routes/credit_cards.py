@@ -60,7 +60,7 @@ def list_credit_cards():
 def list_invoices(card_id):
     card = _get_owned_card(card_id)
     if card is None:
-        raise ApiError("Cartao nao encontrado", 404)
+        raise ApiError("Cartão não encontrado", 404)
 
     query = CreditCardInvoice.query.filter_by(credit_card_id=card.id).order_by(
         CreditCardInvoice.reference_month.desc()
@@ -77,11 +77,11 @@ def list_invoices(card_id):
 def get_invoice(card_id, invoice_id):
     card = _get_owned_card(card_id)
     if card is None:
-        raise ApiError("Cartao nao encontrado", 404)
+        raise ApiError("Cartão não encontrado", 404)
 
     invoice = CreditCardInvoice.query.filter_by(id=invoice_id, credit_card_id=card.id).first()
     if invoice is None:
-        raise ApiError("Fatura nao encontrada", 404)
+        raise ApiError("Fatura não encontrada", 404)
 
     data = invoice.to_dict()
     data["transactions"] = [t.to_dict() for t in invoice.transactions]
@@ -93,11 +93,11 @@ def get_invoice(card_id, invoice_id):
 def pay_invoice(card_id, invoice_id):
     card = _get_owned_card(card_id)
     if card is None:
-        raise ApiError("Cartao nao encontrado", 404)
+        raise ApiError("Cartão não encontrado", 404)
 
     invoice = CreditCardInvoice.query.filter_by(id=invoice_id, credit_card_id=card.id).first()
     if invoice is None:
-        raise ApiError("Fatura nao encontrada", 404)
+        raise ApiError("Fatura não encontrada", 404)
 
     data = request.get_json(silent=True) or {}
     account_id = data.get("account_id")
@@ -106,12 +106,12 @@ def pay_invoice(card_id, invoice_id):
         id=account_id, user_id=g.current_user.id, type="checking", archived=False
     ).first()
     if account is None:
-        raise ApiError("Conta corrente nao encontrada", 404)
+        raise ApiError("Conta corrente não encontrada", 404)
     category = _get_or_create_payment_category(g.current_user.id)
 
     outstanding = invoice.total_amount - invoice.paid_amount
     if outstanding <= 0:
-        raise ApiError("Fatura ja esta quitada", 400)
+        raise ApiError("Fatura já está quitada", 400)
 
     bank_name = card.account.bank.name if card.account and card.account.bank else "cartao"
     tx = Transaction(

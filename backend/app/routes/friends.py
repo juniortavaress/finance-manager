@@ -95,20 +95,20 @@ def send_request():
     data = request.get_json(silent=True) or {}
     addressee_id = data.get("addressee_id")
     if not addressee_id:
-        raise ApiError("Informe o usuario a adicionar", 400)
+        raise ApiError("Informe o usuário a adicionar", 400)
     if str(addressee_id) == str(g.current_user.id):
-        raise ApiError("Voce nao pode adicionar a si mesmo", 400)
+        raise ApiError("Você não pode adicionar a si mesmo", 400)
 
     addressee = User.query.filter_by(id=addressee_id).first()
     if addressee is None or addressee.deleted_at is not None:
-        raise ApiError("Usuario nao encontrado", 404)
+        raise ApiError("Usuário não encontrado", 404)
 
     existing = find_friendship_between(g.current_user.id, addressee_id)
     if existing is not None:
         if existing.status == "accepted":
-            raise ApiError("Voce ja e amigo dessa pessoa", 400)
+            raise ApiError("Você já é amigo dessa pessoa", 400)
         if existing.status == "pending":
-            raise ApiError("Ja existe uma solicitacao pendente", 400)
+            raise ApiError("Já existe uma solicitação pendente", 400)
 
     friendship = Friendship(requester_id=g.current_user.id, addressee_id=addressee_id, status="pending")
     db.session.add(friendship)
@@ -121,7 +121,7 @@ def send_request():
 def accept_request(request_id):
     friendship = Friendship.query.filter_by(id=request_id, addressee_id=g.current_user.id, status="pending").first()
     if friendship is None:
-        raise ApiError("Solicitacao nao encontrada", 404)
+        raise ApiError("Solicitação não encontrada", 404)
 
     friendship.status = "accepted"
     friendship.responded_at = dt.datetime.now(dt.timezone.utc)
@@ -134,7 +134,7 @@ def accept_request(request_id):
 def reject_request(request_id):
     friendship = Friendship.query.filter_by(id=request_id, addressee_id=g.current_user.id, status="pending").first()
     if friendship is None:
-        raise ApiError("Solicitacao nao encontrada", 404)
+        raise ApiError("Solicitação não encontrada", 404)
 
     friendship.status = "rejected"
     friendship.responded_at = dt.datetime.now(dt.timezone.utc)
@@ -154,7 +154,7 @@ def _shared_group_ids(user_a_id, user_b_id):
 @login_required
 def friend_expenses(friend_user_id):
     if not are_friends(g.current_user.id, friend_user_id):
-        raise ApiError("Voces nao sao amigos", 404)
+        raise ApiError("Vocês não são amigos", 404)
 
     low, high = _friend_pair(g.current_user.id, friend_user_id)
     standalone = SharedExpense.query.filter_by(group_id=None, friend_user_low_id=low, friend_user_high_id=high).all()
@@ -175,7 +175,7 @@ def friend_history(friend_user_id):
     unificados numa unica linha do tempo -- para que a soma da lista sempre bata
     com o saldo total mostrado (que tambem soma os acertos ja registrados)."""
     if not are_friends(g.current_user.id, friend_user_id):
-        raise ApiError("Voces nao sao amigos", 404)
+        raise ApiError("Vocês não são amigos", 404)
 
     low, high = _friend_pair(g.current_user.id, friend_user_id)
     shared_group_ids = _shared_group_ids(g.current_user.id, friend_user_id)
@@ -223,7 +223,7 @@ def friend_history(friend_user_id):
 @login_required
 def friend_balance(friend_user_id):
     if not are_friends(g.current_user.id, friend_user_id):
-        raise ApiError("Voces nao sao amigos", 404)
+        raise ApiError("Vocês não são amigos", 404)
 
     return compute_friend_total_balance(g.current_user.id, friend_user_id)
 
@@ -235,7 +235,7 @@ def friend_accounts(friend_user_id):
     confirma (o front usa isso apenas para exibir; a escrita real sempre exige que o
     usuario logado seja o dono da conta)."""
     if not are_friends(g.current_user.id, friend_user_id):
-        raise ApiError("Voces nao sao amigos", 404)
+        raise ApiError("Vocês não são amigos", 404)
 
     from app.models import Account
 
