@@ -261,6 +261,7 @@ export default function Portfolio() {
           {sorted.map((a) => {
             const color = TYPE_COLORS[a.type] || '#8B9A97';
             const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
+            const isPreFixado = a.type === 'renda_fixa' && a.fixed_income_type === 'pre_fixado';
             return (
               <div className="asset-row" key={a.id}>
                 <div>
@@ -279,7 +280,11 @@ export default function Portfolio() {
                 </div>
                 <div className="a-num">{a.position.quantity}</div>
                 <div className="a-num">{fmt(a.position.avg_unit_price)}</div>
-                {editingPriceId === a.id ? (
+                {isPreFixado ? (
+                  <div className="a-num" title="Calculado automaticamente pela taxa pré-fixada">
+                    {currentAmount != null ? fmt(currentAmount / (a.position.quantity || 1)) : '—'}
+                  </div>
+                ) : editingPriceId === a.id ? (
                   <div onClick={(e) => e.stopPropagation()}>
                     <CurrencyInput
                       autoFocus

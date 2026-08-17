@@ -65,4 +65,8 @@ def create_app():
 
     register_cli(app)
 
+    from app.services.fixed_income_service import warm_up_holidays_cache
+
+    warm_up_holidays_cache()
+
     return app

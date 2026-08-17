@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models import Account, Asset, AssetTransaction, Bank, Category, InvestmentAccount, Transaction
 from app.models.investment import ASSET_TYPES, FIXED_INCOME_TYPES
 from app.services.finance_service import add_months, recalc_account_balance
+from app.services.fixed_income_service import pre_fixado_current_value
 
 investments_bp = Blueprint("investments", __name__)
 
@@ -48,6 +49,34 @@ def _owned_asset(asset_id):
     )
 
 
+def _pre_fixado_projected_value(asset: Asset, as_of: dt.date):
+    """Valor atual projetado de um ativo pre-fixado: cada compra rende juros
+    compostos (dias uteis/252) desde sua propria data ate `as_of` (ou o
+    vencimento, o que vier primeiro - o titulo "congela" apos vencer).
+    Vendas reduzem a base restante proporcionalmente (mesmo metodo de custo
+    medio usado em _asset_position, sem FIFO/LIFO)."""
+    if asset.fixed_income_rate_pct is None or asset.maturity_date is None:
+        return None
+
+    cutoff = min(as_of, asset.maturity_date)
+    quantity = Decimal("0")
+    projected_value = Decimal("0")
+
+    for tx in asset.asset_transactions:
+        if tx.type == "buy":
+            lot_invested = tx.quantity * tx.unit_price + tx.fee_amount
+            lot_value = pre_fixado_current_value(lot_invested, asset.fixed_income_rate_pct, tx.date, cutoff)
+            quantity += tx.quantity
+            projected_value += lot_value
+        else:
+            if quantity > 0:
+                ratio = tx.quantity / quantity
+                projected_value -= projected_value * ratio
+            quantity -= tx.quantity
+
+    return projected_value if quantity > 0 else Decimal("0")
+
+
 def _asset_position(asset: Asset):
     """Quantidade, custo total e preco medio a partir do historico de compras/vendas.
     Vendas reduzem a quantidade mas nao alteram o preco medio das compras restantes
@@ -66,7 +95,10 @@ def _asset_position(asset: Asset):
             cost_basis -= tx.quantity * avg_price
             quantity -= tx.quantity
 
-    current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
+    if asset.type == "renda_fixa" and asset.fixed_income_type == "pre_fixado":
+        current_value = _pre_fixado_projected_value(asset, dt.date.today())
+    else:
+        current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
     dividends_total = sum((d.amount for d in asset.dividends), Decimal("0"))
 
     base_value = current_value if current_value is not None else cost_basis
@@ -91,9 +123,85 @@ def _asset_to_dict(asset: Asset):
     return data
 
 
+def _settle_matured_pre_fixado(asset: Asset):
+    """Resgate automatico: quando um titulo pre-fixado passa do vencimento e
+    ainda tem posicao em aberto, gera a venda pelo valor projetado na data de
+    vencimento (mesmo formato de _create_asset_transaction), zerando a
+    posicao e creditando a conta - igual um resgate real de corretora."""
+    if asset.type != "renda_fixa" or asset.fixed_income_type != "pre_fixado":
+        return
+    if asset.maturity_date is None or asset.fixed_income_rate_pct is None:
+        return
+    if asset.maturity_date > dt.date.today():
+        return
+
+    position = _asset_position(asset)
+    quantity = Decimal(str(position["quantity"]))
+    if quantity <= 0:
+        return
+
+    redemption_value = _pre_fixado_projected_value(asset, asset.maturity_date)
+    if redemption_value is None or redemption_value <= 0:
+        return
+
+    account = asset.investment_account.account
+    category = _get_or_create_transfer_category(g.current_user.id)
+    label = asset.code or asset.name
+
+    tx = Transaction(
+        user_id=g.current_user.id,
+        account_id=account.id,
+        category_id=category.id,
+        description=f"Venda {label}",
+        amount=redemption_value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+        type="income",
+        date=asset.maturity_date,
+        payment_method="debit",
+        status="confirmed",
+        is_transfer=True,
+    )
+    db.session.add(tx)
+    db.session.flush()
+
+    asset_tx = AssetTransaction(
+        asset_id=asset.id,
+        transaction_id=tx.id,
+        type="sell",
+        date=asset.maturity_date,
+        quantity=quantity,
+        unit_price=(redemption_value / quantity).quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP),
+        total_amount=tx.amount,
+        fee_amount=Decimal("0"),
+        note_id="Resgate automático (vencimento)",
+    )
+    db.session.add(asset_tx)
+    db.session.flush()
+
+    recalc_account_balance(account)
+
+
+def _settle_all_matured_pre_fixado(user_id):
+    inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
+    if not inv_account_ids:
+        return
+    assets = Asset.query.filter(
+        Asset.investment_account_id.in_(inv_account_ids),
+        Asset.type == "renda_fixa",
+        Asset.fixed_income_type == "pre_fixado",
+        Asset.maturity_date.isnot(None),
+        Asset.maturity_date <= dt.date.today(),
+    ).all()
+    for asset in assets:
+        _settle_matured_pre_fixado(asset)
+    if assets:
+        db.session.commit()
+
+
 @investments_bp.get("/assets")
 @login_required
 def list_assets():
+    _settle_all_matured_pre_fixado(g.current_user.id)
+
     inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
     show_archived = request.args.get("archived") == "true"
     all_assets = Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all() if inv_account_ids else []
@@ -141,6 +249,8 @@ def _month_start(d: dt.date) -> dt.date:
 @investments_bp.get("/summary")
 @login_required
 def investments_summary():
+    _settle_all_matured_pre_fixado(g.current_user.id)
+
     bank_filter = request.args.get("bank_id")
 
     inv_accounts = _owned_investment_accounts()
