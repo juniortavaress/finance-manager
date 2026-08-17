@@ -7,7 +7,7 @@ from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
 from app.models import Account, Asset, AssetTransaction, Bank, Category, InvestmentAccount, Transaction
-from app.models.investment import ASSET_TYPES
+from app.models.investment import ASSET_TYPES, FIXED_INCOME_TYPES
 from app.services.finance_service import add_months, recalc_account_balance
 
 investments_bp = Blueprint("investments", __name__)
@@ -269,6 +269,45 @@ def investments_summary():
     }
 
 
+def _parse_fixed_income_fields(data, required):
+    """Valida e extrai os campos de renda fixa do payload. Quando `required`
+    e True (criacao de ativo renda_fixa), exige tipo, vencimento e a info
+    especifica de cada modalidade. Na edicao (`required=False`) os campos sao
+    aceitos e salvos livremente, sem exigir nada - existe para permitir
+    corrigir ativos antigos que nao tinham essas colunas."""
+    result = {}
+
+    if "fixed_income_type" in data or required:
+        fi_type = data.get("fixed_income_type")
+        if required and fi_type not in FIXED_INCOME_TYPES:
+            raise ApiError("Selecione o tipo de renda fixa (pós-fixado, pré-fixado ou IPCA+)", 400)
+        if fi_type is not None and fi_type not in FIXED_INCOME_TYPES:
+            raise ApiError("Tipo de renda fixa inválido", 400)
+        result["fixed_income_type"] = fi_type or None
+
+    effective_type = result.get("fixed_income_type", data.get("fixed_income_type"))
+
+    if "fixed_income_indexer" in data or (required and effective_type == "pos_fixado"):
+        indexer = (data.get("fixed_income_indexer") or "").strip() or None
+        if required and effective_type == "pos_fixado" and not indexer:
+            raise ApiError("Informe o indexador (ex.: CDI, Selic)", 400)
+        result["fixed_income_indexer"] = indexer
+
+    if "fixed_income_rate_pct" in data or (required and effective_type in ("pos_fixado", "pre_fixado", "ipca")):
+        rate = data.get("fixed_income_rate_pct")
+        if required and rate in (None, ""):
+            raise ApiError("Informe a taxa", 400)
+        result["fixed_income_rate_pct"] = Decimal(str(rate)) if rate not in (None, "") else None
+
+    if "maturity_date" in data or required:
+        maturity_raw = data.get("maturity_date")
+        if required and not maturity_raw:
+            raise ApiError("Informe a data de vencimento", 400)
+        result["maturity_date"] = dt.date.fromisoformat(maturity_raw) if maturity_raw else None
+
+    return result
+
+
 @investments_bp.post("/assets")
 @login_required
 def create_asset():
@@ -289,7 +328,9 @@ def create_asset():
     if ia is None:
         raise ApiError("Conta de investimento não encontrada", 404)
 
-    asset = Asset(investment_account_id=ia.id, type=asset_type, code=code, name=name)
+    fixed_income_fields = _parse_fixed_income_fields(data, required=asset_type == "renda_fixa")
+
+    asset = Asset(investment_account_id=ia.id, type=asset_type, code=code, name=name, **fixed_income_fields)
     db.session.add(asset)
     db.session.commit()
     return {"asset": _asset_to_dict(asset)}, 201
@@ -324,6 +365,9 @@ def update_asset(asset_id):
         if ia is None:
             raise ApiError("Conta de investimento não encontrada", 404)
         asset.investment_account_id = ia.id
+
+    for field, value in _parse_fixed_income_fields(data, required=False).items():
+        setattr(asset, field, value)
 
     db.session.commit()
     return {"asset": _asset_to_dict(asset)}

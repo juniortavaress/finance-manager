@@ -4,6 +4,7 @@ from app.extensions import db
 from app.models.base import BaseModel
 
 ASSET_TYPES = ("renda_fixa", "acoes", "fii", "fundos", "cripto", "outro")
+FIXED_INCOME_TYPES = ("pos_fixado", "pre_fixado", "ipca")
 ASSET_TRANSACTION_TYPES = ("buy", "sell")
 DIVIDEND_KINDS = ("dividendo", "rendimento", "jcp", "cupom", "bonificacao", "outro")
 DIVIDEND_CALC_MODES = ("per_share", "fixed")
@@ -21,6 +22,11 @@ class Asset(BaseModel):
     name = db.Column(db.Text, nullable=False)
     current_unit_price = db.Column(db.Numeric(14, 6), nullable=True)
 
+    fixed_income_type = db.Column(db.Enum(*FIXED_INCOME_TYPES, name="fixed_income_type"), nullable=True)
+    fixed_income_indexer = db.Column(db.Text, nullable=True)
+    fixed_income_rate_pct = db.Column(db.Numeric(7, 3), nullable=True)
+    maturity_date = db.Column(db.Date, nullable=True)
+
     asset_transactions = db.relationship(
         "AssetTransaction", backref="asset", cascade="all, delete-orphan", order_by="AssetTransaction.date"
     )
@@ -37,6 +43,10 @@ class Asset(BaseModel):
             "code": self.code,
             "name": self.name,
             "current_unit_price": float(self.current_unit_price) if self.current_unit_price is not None else None,
+            "fixed_income_type": self.fixed_income_type,
+            "fixed_income_indexer": self.fixed_income_indexer,
+            "fixed_income_rate_pct": float(self.fixed_income_rate_pct) if self.fixed_income_rate_pct is not None else None,
+            "maturity_date": self.maturity_date.isoformat() if self.maturity_date else None,
         }
 
 

@@ -14,6 +14,14 @@ const TYPE_OPTIONS = [
   { value: 'outro', label: 'Outro' },
 ];
 
+const FIXED_INCOME_TYPE_OPTIONS = [
+  { value: 'pos_fixado', label: 'Pós-fixado' },
+  { value: 'pre_fixado', label: 'Pré-fixado' },
+  { value: 'ipca', label: 'IPCA+' },
+];
+
+const INDEXER_OPTIONS = ['CDI', 'Selic', 'IPCA'];
+
 /**
  * Modal unico para criar OU editar um ativo.
  * Se `asset` for passado, edita (nome/codigo/categoria/corretora) e permite
@@ -28,9 +36,15 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
   const [code, setCode] = useState('');
   const [type, setType] = useState('acoes');
   const [investmentAccountId, setInvestmentAccountId] = useState('');
+  const [fixedIncomeType, setFixedIncomeType] = useState('');
+  const [fixedIncomeIndexer, setFixedIncomeIndexer] = useState(INDEXER_OPTIONS[0]);
+  const [fixedIncomeRatePct, setFixedIncomeRatePct] = useState('');
+  const [maturityDate, setMaturityDate] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+
+  const isRendaFixa = type === 'renda_fixa';
 
   useEffect(() => {
     if (!open) return;
@@ -40,11 +54,19 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
       setCode(asset.code || '');
       setType(asset.type);
       setInvestmentAccountId(asset.investment_account_id);
+      setFixedIncomeType(asset.fixed_income_type || '');
+      setFixedIncomeIndexer(asset.fixed_income_indexer || INDEXER_OPTIONS[0]);
+      setFixedIncomeRatePct(asset.fixed_income_rate_pct != null ? String(asset.fixed_income_rate_pct) : '');
+      setMaturityDate(asset.maturity_date || '');
     } else {
       setName('');
       setCode('');
       setType('acoes');
       setInvestmentAccountId(investmentAccounts[0]?.investment_account?.id || '');
+      setFixedIncomeType('');
+      setFixedIncomeIndexer(INDEXER_OPTIONS[0]);
+      setFixedIncomeRatePct('');
+      setMaturityDate('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEditing, asset]);
@@ -63,14 +85,37 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
     if (!name.trim()) return setError('Informe o nome do ativo.');
     if (!investmentAccountId) return setError('Selecione um banco/corretora.');
 
+    // renda fixa exige os campos completos apenas ao CRIAR um ativo novo —
+    // ativos antigos sem esses dados podem ser editados livremente para corrigi-los
+    if (isRendaFixa && !isEditing) {
+      if (!fixedIncomeType) return setError('Selecione o tipo de renda fixa.');
+      if (fixedIncomeType === 'pos_fixado' && !fixedIncomeIndexer.trim()) {
+        return setError('Informe o indexador (ex.: CDI, Selic).');
+      }
+      if (!fixedIncomeRatePct.trim()) return setError('Informe a taxa.');
+      if (!maturityDate) return setError('Informe a data de vencimento.');
+    }
+
+    const fixedIncomePayload = isRendaFixa
+      ? {
+          fixed_income_type: fixedIncomeType || null,
+          fixed_income_indexer: fixedIncomeType === 'pos_fixado' ? fixedIncomeIndexer.trim() || null : null,
+          fixed_income_rate_pct: fixedIncomeRatePct.trim() ? Number(fixedIncomeRatePct.replace(',', '.')) : null,
+          maturity_date: maturityDate || null,
+        }
+      : {};
+
+    const codeValue = isRendaFixa ? null : code.trim() || null;
+
     setSubmitting(true);
     try {
       if (isEditing) {
         const { asset: updated } = await investmentsApi.updateAsset(asset.id, {
           investment_account_id: investmentAccountId,
           type,
-          code: code.trim() || null,
+          code: codeValue,
           name: name.trim(),
+          ...fixedIncomePayload,
         });
         showSuccess('Ativo atualizado com sucesso.');
         onSaved?.(updated);
@@ -78,8 +123,9 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
         const { asset: created } = await investmentsApi.createAsset({
           investment_account_id: investmentAccountId,
           type,
-          code: code.trim() || undefined,
+          code: codeValue || undefined,
           name: name.trim(),
+          ...fixedIncomePayload,
         });
         showSuccess('Ativo criado com sucesso.');
         onCreated?.(created);
@@ -120,23 +166,14 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
           {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
-            <label>Nome</label>
-            <input
-              type="text"
-              placeholder="Ex.: Petrobras, Tesouro Selic 2029..."
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          <div className="field">
-            <label>Código (opcional)</label>
-            <input
-              type="text"
-              placeholder="Ex.: PETR4, BTC..."
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-            />
+            <label>Banco / corretora</label>
+            <select value={investmentAccountId} onChange={(e) => setInvestmentAccountId(e.target.value)}>
+              {investmentAccounts.map((a) => (
+                <option key={a.investment_account?.id} value={a.investment_account?.id}>
+                  {bankNameFor(a)}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="field">
@@ -151,15 +188,79 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
           </div>
 
           <div className="field">
-            <label>Banco / corretora</label>
-            <select value={investmentAccountId} onChange={(e) => setInvestmentAccountId(e.target.value)}>
-              {investmentAccounts.map((a) => (
-                <option key={a.investment_account?.id} value={a.investment_account?.id}>
-                  {bankNameFor(a)}
-                </option>
-              ))}
-            </select>
+            <label>Nome</label>
+            <input
+              type="text"
+              placeholder={isRendaFixa ? 'Ex.: CDB Banco XP 2029, Tesouro Selic 2029...' : 'Ex.: Petrobras, Tesouro Selic 2029...'}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
+
+          {!isRendaFixa && (
+            <div className="field">
+              <label>Código (opcional)</label>
+              <input
+                type="text"
+                placeholder="Ex.: PETR4, BTC..."
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+              />
+            </div>
+          )}
+
+          {isRendaFixa && (
+            <>
+              <div className="field">
+                <label>Tipo de renda fixa</label>
+                <select value={fixedIncomeType} onChange={(e) => setFixedIncomeType(e.target.value)}>
+                  <option value="">Selecione...</option>
+                  {FIXED_INCOME_TYPE_OPTIONS.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {fixedIncomeType === 'pos_fixado' && (
+                <div className="field">
+                  <label>Indexador</label>
+                  <select value={fixedIncomeIndexer} onChange={(e) => setFixedIncomeIndexer(e.target.value)}>
+                    {INDEXER_OPTIONS.map((idx) => (
+                      <option key={idx} value={idx}>
+                        {idx}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {fixedIncomeType && (
+                <div className="field">
+                  <label>
+                    {fixedIncomeType === 'pos_fixado'
+                      ? `% do ${fixedIncomeIndexer.trim() || 'indexador'}`
+                      : fixedIncomeType === 'pre_fixado'
+                      ? 'Taxa fixa ao ano (%)'
+                      : 'Taxa adicional ao IPCA (%)'}
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    placeholder={fixedIncomeType === 'pos_fixado' ? 'Ex.: 110' : 'Ex.: 14,5'}
+                    value={fixedIncomeRatePct}
+                    onChange={(e) => setFixedIncomeRatePct(e.target.value.replace(/[^\d,.]/g, ''))}
+                  />
+                </div>
+              )}
+
+              <div className="field">
+                <label>Data de vencimento</label>
+                <input type="date" value={maturityDate} onChange={(e) => setMaturityDate(e.target.value)} />
+              </div>
+            </>
+          )}
 
           <div className="modal-actions">
             <div className="btn btn-ghost" onClick={onClose}>
