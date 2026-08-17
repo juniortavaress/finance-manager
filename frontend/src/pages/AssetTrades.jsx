@@ -3,6 +3,7 @@ import { investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, fmtDateShort } from '../utils/format';
+import { IconPencil } from '../components/icons';
 import PickAssetModal from '../components/modals/PickAssetModal';
 import NewAssetModal from '../components/modals/NewAssetModal';
 import TradeAssetModal from '../components/modals/TradeAssetModal';
@@ -13,6 +14,37 @@ function todayIso() {
 
 function initials(text) {
   return (text || '?').slice(0, 2).toUpperCase();
+}
+
+function RowActionButton({ title, onClick, color, children }) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 26,
+        height: 26,
+        borderRadius: 7,
+        border: 'none',
+        background: 'transparent',
+        color: 'var(--ink-faint)',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'var(--bg)';
+        e.currentTarget.style.color = color || 'var(--teal)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = 'var(--ink-faint)';
+      }}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function AssetTrades() {
@@ -93,17 +125,11 @@ export default function AssetTrades() {
                 {initials(t.asset.code || t.asset.name)}
               </div>
               <div>
-                <div className="compra-desc">
-                  {t.asset.code || t.asset.name}
-                  <span
-                    className="edit-pencil"
-                    role="button"
-                    title="Editar"
-                    onClick={() => setEditTrade(t)}
-                    style={{ marginLeft: 6, cursor: 'pointer', opacity: 0.6 }}
-                  >
-                    ✏️
-                  </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div className="compra-desc">{t.asset.code || t.asset.name}</div>
+                  <RowActionButton title="Editar compra" onClick={() => setEditTrade(t)}>
+                    <IconPencil style={{ width: 13, height: 13 }} />
+                  </RowActionButton>
                 </div>
                 <div className="compra-meta">
                   {bankNameFor(t.asset)} · {fmtDateShort(t.date)}
@@ -130,7 +156,12 @@ export default function AssetTrades() {
                 {initials(t.asset.code || t.asset.name)}
               </div>
               <div>
-                <div className="compra-desc">{t.asset.code || t.asset.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div className="compra-desc">{t.asset.code || t.asset.name}</div>
+                  <RowActionButton title="Editar venda" onClick={() => setEditTrade(t)}>
+                    <IconPencil style={{ width: 13, height: 13 }} />
+                  </RowActionButton>
+                </div>
                 <div className="compra-meta">
                   {bankNameFor(t.asset)} · {fmtDateShort(t.date)}
                 </div>
