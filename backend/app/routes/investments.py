@@ -150,6 +150,8 @@ def investments_summary():
             "assets": [],
             "unallocated_by_bank": [],
             "evolution": [],
+            "total_transferred": 0,
+            "total_unallocated": 0,
         }
 
     accounts_by_ia_id = {
@@ -175,13 +177,32 @@ def investments_summary():
                 earliest_date = tx.date
 
     unallocated_by_bank = []
+    total_unallocated = Decimal("0")
+    total_transferred = Decimal("0")
     for ia in inv_accounts:
         account = accounts_by_ia_id[ia.id]
         if bank_filter and str(account.bank_id) != bank_filter:
             continue
+
+        transferred = (
+            db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
+            .filter(
+                Transaction.account_id == account.id,
+                Transaction.is_transfer.is_(True),
+                Transaction.type == "income",
+                Transaction.status == "confirmed",
+                ~Transaction.description.startswith("Compra "),
+                ~Transaction.description.startswith("Venda "),
+                ~Transaction.description.startswith("Provento "),
+            )
+            .scalar()
+        ) or Decimal("0")
+        total_transferred += transferred
+
         if account.balance <= 0:
             continue
         bank = Bank.query.get(account.bank_id)
+        total_unallocated += account.balance
         unallocated_by_bank.append(
             {
                 "bank_id": str(account.bank_id),
@@ -243,6 +264,8 @@ def investments_summary():
         "assets": assets_result,
         "unallocated_by_bank": unallocated_by_bank,
         "evolution": evolution,
+        "total_transferred": float(total_transferred),
+        "total_unallocated": float(total_unallocated),
     }
 
 
