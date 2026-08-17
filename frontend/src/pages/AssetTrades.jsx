@@ -23,6 +23,7 @@ export default function AssetTrades() {
   const [pickKind, setPickKind] = useState('buy');
   const [newAssetModalOpen, setNewAssetModalOpen] = useState(false);
   const [tradeState, setTradeState] = useState(null);
+  const [editTrade, setEditTrade] = useState(null);
 
   const assets = assetsData?.assets || [];
   const trades = tradesData?.asset_transactions || [];
@@ -92,7 +93,18 @@ export default function AssetTrades() {
                 {initials(t.asset.code || t.asset.name)}
               </div>
               <div>
-                <div className="compra-desc">{t.asset.code || t.asset.name}</div>
+                <div className="compra-desc">
+                  {t.asset.code || t.asset.name}
+                  <span
+                    className="edit-pencil"
+                    role="button"
+                    title="Editar"
+                    onClick={() => setEditTrade(t)}
+                    style={{ marginLeft: 6, cursor: 'pointer', opacity: 0.6 }}
+                  >
+                    ✏️
+                  </span>
+                </div>
                 <div className="compra-meta">
                   {bankNameFor(t.asset)} · {fmtDateShort(t.date)}
                 </div>
@@ -174,6 +186,18 @@ export default function AssetTrades() {
         onClose={() => setTradeState(null)}
         onSaved={() => {
           setTradeState(null);
+          reload();
+        }}
+      />
+
+      <TradeAssetModal
+        open={!!editTrade}
+        asset={editTrade?.asset}
+        trade={editTrade}
+        accountBalance={editTrade?.asset ? accountBalanceFor(editTrade.asset) : null}
+        onClose={() => setEditTrade(null)}
+        onSaved={() => {
+          setEditTrade(null);
           reload();
         }}
       />

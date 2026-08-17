@@ -68,6 +68,7 @@ export const investmentsApi = {
   buy: (assetId, data) => api.post(`/investments/assets/${assetId}/buy`, data),
   sell: (assetId, data) => api.post(`/investments/assets/${assetId}/sell`, data),
   listAssetTransactions: (limit) => api.get('/investments/asset-transactions', { limit }),
+  updateAssetTransaction: (id, data) => api.patch(`/investments/asset-transactions/${id}`, data),
   removeAssetTransaction: (id) => api.delete(`/investments/asset-transactions/${id}`),
 };
 

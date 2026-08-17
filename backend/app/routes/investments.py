@@ -419,6 +419,80 @@ def sell_asset(asset_id):
     return {"asset_transaction": asset_tx.to_dict(), "asset": _asset_to_dict(asset)}, 201
 
 
+def _owned_asset_transaction(asset_transaction_id):
+    return (
+        AssetTransaction.query.join(Asset, Asset.id == AssetTransaction.asset_id)
+        .join(InvestmentAccount, InvestmentAccount.id == Asset.investment_account_id)
+        .join(Account, Account.id == InvestmentAccount.account_id)
+        .filter(AssetTransaction.id == asset_transaction_id, Account.user_id == g.current_user.id)
+        .first()
+    )
+
+
+@investments_bp.patch("/asset-transactions/<uuid:asset_transaction_id>")
+@login_required
+def update_asset_transaction(asset_transaction_id):
+    asset_tx = _owned_asset_transaction(asset_transaction_id)
+    if asset_tx is None:
+        raise ApiError("Operação não encontrada", 404)
+
+    data = request.get_json(silent=True) or {}
+    asset = asset_tx.asset
+    account = asset.investment_account.account
+    tx = Transaction.query.get(asset_tx.transaction_id) if asset_tx.transaction_id else None
+
+    quantity = Decimal(str(data["quantity"])) if "quantity" in data else asset_tx.quantity
+    unit_price = Decimal(str(data["unit_price"])) if "unit_price" in data else asset_tx.unit_price
+    fee_amount = (
+        Decimal(str(data["fee_amount"])).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if "fee_amount" in data
+        else asset_tx.fee_amount
+    )
+    trade_date = dt.date.fromisoformat(data["date"]) if "date" in data else asset_tx.date
+    note_id = (data["note_id"] or "").strip() or None if "note_id" in data else asset_tx.note_id
+
+    if quantity <= 0:
+        raise ApiError("Quantidade deve ser maior que zero", 400)
+    if unit_price <= 0:
+        raise ApiError("Valor unitário deve ser maior que zero", 400)
+    if fee_amount < 0:
+        raise ApiError("Taxa não pode ser negativa", 400)
+
+    base_amount = quantity * unit_price
+
+    if asset_tx.type == "buy":
+        total_amount = (base_amount + fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if total_amount > account.balance + asset_tx.total_amount:
+            raise ApiError("Saldo insuficiente na conta de investimento", 400)
+    else:
+        if fee_amount > base_amount:
+            raise ApiError("Taxa não pode ser maior que o valor da venda", 400)
+        total_amount = (base_amount - fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        other_quantity = sum(
+            (t.quantity if t.type == "buy" else -t.quantity for t in asset.asset_transactions if t.id != asset_tx.id),
+            Decimal("0"),
+        )
+        if quantity > other_quantity:
+            raise ApiError("Quantidade insuficiente do ativo para vender", 400)
+
+    asset_tx.quantity = quantity
+    asset_tx.unit_price = unit_price
+    asset_tx.fee_amount = fee_amount
+    asset_tx.date = trade_date
+    asset_tx.total_amount = total_amount
+    asset_tx.note_id = note_id
+
+    if tx:
+        tx.amount = total_amount
+        tx.date = trade_date
+        tx.description = f"{'Compra' if asset_tx.type == 'buy' else 'Venda'} {asset.code or asset.name}"
+
+    db.session.flush()
+    recalc_account_balance(account)
+    db.session.commit()
+    return {"asset_transaction": asset_tx.to_dict(), "asset": _asset_to_dict(asset)}
+
+
 @investments_bp.delete("/asset-transactions/<uuid:asset_transaction_id>")
 @login_required
 def delete_asset_transaction(asset_transaction_id):

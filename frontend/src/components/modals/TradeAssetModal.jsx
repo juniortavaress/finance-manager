@@ -10,9 +10,10 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, accountBalance }) {
+export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, accountBalance, trade }) {
   const { showSuccess, showError } = useToast();
-  const isSell = kind === 'sell';
+  const isEdit = !!trade;
+  const isSell = isEdit ? trade.type === 'sell' : kind === 'sell';
 
   const [date, setDate] = useState(todayIso());
   const [quantity, setQuantity] = useState('');
@@ -25,14 +26,23 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
 
   useEffect(() => {
     if (!open) return;
-    setDate(todayIso());
-    setQuantity('');
-    setUnitPrice('');
-    setFeeAmount('');
-    setTotalAmount('');
-    setNoteId('');
+    if (trade) {
+      setDate(trade.date);
+      setQuantity(String(trade.quantity));
+      setUnitPrice(numberToMasked(trade.unit_price));
+      setFeeAmount(numberToMasked(trade.fee_amount));
+      setTotalAmount(numberToMasked(trade.total_amount));
+      setNoteId(trade.note_id || '');
+    } else {
+      setDate(todayIso());
+      setQuantity('');
+      setUnitPrice('');
+      setFeeAmount('');
+      setTotalAmount('');
+      setNoteId('');
+    }
     setError('');
-  }, [open]);
+  }, [open, trade]);
 
   if (!open || !asset) return null;
 
@@ -74,11 +84,11 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
 
     if (numericQuantity <= 0) return setError('Informe uma quantidade maior que zero.');
     if (numericUnitPrice <= 0) return setError('Informe o valor unitário.');
-    if (!isSell && accountBalance != null && numericTotal > accountBalance) {
+    if (!isEdit && !isSell && accountBalance != null && numericTotal > accountBalance) {
       showError(`Saldo insuficiente. Disponível: ${fmt(accountBalance)}.`);
       return;
     }
-    if (isSell && numericQuantity > (asset.position?.quantity || 0)) {
+    if (!isEdit && isSell && numericQuantity > (asset.position?.quantity || 0)) {
       return setError(`Quantidade insuficiente. Você tem ${asset.position?.quantity || 0}.`);
     }
 
@@ -91,12 +101,14 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
         fee_amount: numericFee,
         note_id: noteId.trim() || undefined,
       };
-      if (isSell) {
+      if (isEdit) {
+        await investmentsApi.updateAssetTransaction(trade.id, payload);
+      } else if (isSell) {
         await investmentsApi.sell(asset.id, payload);
       } else {
         await investmentsApi.buy(asset.id, payload);
       }
-      showSuccess(isSell ? 'Venda registrada com sucesso.' : 'Compra registrada com sucesso.');
+      showSuccess(isEdit ? 'Operação atualizada com sucesso.' : isSell ? 'Venda registrada com sucesso.' : 'Compra registrada com sucesso.');
       onSaved?.();
     } catch (err) {
       const message = err.message || 'Não foi possível registrar a operação.';
@@ -112,7 +124,7 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
       <div className="modal">
         <div className="modal-head">
           <h2>
-            {isSell ? 'Vender' : 'Comprar'} {asset.code || asset.name}
+            {isEdit ? 'Editar' : isSell ? 'Vender' : 'Comprar'} {asset.code || asset.name}
           </h2>
           <button className="modal-close" onClick={onClose}>
             ✕
@@ -164,7 +176,7 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
               Cancelar
             </div>
             <button className="btn btn-primary" type="submit" disabled={submitting}>
-              {submitting ? 'Salvando...' : isSell ? 'Registrar venda' : 'Registrar compra'}
+              {submitting ? 'Salvando...' : isEdit ? 'Salvar alterações' : isSell ? 'Registrar venda' : 'Registrar compra'}
             </button>
           </div>
         </form>
