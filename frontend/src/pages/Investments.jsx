@@ -3,13 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { investmentsApi, dividendsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
-import { useToast } from '../context/ToastContext';
 import { fmt } from '../utils/format';
-import TradeAssetModal from '../components/modals/TradeAssetModal';
-import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal';
 import InvestmentEvolutionChart from '../components/charts/InvestmentEvolutionChart';
 import UpcomingDividendsChart from '../components/charts/UpcomingDividendsChart';
-import { IconTrash } from '../components/icons';
+import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
+import { IconChevronDown } from '../components/icons';
 
 const FREQUENCY_MONTHS = {
   monthly: 1,
@@ -40,8 +38,7 @@ const TYPE_COLORS = {
 
 export default function Investments() {
   const navigate = useNavigate();
-  const { investmentAccounts, bankById, reloadAll } = useData();
-  const { showSuccess } = useToast();
+  const { bankById, reloadAll } = useData();
   const [bankFilter, setBankFilter] = useState('');
   const { data: summaryData, reload: reloadSummary } = useFetch(
     () => investmentsApi.summary(bankFilter || undefined),
@@ -49,8 +46,7 @@ export default function Investments() {
   );
   const { data: dividendsData, reload: reloadDividends } = useFetch(() => dividendsApi.list(), []);
   const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
-  const [tradeState, setTradeState] = useState(null); // { asset, kind }
-  const [deletingAsset, setDeletingAsset] = useState(null);
+  const [drilldown, setDrilldown] = useState(null);
 
   const assets = summaryData?.assets || [];
   const unallocatedByBank = summaryData?.unallocated_by_bank || [];
@@ -155,25 +151,15 @@ export default function Investments() {
 
   const topPositions = useMemo(
     () =>
-      [...activeAssets].sort((a, b) => {
-        const va = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
-        const vb = b.position.current_amount != null ? b.position.current_amount : b.position.invested_amount;
-        return vb - va;
-      }),
+      [...activeAssets]
+        .sort((a, b) => {
+          const va = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
+          const vb = b.position.current_amount != null ? b.position.current_amount : b.position.invested_amount;
+          return vb - va;
+        })
+        .slice(0, 5),
     [activeAssets]
   );
-
-  function accountBalanceFor(asset) {
-    const account = investmentAccounts.find((a) => a.investment_account?.id === asset.investment_account_id);
-    return account ? account.balance : null;
-  }
-
-  async function handleDeleteAsset() {
-    await investmentsApi.removeAsset(deletingAsset.id);
-    showSuccess('Ativo excluído com sucesso.');
-    setDeletingAsset(null);
-    reload();
-  }
 
   return (
     <div className="screen active">
@@ -216,6 +202,16 @@ export default function Investments() {
           <div className="value num">
             {activeAssets.length ? `${rentabilidade >= 0 ? '+' : ''}${rentabilidade.toFixed(1)}%` : '—'}
           </div>
+          {activeAssets.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver detalhes"
+              onClick={() => setDrilldown({ kind: 'rentability' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
           <div className="label">Dividendos este mês</div>
@@ -363,74 +359,12 @@ export default function Investments() {
         })}
       </div>
 
-      {assets.some((a) => a.position.quantity <= 0) && (
-        <div className="card" style={{ marginTop: 20 }}>
-          <h3>Ativos sem posição</h3>
-          {assets
-            .filter((a) => a.position.quantity <= 0)
-            .map((asset) => (
-              <div className="tx-row" key={asset.id}>
-                <div className="tx-left">
-                  <div className="tx-icon" style={{ background: 'var(--bg)' }}>
-                    {(asset.code || asset.name).slice(0, 2).toUpperCase()}
-                  </div>
-                  <div>
-                    <div className="tx-desc">{asset.code || asset.name}</div>
-                    <div className="tx-meta">{asset.bank_name}</div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    style={{ padding: '6px 10px', fontSize: 12 }}
-                    onClick={() => setTradeState({ asset, kind: 'buy' })}
-                  >
-                    Comprar
-                  </button>
-                  <button
-                    type="button"
-                    title="Excluir ativo"
-                    onClick={() => setDeletingAsset(asset)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 28,
-                      height: 28,
-                      borderRadius: 7,
-                      border: 'none',
-                      background: 'transparent',
-                      color: 'var(--ink-faint)',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <IconTrash style={{ width: 14, height: 14 }} />
-                  </button>
-                </div>
-              </div>
-            ))}
-        </div>
-      )}
-
-      <TradeAssetModal
-        open={!!tradeState}
-        asset={tradeState?.asset}
-        kind={tradeState?.kind}
-        accountBalance={tradeState?.asset ? accountBalanceFor(tradeState.asset) : null}
-        onClose={() => setTradeState(null)}
-        onSaved={() => {
-          setTradeState(null);
-          reload();
-        }}
-      />
-
-      <ConfirmDeleteModal
-        open={!!deletingAsset}
-        onClose={() => setDeletingAsset(null)}
-        onConfirm={handleDeleteAsset}
-        title="Excluir ativo"
-        message="Tem certeza que deseja excluir este ativo? Esta ação não pode ser desfeita."
+      <InvestmentRentabilityDrilldownModal
+        open={drilldown?.kind === 'rentability'}
+        onClose={() => setDrilldown(null)}
+        rentabilityTotal={summaryData?.rentability_total}
+        rentabilityLastMonth={summaryData?.rentability_last_month}
+        rentabilityLastYear={summaryData?.rentability_last_year}
       />
     </div>
   );
