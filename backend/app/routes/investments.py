@@ -381,9 +381,11 @@ def investments_summary():
             for a in all_assets
             if not bank_filter or str(accounts_by_ia_id[a.investment_account_id].bank_id) == bank_filter
         ]
+        current_amount_by_asset_id = {a["id"]: a["position"]["current_amount"] for a in assets_result}
 
         for month_start in months:
             month_end = add_months(month_start, 1)
+            is_current_month = month_start == last
             invested_total = Decimal("0")
             current_total = Decimal("0")
             for asset in relevant_assets:
@@ -401,7 +403,14 @@ def investments_summary():
                         cost_basis -= tx.quantity * avg_price
                         quantity -= tx.quantity
                 invested_total += cost_basis
-                if asset.current_unit_price is not None:
+                if is_current_month:
+                    # No mes atual, usa exatamente o mesmo valor projetado do card
+                    # "Valor atual" (_asset_position, com juros compostos para
+                    # pre-fixado) em vez de recalcular cru - garante que o ultimo
+                    # ponto do grafico bata com o card.
+                    current_value = current_amount_by_asset_id.get(str(asset.id))
+                    current_total += Decimal(str(current_value)) if current_value is not None else cost_basis
+                elif asset.current_unit_price is not None:
                     current_total += quantity * asset.current_unit_price
                 else:
                     current_total += cost_basis
