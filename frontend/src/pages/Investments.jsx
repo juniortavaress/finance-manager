@@ -7,6 +7,7 @@ import { fmt } from '../utils/format';
 import InvestmentEvolutionChart from '../components/charts/InvestmentEvolutionChart';
 import UpcomingDividendsChart from '../components/charts/UpcomingDividendsChart';
 import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
+import InvestmentBreakdownDrilldownModal from '../components/modals/InvestmentBreakdownDrilldownModal';
 import { IconChevronDown } from '../components/icons';
 
 const FREQUENCY_MONTHS = {
@@ -192,10 +193,30 @@ export default function Investments() {
         <div className="card stat-card" style={{ '--stripe': '#8B9A97' }}>
           <div className="label">Caixa disponível</div>
           <div className="value num">{fmt(totalUnallocated)}</div>
+          {unallocatedByBank.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver por corretora"
+              onClick={() => setDrilldown({ kind: 'unallocated' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
           <div className="label">Valor atual</div>
           <div className="value num">{fmt(totalCurrent)}</div>
+          {byBank.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver por corretora"
+              onClick={() => setDrilldown({ kind: 'current' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
           <div className="label">Rentabilidade</div>
@@ -219,20 +240,6 @@ export default function Investments() {
         </div>
       </div>
 
-      {unallocatedByBank.length > 0 && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <h3>Saldo não alocado por corretora</h3>
-          {unallocatedByBank.map((b) => (
-            <div className="bank-row" key={b.bank_id}>
-              <div className="bank-id">
-                <span className="bank-chip" style={{ background: b.bank_color }} />
-                <div className="bank-name">{b.bank_name}</div>
-              </div>
-              <div className="bank-val num">{fmt(b.balance)}</div>
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className="grid grid-2" style={{ marginBottom: 20 }}>
         <div className="card">
@@ -365,6 +372,20 @@ export default function Investments() {
         rentabilityTotal={summaryData?.rentability_total}
         rentabilityLastMonth={summaryData?.rentability_last_month}
         rentabilityLastYear={summaryData?.rentability_last_year}
+      />
+
+      <InvestmentBreakdownDrilldownModal
+        open={drilldown?.kind === 'unallocated'}
+        onClose={() => setDrilldown(null)}
+        title="Caixa disponível por corretora"
+        rows={unallocatedByBank.map((b) => ({ label: b.bank_name, value: b.balance, color: b.bank_color }))}
+      />
+
+      <InvestmentBreakdownDrilldownModal
+        open={drilldown?.kind === 'current'}
+        onClose={() => setDrilldown(null)}
+        title="Valor atual por corretora"
+        rows={byBank.map((b) => ({ label: b.name, value: b.total, color: b.color }))}
       />
     </div>
   );
