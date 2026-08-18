@@ -3,10 +3,14 @@ import { investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, fmtDateShort } from '../utils/format';
-import { IconPencil } from '../components/icons';
+import { IconPencil, IconTrash } from '../components/icons';
 import PickAssetModal from '../components/modals/PickAssetModal';
 import NewAssetModal from '../components/modals/NewAssetModal';
 import TradeAssetModal from '../components/modals/TradeAssetModal';
+import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal';
+import Pagination from '../components/Pagination';
+
+const PAGE_SIZE = 15;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -48,36 +52,62 @@ function RowActionButton({ title, onClick, color, children }) {
 }
 
 export default function AssetTrades() {
-  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
-  const { data: tradesData, reload: reloadTrades } = useFetch(
-    (signal) => investmentsApi.listAssetTransactions(undefined, signal),
-    []
-  );
   const { banks, investmentAccounts, bankById, reloadAll } = useData();
+  const [bankFilter, setBankFilter] = useState('');
+  const [buyPage, setBuyPage] = useState(1);
+  const [sellPage, setSellPage] = useState(1);
+
+  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
+
+  const { data: buyData, reload: reloadBuys } = useFetch(
+    (signal) =>
+      investmentsApi.listAssetTransactions(
+        { type: 'buy', page: buyPage, page_size: PAGE_SIZE, bank_id: bankFilter || undefined },
+        signal
+      ),
+    [buyPage, bankFilter]
+  );
+  const { data: sellData, reload: reloadSells } = useFetch(
+    (signal) =>
+      investmentsApi.listAssetTransactions(
+        { type: 'sell', page: sellPage, page_size: PAGE_SIZE, bank_id: bankFilter || undefined },
+        signal
+      ),
+    [sellPage, bankFilter]
+  );
+
+  const currentMonth = todayIso().slice(0, 7);
+  const { data: monthBuysData } = useFetch(
+    (signal) =>
+      investmentsApi.listAssetTransactions(
+        { type: 'buy', date_from: `${currentMonth}-01`, page_size: 100, bank_id: bankFilter || undefined },
+        signal
+      ),
+    [currentMonth, bankFilter]
+  );
+
   const [pickModalOpen, setPickModalOpen] = useState(false);
   const [pickKind, setPickKind] = useState('buy');
   const [newAssetModalOpen, setNewAssetModalOpen] = useState(false);
   const [tradeState, setTradeState] = useState(null);
   const [editTrade, setEditTrade] = useState(null);
+  const [deletingTrade, setDeletingTrade] = useState(null);
 
   const assets = assetsData?.assets || [];
-  const trades = tradesData?.asset_transactions || [];
+  const purchases = buyData?.asset_transactions || [];
+  const sales = sellData?.asset_transactions || [];
 
   function reload() {
     reloadAssets();
-    reloadTrades();
+    reloadBuys();
+    reloadSells();
     reloadAll();
   }
 
-  const purchases = useMemo(() => trades.filter((t) => t.type === 'buy'), [trades]);
-  const sales = useMemo(() => trades.filter((t) => t.type === 'sell'), [trades]);
-
-  const totalThisMonth = useMemo(() => {
-    const currentMonth = todayIso().slice(0, 7);
-    return purchases
-      .filter((t) => t.date.slice(0, 7) === currentMonth)
-      .reduce((s, t) => s + t.total_amount, 0);
-  }, [purchases]);
+  const totalThisMonth = useMemo(
+    () => (monthBuysData?.asset_transactions || []).reduce((s, t) => s + t.total_amount, 0),
+    [monthBuysData]
+  );
 
   function openPick(kind) {
     setPickKind(kind);
@@ -95,6 +125,18 @@ export default function AssetTrades() {
     return account ? account.balance : null;
   }
 
+  function handleBankFilterChange(value) {
+    setBankFilter(value);
+    setBuyPage(1);
+    setSellPage(1);
+  }
+
+  async function handleDeleteTrade() {
+    await investmentsApi.removeAssetTransaction(deletingTrade.id);
+    setDeletingTrade(null);
+    reload();
+  }
+
   return (
     <div className="screen active">
       <div className="topbar">
@@ -109,6 +151,21 @@ export default function AssetTrades() {
             onClick={() => openPick('buy')}
           >
             + nova compra
+          </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16, padding: 6 }}>
+        <div className="filter-bar">
+          <div className="filter-select">
+            <select value={bankFilter} onChange={(e) => handleBankFilterChange(e.target.value)}>
+              <option value="">Todas as corretoras</option>
+              {banks.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -133,6 +190,9 @@ export default function AssetTrades() {
                   <RowActionButton title="Editar compra" onClick={() => setEditTrade(t)}>
                     <IconPencil style={{ width: 13, height: 13 }} />
                   </RowActionButton>
+                  <RowActionButton title="Excluir compra" color="var(--brick)" onClick={() => setDeletingTrade(t)}>
+                    <IconTrash style={{ width: 13, height: 13 }} />
+                  </RowActionButton>
                 </div>
                 <div className="compra-meta">
                   {bankNameFor(t.asset)} · {fmtDateShort(t.date)}
@@ -147,6 +207,7 @@ export default function AssetTrades() {
             </div>
           </div>
         ))}
+        <Pagination page={buyPage} pageSize={PAGE_SIZE} total={buyData?.total || 0} onPageChange={setBuyPage} />
       </div>
 
       <div className="card" style={{ marginTop: 20 }}>
@@ -164,6 +225,9 @@ export default function AssetTrades() {
                   <RowActionButton title="Editar venda" onClick={() => setEditTrade(t)}>
                     <IconPencil style={{ width: 13, height: 13 }} />
                   </RowActionButton>
+                  <RowActionButton title="Excluir venda" color="var(--brick)" onClick={() => setDeletingTrade(t)}>
+                    <IconTrash style={{ width: 13, height: 13 }} />
+                  </RowActionButton>
                 </div>
                 <div className="compra-meta">
                   {bankNameFor(t.asset)} · {fmtDateShort(t.date)}
@@ -178,6 +242,7 @@ export default function AssetTrades() {
             </div>
           </div>
         ))}
+        <Pagination page={sellPage} pageSize={PAGE_SIZE} total={sellData?.total || 0} onPageChange={setSellPage} />
       </div>
 
       <PickAssetModal
@@ -234,6 +299,18 @@ export default function AssetTrades() {
           setEditTrade(null);
           reload();
         }}
+        onDelete={() => {
+          setDeletingTrade(editTrade);
+          setEditTrade(null);
+        }}
+      />
+
+      <ConfirmDeleteModal
+        open={!!deletingTrade}
+        onClose={() => setDeletingTrade(null)}
+        onConfirm={handleDeleteTrade}
+        title={deletingTrade?.type === 'sell' ? 'Excluir venda' : 'Excluir compra'}
+        message="Tem certeza que deseja excluir esta operação? Isso vai reverter o saldo da conta e recalcular a posição do ativo. Esta ação não pode ser desfeita."
       />
     </div>
   );

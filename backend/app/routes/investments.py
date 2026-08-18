@@ -218,28 +218,60 @@ def list_assets():
 @investments_bp.get("/asset-transactions")
 @login_required
 def list_asset_transactions():
-    inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
+    bank_id = request.args.get("bank_id")
+
+    ia_query = (
+        InvestmentAccount.query.join(Account, Account.id == InvestmentAccount.account_id)
+        .filter(Account.user_id == g.current_user.id)
+    )
+    if bank_id:
+        ia_query = ia_query.filter(Account.bank_id == bank_id)
+    inv_account_ids = [ia.id for ia in ia_query.all()]
+
     asset_ids = (
         [a.id for a in Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all()]
         if inv_account_ids
         else []
     )
     if not asset_ids:
-        return {"asset_transactions": []}
+        return {"asset_transactions": [], "total": 0, "page": 1, "page_size": 15}
 
-    limit = request.args.get("limit")
-    query = AssetTransaction.query.filter(AssetTransaction.asset_id.in_(asset_ids)).order_by(
-        AssetTransaction.date.desc(), AssetTransaction.created_at.desc()
-    )
-    if limit:
-        query = query.limit(int(limit))
+    query = AssetTransaction.query.filter(AssetTransaction.asset_id.in_(asset_ids))
+
+    tx_type = request.args.get("type")
+    if tx_type in ("buy", "sell"):
+        query = query.filter(AssetTransaction.type == tx_type)
+
+    date_from = request.args.get("date_from")
+    date_to = request.args.get("date_to")
+    if date_from:
+        query = query.filter(AssetTransaction.date >= dt.date.fromisoformat(date_from))
+    if date_to:
+        query = query.filter(AssetTransaction.date <= dt.date.fromisoformat(date_to))
+
+    query = query.order_by(AssetTransaction.date.desc(), AssetTransaction.created_at.desc())
+
+    legacy_limit = request.args.get("limit")
+    if legacy_limit and "page" not in request.args:
+        query = query.limit(int(legacy_limit))
+        result = []
+        for tx in query.all():
+            data = tx.to_dict()
+            data["asset"] = tx.asset.to_dict()
+            result.append(data)
+        return {"asset_transactions": result, "total": len(result), "page": 1, "page_size": len(result) or 15}
+
+    page = int(request.args.get("page", 1))
+    page_size = min(int(request.args.get("page_size", 15)), 100)
+    total = query.count()
+    items = query.offset((page - 1) * page_size).limit(page_size).all()
 
     result = []
-    for tx in query.all():
+    for tx in items:
         data = tx.to_dict()
         data["asset"] = tx.asset.to_dict()
         result.append(data)
-    return {"asset_transactions": result}
+    return {"asset_transactions": result, "total": total, "page": page, "page_size": page_size}
 
 
 def _month_start(d: dt.date) -> dt.date:

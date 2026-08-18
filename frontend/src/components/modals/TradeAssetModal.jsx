@@ -5,15 +5,21 @@ import { fmt } from '../../utils/format';
 import { maskToNumber, numberToMasked } from '../../utils/currency';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
+import { IconTrash } from '../icons';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, accountBalance, trade }) {
+export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, accountBalance, trade, onDelete }) {
   const { showSuccess, showError } = useToast();
   const isEdit = !!trade;
   const isSell = isEdit ? trade.type === 'sell' : kind === 'sell';
+  const availableQuantity = isSell
+    ? isEdit
+      ? (asset?.position?.quantity || 0) + (trade?.quantity || 0)
+      : asset?.position?.quantity || 0
+    : null;
 
   const [date, setDate] = useState(todayIso());
   const [quantity, setQuantity] = useState('');
@@ -88,8 +94,8 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
       showError(`Saldo insuficiente. Disponível: ${fmt(accountBalance)}.`);
       return;
     }
-    if (!isEdit && isSell && numericQuantity > (asset.position?.quantity || 0)) {
-      return setError(`Quantidade insuficiente. Você tem ${asset.position?.quantity || 0}.`);
+    if (isSell && numericQuantity > availableQuantity) {
+      return setError(`Quantidade insuficiente. Disponível: ${availableQuantity}.`);
     }
 
     setSubmitting(true);
@@ -126,9 +132,16 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
           <h2>
             {isEdit ? 'Editar' : isSell ? 'Vender' : 'Comprar'} {asset.code || asset.name}
           </h2>
-          <button className="modal-close" onClick={onClose}>
-            ✕
-          </button>
+          <div className="modal-head-actions">
+            {isEdit && onDelete && (
+              <button type="button" className="modal-delete-trigger" title="Excluir" onClick={onDelete}>
+                <IconTrash />
+              </button>
+            )}
+            <button className="modal-close" onClick={onClose}>
+              ✕
+            </button>
+          </div>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
           {error && <div className="form-error-banner">{error}</div>}
@@ -153,6 +166,17 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
                 value={quantity}
                 onChange={(e) => handleQuantityChange(e.target.value)}
               />
+              {isSell && (
+                <div
+                  style={{
+                    fontSize: 11.5,
+                    marginTop: 4,
+                    color: numericQuantity > availableQuantity ? 'var(--brick)' : 'var(--ink-faint)',
+                  }}
+                >
+                  Disponível: {availableQuantity}
+                </div>
+              )}
             </div>
             <div className="field">
               <label>Preço unitário</label>
@@ -175,7 +199,11 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
             <div className="btn btn-ghost" onClick={onClose}>
               Cancelar
             </div>
-            <button className="btn btn-primary" type="submit" disabled={submitting}>
+            <button
+              className="btn btn-primary"
+              type="submit"
+              disabled={submitting || (isSell && numericQuantity > availableQuantity)}
+            >
               {submitting ? 'Salvando...' : isEdit ? 'Salvar alterações' : isSell ? 'Registrar venda' : 'Registrar compra'}
             </button>
           </div>
