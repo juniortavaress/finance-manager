@@ -1,3 +1,5 @@
+import { IconChevronDown } from './icons';
+
 export default function Pagination({ page, pageSize, total, onPageChange }) {
   if (!total || total <= pageSize) return null;
 
@@ -6,27 +8,27 @@ export default function Pagination({ page, pageSize, total, onPageChange }) {
   const end = Math.min(page * pageSize, total);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 12, fontSize: 12.5 }}>
+    <div className="pagination">
       <button
         type="button"
+        className="pagination-btn"
         onClick={() => onPageChange(page - 1)}
         disabled={page <= 1}
-        className="btn btn-ghost"
-        style={{ padding: '6px 12px', fontSize: 12.5, opacity: page <= 1 ? 0.4 : 1, cursor: page <= 1 ? 'default' : 'pointer' }}
+        title="Página anterior"
       >
-        ‹ anterior
+        <IconChevronDown style={{ transform: 'rotate(90deg)' }} />
       </button>
-      <span style={{ color: 'var(--ink-faint)' }}>
+      <span className="pagination-info">
         {start}–{end} de {total}
       </span>
       <button
         type="button"
+        className="pagination-btn"
         onClick={() => onPageChange(page + 1)}
         disabled={page >= totalPages}
-        className="btn btn-ghost"
-        style={{ padding: '6px 12px', fontSize: 12.5, opacity: page >= totalPages ? 0.4 : 1, cursor: page >= totalPages ? 'default' : 'pointer' }}
+        title="Próxima página"
       >
-        próxima ›
+        <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
       </button>
     </div>
   );
