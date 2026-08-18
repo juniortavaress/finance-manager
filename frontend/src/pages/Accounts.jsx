@@ -24,8 +24,8 @@ export default function Accounts() {
   const [transferModalOpen, setTransferModalOpen] = useState(false);
 
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
-  const investmentAccounts = useMemo(() => accounts.filter((a) => a.type === 'investment'), [accounts]);
-  const { data: assetsData, reload: reloadAssets } = useFetch(() => investmentsApi.listAssets(), []);
+  const investmentAccounts = useMemo(() => accounts.filter((a) => !!a.investment_account), [accounts]);
+  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
   const investedByAccountId = useMemo(() => {
     const map = {};
     (assetsData?.assets || []).forEach((asset) => {
@@ -173,7 +173,8 @@ export default function Accounts() {
         const bankAccounts = accounts.filter((a) => a.bank_id === bank.id);
         const checking = bankAccounts.find((a) => a.type === 'checking');
         const creditCard = bankAccounts.find((a) => a.type === 'credit_card');
-        const investment = bankAccounts.find((a) => a.type === 'investment');
+        const isUnified = !!checking?.investment_account?.is_unified;
+        const investment = isUnified ? checking : bankAccounts.find((a) => !!a.investment_account);
         const cardInvoices = creditCard?.credit_card ? invoicesByCard[creditCard.credit_card.id] || [] : [];
         const cardInvoiceIdx = creditCard?.credit_card ? invoiceIndexByCard[creditCard.credit_card.id] ?? 0 : 0;
         const viewedInvoice = creditCard?.credit_card ? selectedInvoice(creditCard.credit_card.id) : null;
@@ -249,9 +250,15 @@ export default function Accounts() {
             </div>
             <div className="acct-types">
               <div className="acct-type-card">
-                <div className="t-label">Conta corrente</div>
-                <div className="t-val num">{checking ? fmt(checking.balance) : '—'}</div>
-                <div className="t-sub">disponível</div>
+                <div className="t-label">{isUnified ? 'Conta corrente + Investimentos' : 'Conta corrente'}</div>
+                <div className="t-val num">
+                  {checking ? fmt(checking.balance + (isUnified ? investedByAccountId[checking.id] || 0 : 0)) : '—'}
+                </div>
+                <div className="t-sub">
+                  {isUnified
+                    ? `${fmt(checking.balance)} disponível · ${fmt(investedByAccountId[checking.id] || 0)} investido`
+                    : 'disponível'}
+                </div>
               </div>
               <div className="acct-type-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -302,17 +309,19 @@ export default function Accounts() {
                   </>
                 )}
               </div>
-              <div className="acct-type-card">
-                <div className="t-label">Investimento</div>
-                <div className="t-val num">
-                  {investment ? fmt(investment.balance + (investedByAccountId[investment.id] || 0)) : '—'}
+              {!isUnified && (
+                <div className="acct-type-card">
+                  <div className="t-label">Investimento</div>
+                  <div className="t-val num">
+                    {investment ? fmt(investment.balance + (investedByAccountId[investment.id] || 0)) : '—'}
+                  </div>
+                  <div className="t-sub">
+                    {investment && investment.balance > 0
+                      ? `${fmt(investment.balance)} não alocado`
+                      : 'saldo aplicado'}
+                  </div>
                 </div>
-                <div className="t-sub">
-                  {investment && investment.balance > 0
-                    ? `${fmt(investment.balance)} não alocado`
-                    : 'saldo aplicado'}
-                </div>
-              </div>
+              )}
             </div>
           </div>
         );

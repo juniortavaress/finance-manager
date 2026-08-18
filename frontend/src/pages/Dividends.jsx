@@ -31,7 +31,7 @@ function initials(text) {
 }
 
 export default function Dividends() {
-  const { data: assetsData, reload: reloadAssets } = useFetch(() => investmentsApi.listAssets(), []);
+  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
   const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
   const { data: dividendsData, reload: reloadDividends } = useFetch(() => dividendsApi.list(), []);
   const { investmentAccounts, bankById, reloadAll } = useData();

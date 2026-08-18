@@ -36,6 +36,7 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
   const [creditLimit, setCreditLimit] = useState('');
   const [closingDay, setClosingDay] = useState(5);
   const [dueDay, setDueDay] = useState(15);
+  const [unifyInvestment, setUnifyInvestment] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -62,6 +63,7 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
       setCreditLimit('');
       setClosingDay(5);
       setDueDay(15);
+      setUnifyInvestment(false);
     }
   }, [open, isEditing, bank, creditCardAccount]);
 
@@ -96,7 +98,7 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
         const balance = maskToNumber(openingBalance);
         const limit = maskToNumber(creditLimit);
 
-        await accountsApi.create({
+        const { account: checkingAccount } = await accountsApi.create({
           bank_id: newBank.id,
           type: 'checking',
           name: `Conta corrente ${newBank.name}`,
@@ -111,11 +113,19 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
           credit_card: { credit_limit: limit, closing_day: Number(closingDay), due_day: Number(dueDay) },
         });
 
-        await accountsApi.create({
-          bank_id: newBank.id,
-          type: 'investment',
-          name: `Investimentos ${newBank.name}`,
-        });
+        if (unifyInvestment) {
+          await accountsApi.create({
+            bank_id: newBank.id,
+            type: 'investment',
+            unify_with_account_id: checkingAccount.id,
+          });
+        } else {
+          await accountsApi.create({
+            bank_id: newBank.id,
+            type: 'investment',
+            name: `Investimentos ${newBank.name}`,
+          });
+        }
       }
 
       showSuccess(isEditing ? 'Banco atualizado com sucesso.' : 'Banco criado com sucesso.');
@@ -199,6 +209,23 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
             <div className="field">
               <label>Saldo inicial da conta corrente</label>
               <CurrencyInput value={openingBalance} onChange={setOpeningBalance} />
+            </div>
+          )}
+
+          {!isEditing && (
+            <div className="field">
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={unifyInvestment}
+                  onChange={(e) => setUnifyInvestment(e.target.checked)}
+                  style={{ width: 'auto' }}
+                />
+                Unificar conta corrente com investimentos
+              </label>
+              <div style={{ fontSize: 11.5, color: 'var(--ink-faint)', marginTop: 4 }}>
+                O dinheiro de compra e venda de ativos entra e sai direto da conta corrente, sem precisar transferir para uma conta de investimento separada.
+              </div>
             </div>
           )}
 

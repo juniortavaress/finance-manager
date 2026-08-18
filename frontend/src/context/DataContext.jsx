@@ -34,7 +34,7 @@ export function DataProvider({ children }) {
     friendById: (id) => friends.find((f) => f.id === id),
     checkingAccounts: accounts.filter((a) => a.type === 'checking'),
     creditCardAccounts: accounts.filter((a) => a.type === 'credit_card'),
-    investmentAccounts: accounts.filter((a) => a.type === 'investment'),
+    investmentAccounts: accounts.filter((a) => !!a.investment_account),
     expenseCategories: categories.filter((c) => c.kind === 'expense' || c.kind === 'both'),
     incomeCategories: categories.filter((c) => c.kind === 'income' || c.kind === 'both'),
     bankById: (id) => banks.find((b) => b.id === id),

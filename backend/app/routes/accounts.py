@@ -49,12 +49,32 @@ def create_account():
 
     if acc_type not in ("checking", "credit_card", "investment"):
         raise ApiError("Tipo de conta inválido", 400)
-    if not name:
-        raise ApiError("Nome da conta é obrigatório", 400)
 
     bank = Bank.query.filter_by(id=bank_id, user_id=g.current_user.id).first()
     if bank is None:
         raise ApiError("Banco não encontrado", 404)
+
+    unify_with_account_id = data.get("unify_with_account_id")
+    if acc_type == "investment" and unify_with_account_id:
+        checking = Account.query.filter_by(
+            id=unify_with_account_id, user_id=g.current_user.id, bank_id=bank.id, type="checking"
+        ).first()
+        if checking is None:
+            raise ApiError("Conta corrente não encontrada para unificação", 404)
+        if checking.investment_account is not None:
+            raise ApiError("Esta conta já possui uma conta de investimento vinculada", 400)
+
+        inv = data.get("investment_account") or {}
+        investment_account = InvestmentAccount(
+            account_id=checking.id, broker_name=inv.get("broker_name"), is_unified=True
+        )
+        db.session.add(investment_account)
+        db.session.commit()
+        db.session.refresh(checking)
+        return {"account": checking.to_dict()}, 201
+
+    if not name:
+        raise ApiError("Nome da conta é obrigatório", 400)
 
     opening_balance = data.get("opening_balance", 0) or 0
     opening_date_raw = data.get("opening_balance_date")
