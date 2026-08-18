@@ -316,7 +316,7 @@ export default function Investments() {
                       display: 'inline-block',
                     }}
                   />
-                  Aportado
+                  Investido
                 </span>
               </span>
             )}

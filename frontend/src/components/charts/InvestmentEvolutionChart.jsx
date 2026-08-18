@@ -42,7 +42,7 @@ export default function InvestmentEvolutionChart({ periods }) {
           <Line
             type="monotone"
             dataKey="invested"
-            name="Aportado"
+            name="Investido"
             stroke={CHART_COLORS.inkFaint}
             strokeWidth={2}
             strokeDasharray="5 4"
