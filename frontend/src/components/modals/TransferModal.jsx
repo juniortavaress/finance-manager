@@ -99,7 +99,7 @@ export default function TransferModal({ open, onClose, onCreated }) {
     if (fromAccountId === toAccountId) return setError('As contas de origem e destino devem ser diferentes.');
     if (numericAmount <= 0) return setError('Informe um valor maior que zero.');
     if (fromAccount && numericAmount > fromAccount.balance) {
-      showError(`Saldo insuficiente. Disponível em ${fromAccount.name}: ${fmt(fromAccount.balance)}.`);
+      showError(`Saldo insuficiente. Disponível em ${fromAccount.name}: ${fmt(fromAccount.balance, fromAccount.currency)}.`);
       return;
     }
     if (needsExchange && numericRate <= 0 && numericAmountDestination <= 0) {

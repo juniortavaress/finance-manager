@@ -11,7 +11,17 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, accountBalance, trade, onDelete }) {
+export default function TradeAssetModal({
+  open,
+  onClose,
+  onSaved,
+  asset,
+  kind,
+  accountBalance,
+  accountCurrency,
+  trade,
+  onDelete,
+}) {
   const { showSuccess, showError } = useToast();
   const isEdit = !!trade;
   const isSell = isEdit ? trade.type === 'sell' : kind === 'sell';
@@ -91,7 +101,7 @@ export default function TradeAssetModal({ open, onClose, onSaved, asset, kind, a
     if (numericQuantity <= 0) return setError('Informe uma quantidade maior que zero.');
     if (numericUnitPrice <= 0) return setError('Informe o valor unitário.');
     if (!isEdit && !isSell && accountBalance != null && numericTotal > accountBalance) {
-      showError(`Saldo insuficiente. Disponível: ${fmt(accountBalance)}.`);
+      showError(`Saldo insuficiente. Disponível: ${fmt(accountBalance, accountCurrency)}.`);
       return;
     }
     if (isSell && numericQuantity > availableQuantity) {

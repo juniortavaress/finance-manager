@@ -29,16 +29,17 @@ function RowActionButton({ title, onClick, color, children }) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        width: 26,
-        height: 26,
-        borderRadius: 7,
+        width: 24,
+        height: 24,
+        borderRadius: 6,
         border: 'none',
         background: 'transparent',
         color: 'var(--ink-faint)',
         cursor: 'pointer',
+        transition: 'background 0.12s ease, color 0.12s ease',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--bg)';
+        e.currentTarget.style.background = 'var(--surface)';
         e.currentTarget.style.color = color || 'var(--teal)';
       }}
       onMouseLeave={(e) => {
@@ -114,15 +115,23 @@ export default function AssetTrades() {
     setPickModalOpen(true);
   }
 
+  function accountFor(assetSnapshot) {
+    return investmentAccounts.find((a) => a.investment_account?.id === assetSnapshot.investment_account_id) || null;
+  }
+
   function bankNameFor(assetSnapshot) {
-    const account = investmentAccounts.find((a) => a.investment_account?.id === assetSnapshot.investment_account_id);
+    const account = accountFor(assetSnapshot);
     const bank = account ? bankById(account.bank_id) : null;
     return bank?.name || '';
   }
 
   function accountBalanceFor(asset) {
-    const account = investmentAccounts.find((a) => a.investment_account?.id === asset.investment_account_id);
+    const account = accountFor(asset);
     return account ? account.balance : null;
+  }
+
+  function currencyFor(assetSnapshot) {
+    return accountFor(assetSnapshot)?.currency || 'BRL';
   }
 
   function handleBankFilterChange(value) {
@@ -141,22 +150,7 @@ export default function AssetTrades() {
     <div className="screen active">
       <div className="topbar">
         <h1>Compras e vendas</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div className="period" onClick={() => openPick('sell')}>
-            + nova venda
-          </div>
-          <div
-            className="period"
-            style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
-            onClick={() => openPick('buy')}
-          >
-            + nova compra
-          </div>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 16, padding: 6 }}>
-        <div className="filter-bar">
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <div className="filter-select">
             <select value={bankFilter} onChange={(e) => handleBankFilterChange(e.target.value)}>
               <option value="">Todas as corretoras</option>
@@ -166,6 +160,16 @@ export default function AssetTrades() {
                 </option>
               ))}
             </select>
+          </div>
+          <div className="period" onClick={() => openPick('sell')}>
+            + nova venda
+          </div>
+          <div
+            className="period"
+            style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
+            onClick={() => openPick('buy')}
+          >
+            + nova compra
           </div>
         </div>
       </div>
@@ -200,9 +204,9 @@ export default function AssetTrades() {
               </div>
             </div>
             <div className="compra-val">
-              <div className="compra-total num">{fmt(t.total_amount)}</div>
+              <div className="compra-total num">{fmt(t.total_amount, currencyFor(t.asset))}</div>
               <div className="compra-unit">
-                {t.quantity} × {fmt(t.unit_price)}
+                {t.quantity} × {fmt(t.unit_price, currencyFor(t.asset))}
               </div>
             </div>
           </div>
@@ -235,9 +239,9 @@ export default function AssetTrades() {
               </div>
             </div>
             <div className="compra-val">
-              <div className="compra-total num">{fmt(t.total_amount)}</div>
+              <div className="compra-total num">{fmt(t.total_amount, currencyFor(t.asset))}</div>
               <div className="compra-unit">
-                {t.quantity} × {fmt(t.unit_price)}
+                {t.quantity} × {fmt(t.unit_price, currencyFor(t.asset))}
               </div>
             </div>
           </div>
@@ -282,6 +286,7 @@ export default function AssetTrades() {
         asset={tradeState?.asset}
         kind={tradeState?.kind}
         accountBalance={tradeState?.asset ? accountBalanceFor(tradeState.asset) : null}
+        accountCurrency={tradeState?.asset ? currencyFor(tradeState.asset) : undefined}
         onClose={() => setTradeState(null)}
         onSaved={() => {
           setTradeState(null);
@@ -294,6 +299,7 @@ export default function AssetTrades() {
         asset={editTrade?.asset}
         trade={editTrade}
         accountBalance={editTrade?.asset ? accountBalanceFor(editTrade.asset) : null}
+        accountCurrency={editTrade?.asset ? currencyFor(editTrade.asset) : undefined}
         onClose={() => setEditTrade(null)}
         onSaved={() => {
           setEditTrade(null);

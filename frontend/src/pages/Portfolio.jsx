@@ -39,7 +39,7 @@ function fixedIncomeSubLabel(asset) {
     const indexer = asset.fixed_income_indexer ? ` ${asset.fixed_income_indexer}` : '';
     parts.push(`${asset.fixed_income_rate_pct}%${indexer}`);
   }
-  if (asset.maturity_date) parts.push(`vence ${fmtDateFull(asset.maturity_date)}`);
+  if (asset.maturity_date) parts.push(fmtDateFull(asset.maturity_date));
   return parts.join(' · ') || asset.name;
 }
 
@@ -91,18 +91,24 @@ export default function Portfolio() {
     reloadAll();
   }
 
+  function accountFor(asset) {
+    return investmentAccounts.find((a) => a.investment_account?.id === asset.investment_account_id) || null;
+  }
+
   function bankFor(asset) {
-    const account = investmentAccounts.find((a) => a.investment_account?.id === asset.investment_account_id);
+    const account = accountFor(asset);
     return account ? bankById(account.bank_id) : null;
   }
 
   const enriched = useMemo(() => {
     return assets.map((a) => {
       const bank = bankFor(a);
+      const account = accountFor(a);
       return {
         ...a,
         bankName: bank?.name || '',
         bankColor: bank?.color_hex || '#8B9A97',
+        currency: account?.currency || 'BRL',
         rent: a.position.total_return_pct,
       };
     });
@@ -190,6 +196,16 @@ export default function Portfolio() {
     <div className="screen active">
       <div className="topbar">
         <h1>Carteira</h1>
+        {hasArchived && (
+          <div className="seg" style={{ maxWidth: 280 }}>
+            <div className={`seg-opt${!showArchived ? ' active' : ''}`} onClick={() => setShowArchived(false)}>
+              Ativos
+            </div>
+            <div className={`seg-opt${showArchived ? ' active' : ''}`} onClick={() => setShowArchived(true)}>
+              Arquivados
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="fatura-note show" style={{ marginBottom: 16 }}>
@@ -240,17 +256,6 @@ export default function Portfolio() {
         </div>
       </div>
 
-      {hasArchived && (
-        <div className="seg" style={{ marginBottom: 16, maxWidth: 280 }}>
-          <div className={`seg-opt${!showArchived ? ' active' : ''}`} onClick={() => setShowArchived(false)}>
-            Ativos
-          </div>
-          <div className={`seg-opt${showArchived ? ' active' : ''}`} onClick={() => setShowArchived(true)}>
-            Arquivados
-          </div>
-        </div>
-      )}
-
       <div className="card">
         <div className="asset-table-wrap">
           <div className="asset-row asset-head">
@@ -264,7 +269,6 @@ export default function Portfolio() {
                 <span className="arrow">{sort.key === c.key && sort.dir === 'asc' ? '▴' : '▾'}</span>
               </div>
             ))}
-            <div />
           </div>
 
           {sorted.length === 0 && (
@@ -280,7 +284,35 @@ export default function Portfolio() {
             return (
               <div className="asset-row" key={a.id}>
                 <div>
-                  <div className="a-name">{a.code || a.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <div className="a-name">{a.code || a.name}</div>
+                    <button
+                      type="button"
+                      title="Editar ativo"
+                      onClick={() => setEditingAsset(a)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 20,
+                        height: 20,
+                        borderRadius: 6,
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--ink-faint)',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = 'var(--teal)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = 'var(--ink-faint)';
+                      }}
+                    >
+                      <IconPencil style={{ width: 11, height: 11 }} />
+                    </button>
+                  </div>
                   <div className="a-sub">{a.type === 'renda_fixa' ? fixedIncomeSubLabel(a) : a.name}</div>
                 </div>
                 <div>
@@ -294,12 +326,12 @@ export default function Portfolio() {
                   {a.bankName}
                 </div>
                 <div className="a-num">{a.position.quantity}</div>
-                <div className="a-num">{fmt(a.position.avg_unit_price)}</div>
-                <div className="a-num">{a.current_unit_price != null ? fmt(a.current_unit_price) : '—'}</div>
-                <div className="a-num">{fmt(a.position.invested_amount)}</div>
+                <div className="a-num">{fmt(a.position.avg_unit_price, a.currency)}</div>
+                <div className="a-num">{a.current_unit_price != null ? fmt(a.current_unit_price, a.currency) : '—'}</div>
+                <div className="a-num">{fmt(a.position.invested_amount, a.currency)}</div>
                 {isPreFixado ? (
                   <div className="a-num" title="Calculado automaticamente pela taxa pré-fixada">
-                    {currentAmount != null ? fmt(currentAmount) : '—'}
+                    {currentAmount != null ? fmt(currentAmount, a.currency) : '—'}
                   </div>
                 ) : editingPriceId === a.id ? (
                   <div onClick={(e) => e.stopPropagation()}>
@@ -323,34 +355,15 @@ export default function Portfolio() {
                     style={{ cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
                     onClick={() => startEditTotal(a)}
                   >
-                    {fmt(currentAmount)}
+                    {fmt(currentAmount, a.currency)}
                   </div>
                 )}
                 <div className="a-num" style={{ color: a.position.dividends_total > 0 ? 'var(--gold)' : undefined }}>
-                  {fmt(a.position.dividends_total)}
+                  {fmt(a.position.dividends_total, a.currency)}
                 </div>
                 <div className={`a-rent ${a.rent == null ? '' : a.rent >= 0 ? 'up' : 'down'}`}>
                   {a.rent == null ? '—' : `${a.rent >= 0 ? '+' : ''}${a.rent.toFixed(1)}%`}
                 </div>
-                <button
-                  type="button"
-                  title="Editar ativo"
-                  onClick={() => setEditingAsset(a)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 26,
-                    height: 26,
-                    borderRadius: 7,
-                    border: 'none',
-                    background: 'transparent',
-                    color: 'var(--ink-faint)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <IconPencil style={{ width: 13, height: 13 }} />
-                </button>
               </div>
             );
           })}

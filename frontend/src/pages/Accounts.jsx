@@ -252,11 +252,19 @@ export default function Accounts() {
               <div className="acct-type-card">
                 <div className="t-label">{isUnified ? 'Conta corrente + Investimentos' : 'Conta corrente'}</div>
                 <div className="t-val num">
-                  {checking ? fmt(checking.balance + (isUnified ? investedByAccountId[checking.id] || 0 : 0)) : '—'}
+                  {checking
+                    ? fmt(
+                        checking.balance + (isUnified ? investedByAccountId[checking.id] || 0 : 0),
+                        checking.currency
+                      )
+                    : '—'}
                 </div>
                 <div className="t-sub">
                   {isUnified
-                    ? `${fmt(checking.balance)} disponível · ${fmt(investedByAccountId[checking.id] || 0)} investido`
+                    ? `${fmt(checking.balance, checking.currency)} disponível · ${fmt(
+                        investedByAccountId[checking.id] || 0,
+                        checking.currency
+                      )} investido`
                     : 'disponível'}
                 </div>
               </div>
@@ -285,12 +293,12 @@ export default function Accounts() {
                 </div>
                 {creditCard?.credit_card && cardInvoices.length > 0 ? (
                   <>
-                    <div className="t-val num">{fmt(viewedInvoice?.total_amount || 0)}</div>
+                    <div className="t-val num">{fmt(viewedInvoice?.total_amount || 0, creditCard.currency)}</div>
                     <div className="t-sub">
                       {viewedInvoice.status === 'paid'
                         ? 'paga'
                         : viewedInvoice.outstanding_amount > 0
-                        ? `${fmt(viewedInvoice.outstanding_amount)} em aberto`
+                        ? `${fmt(viewedInvoice.outstanding_amount, creditCard.currency)} em aberto`
                         : 'quitada'}{' '}
                       ·{' '}
                       {viewedInvoice.outstanding_amount > 0 && viewedInvoice.due_date < todayIso() ? (
@@ -313,11 +321,13 @@ export default function Accounts() {
                 <div className="acct-type-card">
                   <div className="t-label">Investimento</div>
                   <div className="t-val num">
-                    {investment ? fmt(investment.balance + (investedByAccountId[investment.id] || 0)) : '—'}
+                    {investment
+                      ? fmt(investment.balance + (investedByAccountId[investment.id] || 0), investment.currency)
+                      : '—'}
                   </div>
                   <div className="t-sub">
                     {investment && investment.balance > 0
-                      ? `${fmt(investment.balance)} não alocado`
+                      ? `${fmt(investment.balance, investment.currency)} não alocado`
                       : 'saldo aplicado'}
                   </div>
                 </div>
@@ -332,6 +342,7 @@ export default function Accounts() {
         bank={editingBank}
         creditCardAccount={editingBank ? accounts.find((a) => a.bank_id === editingBank.id && a.type === 'credit_card') : null}
         checkingAccount={editingBank ? accounts.find((a) => a.bank_id === editingBank.id && a.type === 'checking') : null}
+        investmentAccount={editingBank ? accounts.find((a) => a.bank_id === editingBank.id && !!a.investment_account) : null}
         onClose={() => setModalOpen(false)}
         onSaved={() => {
           setModalOpen(false);

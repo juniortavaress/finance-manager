@@ -341,7 +341,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className={`tx-val num ${t.is_transfer ? '' : pos ? 'pos' : 'neg'}`}>
-                    {fmt(pos ? t.amount : -t.amount)}
+                    {fmt(pos ? t.amount : -t.amount, t.account?.currency)}
                   </div>
                 </div>
               );

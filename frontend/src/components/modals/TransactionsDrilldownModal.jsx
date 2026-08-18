@@ -54,7 +54,9 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
                     </div>
                   </div>
                 </div>
-                <div className={`tx-val num ${pos ? 'pos' : 'neg'}`}>{fmt(pos ? t.amount : -t.amount)}</div>
+                <div className={`tx-val num ${pos ? 'pos' : 'neg'}`}>
+                  {fmt(pos ? t.amount : -t.amount, t.account?.currency)}
+                </div>
               </div>
             );
           })}
