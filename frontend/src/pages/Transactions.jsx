@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { transactionsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
@@ -44,6 +44,7 @@ function RowActionButton({ title, onClick, color, children }) {
 export default function Transactions() {
   const { banks, categories, categoryById, accountById } = useData();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [bankFilter, setBankFilter] = useState('');
   const [accountTypeFilter, setAccountTypeFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -54,17 +55,25 @@ export default function Transactions() {
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState(null);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const { data: txData, reload: reloadTx } = useFetch(
-    () =>
-      transactionsApi.list({
-        search: search || undefined,
-        category_id: categoryFilter || undefined,
-        type: typeFilter || undefined,
-        date_from: dateFrom || undefined,
-        date_to: dateTo || (dateFrom ? undefined : todayIso()),
-        page_size: 100,
-      }),
-    [search, categoryFilter, typeFilter, dateFrom, dateTo]
+    (signal) =>
+      transactionsApi.list(
+        {
+          search: debouncedSearch || undefined,
+          category_id: categoryFilter || undefined,
+          type: typeFilter || undefined,
+          date_from: dateFrom || undefined,
+          date_to: dateTo || (dateFrom ? undefined : todayIso()),
+          page_size: 100,
+        },
+        signal
+      ),
+    [debouncedSearch, categoryFilter, typeFilter, dateFrom, dateTo]
   );
 
   const transactions = txData?.transactions || [];

@@ -18,7 +18,7 @@ class ApiError extends Error {
   }
 }
 
-async function request(path, { method = 'GET', body, params } = {}) {
+async function request(path, { method = 'GET', body, params, signal } = {}) {
   let url = `${API_URL}${path}`;
   if (params) {
     const query = new URLSearchParams(
@@ -37,8 +37,10 @@ async function request(path, { method = 'GET', body, params } = {}) {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal,
     });
-  } catch {
+  } catch (err) {
+    if (err.name === 'AbortError') throw err;
     throw new ApiError('Não foi possível conectar ao servidor. Verifique sua conexão.', 0);
   }
 
@@ -60,10 +62,10 @@ async function request(path, { method = 'GET', body, params } = {}) {
 }
 
 export const api = {
-  get: (path, params) => request(path, { method: 'GET', params }),
-  post: (path, body) => request(path, { method: 'POST', body }),
-  patch: (path, body) => request(path, { method: 'PATCH', body }),
-  delete: (path, body) => request(path, { method: 'DELETE', body }),
+  get: (path, params, signal) => request(path, { method: 'GET', params, signal }),
+  post: (path, body, signal) => request(path, { method: 'POST', body, signal }),
+  patch: (path, body, signal) => request(path, { method: 'PATCH', body, signal }),
+  delete: (path, body, signal) => request(path, { method: 'DELETE', body, signal }),
 };
 
 export { ApiError };

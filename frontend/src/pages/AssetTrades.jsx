@@ -48,8 +48,11 @@ function RowActionButton({ title, onClick, color, children }) {
 }
 
 export default function AssetTrades() {
-  const { data: assetsData, reload: reloadAssets } = useFetch(() => investmentsApi.listAssets(), []);
-  const { data: tradesData, reload: reloadTrades } = useFetch(() => investmentsApi.listAssetTransactions(), []);
+  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
+  const { data: tradesData, reload: reloadTrades } = useFetch(
+    (signal) => investmentsApi.listAssetTransactions(undefined, signal),
+    []
+  );
   const { banks, investmentAccounts, bankById, reloadAll } = useData();
   const [pickModalOpen, setPickModalOpen] = useState(false);
   const [pickKind, setPickKind] = useState('buy');

@@ -31,7 +31,7 @@ export const categoriesApi = {
 };
 
 export const transactionsApi = {
-  list: (params) => api.get('/transactions/', params),
+  list: (params, signal) => api.get('/transactions/', params, signal),
   create: (data) => api.post('/transactions/', data),
   update: (id, data) => api.patch(`/transactions/${id}`, data),
   remove: (id) => api.delete(`/transactions/${id}`),
@@ -60,14 +60,14 @@ export const creditCardsApi = {
 };
 
 export const investmentsApi = {
-  summary: (bankId) => api.get('/investments/summary', { bank_id: bankId || undefined }),
-  listAssets: (archived) => api.get('/investments/assets', { archived: archived ? 'true' : undefined }),
+  summary: (bankId, signal) => api.get('/investments/summary', { bank_id: bankId || undefined }, signal),
+  listAssets: (archived, signal) => api.get('/investments/assets', { archived: archived ? 'true' : undefined }, signal),
   createAsset: (data) => api.post('/investments/assets', data),
   updateAsset: (id, data) => api.patch(`/investments/assets/${id}`, data),
   removeAsset: (id) => api.delete(`/investments/assets/${id}`),
   buy: (assetId, data) => api.post(`/investments/assets/${assetId}/buy`, data),
   sell: (assetId, data) => api.post(`/investments/assets/${assetId}/sell`, data),
-  listAssetTransactions: (limit) => api.get('/investments/asset-transactions', { limit }),
+  listAssetTransactions: (params, signal) => api.get('/investments/asset-transactions', params, signal),
   updateAssetTransaction: (id, data) => api.patch(`/investments/asset-transactions/${id}`, data),
   removeAssetTransaction: (id) => api.delete(`/investments/asset-transactions/${id}`),
 };
