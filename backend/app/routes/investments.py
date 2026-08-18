@@ -203,16 +203,13 @@ def list_assets():
     _settle_all_matured_pre_fixado(g.current_user.id)
 
     inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
-    show_archived = request.args.get("archived") == "true"
     all_assets = Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all() if inv_account_ids else []
 
-    result = []
+    active, archived = [], []
     for asset in all_assets:
         data = _asset_to_dict(asset)
-        is_archived = data["position"]["quantity"] <= 0
-        if is_archived == show_archived:
-            result.append(data)
-    return {"assets": result}
+        (archived if data["position"]["quantity"] <= 0 else active).append(data)
+    return {"assets": active, "archived_assets": archived}
 
 
 @investments_bp.get("/asset-transactions")

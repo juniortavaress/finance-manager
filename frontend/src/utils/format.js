@@ -52,3 +52,10 @@ export function fmtDateShort(isoDate) {
   const day = String(d.getDate()).padStart(2, '0');
   return `${day} ${monthLabel(d.getMonth() + 1).toLowerCase()}`;
 }
+
+export function fmtDateFull(isoDate) {
+  const d = new Date(`${isoDate}T00:00:00`);
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${d.getFullYear()}`;
+}

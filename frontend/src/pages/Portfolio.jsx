@@ -3,7 +3,7 @@ import { investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
-import { fmt } from '../utils/format';
+import { fmt, fmtDateFull } from '../utils/format';
 import { maskToNumber, numberToMasked } from '../utils/currency';
 import { IconSearch, IconPencil } from '../components/icons';
 import CurrencyInput from '../components/CurrencyInput';
@@ -26,6 +26,23 @@ const TYPE_COLORS = {
   outro: '#8B9A97',
 };
 
+const FIXED_INCOME_TYPE_LABELS = {
+  pos_fixado: 'Pós-fixado',
+  pre_fixado: 'Pré-fixado',
+  ipca: 'IPCA+',
+};
+
+function fixedIncomeSubLabel(asset) {
+  const parts = [];
+  if (asset.fixed_income_type) parts.push(FIXED_INCOME_TYPE_LABELS[asset.fixed_income_type] || asset.fixed_income_type);
+  if (asset.fixed_income_rate_pct != null) {
+    const indexer = asset.fixed_income_indexer ? ` ${asset.fixed_income_indexer}` : '';
+    parts.push(`${asset.fixed_income_rate_pct}%${indexer}`);
+  }
+  if (asset.maturity_date) parts.push(`vence ${fmtDateFull(asset.maturity_date)}`);
+  return parts.join(' · ') || asset.name;
+}
+
 const COLUMNS = [
   { key: 'name', label: 'Ativo' },
   { key: 'type', label: 'Tipo' },
@@ -41,11 +58,7 @@ const COLUMNS = [
 
 export default function Portfolio() {
   const [showArchived, setShowArchived] = useState(false);
-  const { data: assetsData, reload: reloadAssets } = useFetch(
-    () => investmentsApi.listAssets(showArchived),
-    [showArchived]
-  );
-  const { data: archivedData, reload: reloadArchivedCheck } = useFetch(() => investmentsApi.listAssets(true), []);
+  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
   const { banks, investmentAccounts, bankById, reloadAll } = useData();
   const { showSuccess, showError } = useToast();
 
@@ -59,8 +72,8 @@ export default function Portfolio() {
   const [editingPriceValue, setEditingPriceValue] = useState('');
   const [savingPrice, setSavingPrice] = useState(false);
 
-  const assets = assetsData?.assets || [];
-  const hasArchived = (archivedData?.assets || []).length > 0;
+  const assets = showArchived ? assetsData?.archived_assets || [] : assetsData?.assets || [];
+  const hasArchived = (assetsData?.archived_assets || []).length > 0;
 
   useEffect(() => {
     setSearch('');
@@ -75,7 +88,6 @@ export default function Portfolio() {
 
   function reload() {
     reloadAssets();
-    reloadArchivedCheck();
     reloadAll();
   }
 
@@ -143,9 +155,10 @@ export default function Portfolio() {
   const bankOptions = useMemo(() => [...new Set(enriched.map((a) => a.bankName).filter(Boolean))], [enriched]);
   const typeOptions = useMemo(() => [...new Set(enriched.map((a) => a.type))], [enriched]);
 
-  function startEditPrice(asset) {
+  function startEditTotal(asset) {
+    const currentAmount = asset.position.current_amount != null ? asset.position.current_amount : asset.position.invested_amount;
     setEditingPriceId(asset.id);
-    setEditingPriceValue(asset.current_unit_price != null ? numberToMasked(asset.current_unit_price) : '');
+    setEditingPriceValue(currentAmount != null ? numberToMasked(currentAmount) : '');
   }
 
   function cancelEditPrice() {
@@ -153,17 +166,19 @@ export default function Portfolio() {
     setEditingPriceValue('');
   }
 
-  async function saveEditPrice(assetId) {
-    const value = maskToNumber(editingPriceValue);
+  async function saveEditTotal(asset) {
+    const total = maskToNumber(editingPriceValue);
+    const quantity = asset.position.quantity || 0;
+    const unitPrice = quantity > 0 && total > 0 ? total / quantity : null;
     setSavingPrice(true);
     try {
-      await investmentsApi.updateAsset(assetId, { current_unit_price: value > 0 ? value : null });
-      showSuccess('Preço atualizado com sucesso.');
+      await investmentsApi.updateAsset(asset.id, { current_unit_price: unitPrice });
+      showSuccess('Valor atualizado com sucesso.');
       setEditingPriceId(null);
       setEditingPriceValue('');
       reload();
     } catch (err) {
-      showError(err.message || 'Não foi possível atualizar o preço.');
+      showError(err.message || 'Não foi possível atualizar o valor.');
     } finally {
       setSavingPrice(false);
     }
@@ -178,7 +193,7 @@ export default function Portfolio() {
       </div>
 
       <div className="fatura-note show" style={{ marginBottom: 16 }}>
-        Clique no preço atual de um ativo para atualizá-lo manualmente — em breve integração automática via API de
+        Clique no valor atual de um ativo para atualizá-lo manualmente — em breve integração automática via API de
         cotações.
       </div>
 
@@ -266,7 +281,7 @@ export default function Portfolio() {
               <div className="asset-row" key={a.id}>
                 <div>
                   <div className="a-name">{a.code || a.name}</div>
-                  <div className="a-sub">{a.name}</div>
+                  <div className="a-sub">{a.type === 'renda_fixa' ? fixedIncomeSubLabel(a) : a.name}</div>
                 </div>
                 <div>
                   <span className="tipo-tag" style={{ background: `${color}22`, color }}>
@@ -280,9 +295,11 @@ export default function Portfolio() {
                 </div>
                 <div className="a-num">{a.position.quantity}</div>
                 <div className="a-num">{fmt(a.position.avg_unit_price)}</div>
+                <div className="a-num">{a.current_unit_price != null ? fmt(a.current_unit_price) : '—'}</div>
+                <div className="a-num">{fmt(a.position.invested_amount)}</div>
                 {isPreFixado ? (
                   <div className="a-num" title="Calculado automaticamente pela taxa pré-fixada">
-                    {currentAmount != null ? fmt(currentAmount / (a.position.quantity || 1)) : '—'}
+                    {currentAmount != null ? fmt(currentAmount) : '—'}
                   </div>
                 ) : editingPriceId === a.id ? (
                   <div onClick={(e) => e.stopPropagation()}>
@@ -291,10 +308,10 @@ export default function Portfolio() {
                       value={editingPriceValue}
                       onChange={setEditingPriceValue}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveEditPrice(a.id);
+                        if (e.key === 'Enter') saveEditTotal(a);
                         if (e.key === 'Escape') cancelEditPrice();
                       }}
-                      onBlur={() => saveEditPrice(a.id)}
+                      onBlur={() => saveEditTotal(a)}
                       disabled={savingPrice}
                       style={{ width: '100%', padding: '4px 6px', fontSize: 12.5 }}
                     />
@@ -304,13 +321,11 @@ export default function Portfolio() {
                     className="a-num"
                     title="Clique para editar"
                     style={{ cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
-                    onClick={() => startEditPrice(a)}
+                    onClick={() => startEditTotal(a)}
                   >
-                    {a.current_unit_price != null ? fmt(a.current_unit_price) : '—'}
+                    {fmt(currentAmount)}
                   </div>
                 )}
-                <div className="a-num">{fmt(a.position.invested_amount)}</div>
-                <div className="a-num">{fmt(currentAmount)}</div>
                 <div className="a-num" style={{ color: a.position.dividends_total > 0 ? 'var(--gold)' : undefined }}>
                   {fmt(a.position.dividends_total)}
                 </div>
