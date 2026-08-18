@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
@@ -8,7 +8,7 @@ import PickAssetModal from '../components/modals/PickAssetModal';
 import NewAssetModal from '../components/modals/NewAssetModal';
 import TradeAssetModal from '../components/modals/TradeAssetModal';
 import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal';
-import Pagination from '../components/Pagination';
+import LoadMoreButton from '../components/LoadMoreButton';
 
 const PAGE_SIZE = 15;
 
@@ -60,7 +60,10 @@ export default function AssetTrades() {
 
   const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
 
-  const { data: buyData, reload: reloadBuys } = useFetch(
+  const [purchasesAccumulated, setPurchasesAccumulated] = useState([]);
+  const [salesAccumulated, setSalesAccumulated] = useState([]);
+
+  const { data: buyData, reload: reloadBuys, loading: buyLoading } = useFetch(
     (signal) =>
       investmentsApi.listAssetTransactions(
         { type: 'buy', page: buyPage, page_size: PAGE_SIZE, bank_id: bankFilter || undefined },
@@ -68,7 +71,7 @@ export default function AssetTrades() {
       ),
     [buyPage, bankFilter]
   );
-  const { data: sellData, reload: reloadSells } = useFetch(
+  const { data: sellData, reload: reloadSells, loading: sellLoading } = useFetch(
     (signal) =>
       investmentsApi.listAssetTransactions(
         { type: 'sell', page: sellPage, page_size: PAGE_SIZE, bank_id: bankFilter || undefined },
@@ -76,6 +79,16 @@ export default function AssetTrades() {
       ),
     [sellPage, bankFilter]
   );
+
+  useEffect(() => {
+    if (!buyData) return;
+    setPurchasesAccumulated((prev) => (buyPage === 1 ? buyData.asset_transactions : [...prev, ...buyData.asset_transactions]));
+  }, [buyData, buyPage]);
+
+  useEffect(() => {
+    if (!sellData) return;
+    setSalesAccumulated((prev) => (sellPage === 1 ? sellData.asset_transactions : [...prev, ...sellData.asset_transactions]));
+  }, [sellData, sellPage]);
 
   const currentMonth = todayIso().slice(0, 7);
   const { data: monthBuysData } = useFetch(
@@ -95,14 +108,16 @@ export default function AssetTrades() {
   const [deletingTrade, setDeletingTrade] = useState(null);
 
   const assets = assetsData?.assets || [];
-  const purchases = buyData?.asset_transactions || [];
-  const sales = sellData?.asset_transactions || [];
+  const purchases = purchasesAccumulated;
+  const sales = salesAccumulated;
 
   function reload() {
     reloadAssets();
-    reloadBuys();
-    reloadSells();
     reloadAll();
+    if (buyPage === 1) reloadBuys();
+    else setBuyPage(1);
+    if (sellPage === 1) reloadSells();
+    else setSellPage(1);
   }
 
   const totalThisMonth = useMemo(
@@ -211,7 +226,12 @@ export default function AssetTrades() {
             </div>
           </div>
         ))}
-        <Pagination page={buyPage} pageSize={PAGE_SIZE} total={buyData?.total || 0} onPageChange={setBuyPage} />
+        <LoadMoreButton
+          shown={purchases.length}
+          total={buyData?.total || 0}
+          loading={buyLoading}
+          onClick={() => setBuyPage((p) => p + 1)}
+        />
       </div>
 
       <div className="card" style={{ marginTop: 20 }}>
@@ -246,7 +266,12 @@ export default function AssetTrades() {
             </div>
           </div>
         ))}
-        <Pagination page={sellPage} pageSize={PAGE_SIZE} total={sellData?.total || 0} onPageChange={setSellPage} />
+        <LoadMoreButton
+          shown={sales.length}
+          total={sellData?.total || 0}
+          loading={sellLoading}
+          onClick={() => setSellPage((p) => p + 1)}
+        />
       </div>
 
       <PickAssetModal

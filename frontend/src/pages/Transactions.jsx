@@ -5,7 +5,7 @@ import { useFetch } from '../hooks/useFetch';
 import { fmt, fmtDateShort } from '../utils/format';
 import { IconSearch, IconPencil, IconChevronDown } from '../components/icons';
 import TransactionModal from '../components/modals/TransactionModal';
-import Pagination from '../components/Pagination';
+import LoadMoreButton from '../components/LoadMoreButton';
 
 const PAGE_SIZE = 50;
 
@@ -58,6 +58,7 @@ export default function Transactions() {
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState(null);
   const [page, setPage] = useState(1);
+  const [accumulated, setAccumulated] = useState([]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 400);
@@ -66,9 +67,10 @@ export default function Transactions() {
 
   useEffect(() => {
     setPage(1);
+    setAccumulated([]);
   }, [debouncedSearch, bankFilter, accountTypeFilter, categoryFilter, typeFilter, dateFrom, dateTo]);
 
-  const { data: txData, reload: reloadTx } = useFetch(
+  const { data: txData, reload: reloadTx, loading: txLoading } = useFetch(
     (signal) =>
       transactionsApi.list(
         {
@@ -87,7 +89,17 @@ export default function Transactions() {
     [debouncedSearch, bankFilter, accountTypeFilter, categoryFilter, typeFilter, dateFrom, dateTo, page]
   );
 
-  const transactions = txData?.transactions || [];
+  useEffect(() => {
+    if (!txData) return;
+    setAccumulated((prev) => (page === 1 ? txData.transactions : [...prev, ...txData.transactions]));
+  }, [txData, page]);
+
+  function reloadFromStart() {
+    if (page === 1) reloadTx();
+    else setPage(1);
+  }
+
+  const transactions = accumulated;
   const total = txData?.total || 0;
   const entradas = txData?.sum_income || 0;
   const saidas = txData?.sum_expense || 0;
@@ -291,7 +303,12 @@ export default function Transactions() {
             </div>
           );
         })}
-        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
+        <LoadMoreButton
+          shown={transactions.length}
+          total={total}
+          loading={txLoading}
+          onClick={() => setPage((p) => p + 1)}
+        />
       </div>
 
       <TransactionModal
@@ -304,11 +321,11 @@ export default function Transactions() {
         onCreated={() => {
           setTxModalOpen(false);
           setEditingTx(null);
-          reloadTx();
+          reloadFromStart();
         }}
         onDeleted={() => {
           setEditingTx(null);
-          reloadTx();
+          reloadFromStart();
         }}
       />
     </div>
