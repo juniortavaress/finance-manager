@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useData } from '../context/DataContext';
 import { transactionsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { fmt, fmtDateShort } from '../utils/format';
 import { IconSearch, IconPencil, IconChevronDown } from '../components/icons';
 import TransactionModal from '../components/modals/TransactionModal';
+import Pagination from '../components/Pagination';
+
+const PAGE_SIZE = 50;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -54,44 +57,40 @@ export default function Transactions() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [txModalOpen, setTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 400);
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, bankFilter, accountTypeFilter, categoryFilter, typeFilter, dateFrom, dateTo]);
+
   const { data: txData, reload: reloadTx } = useFetch(
     (signal) =>
       transactionsApi.list(
         {
           search: debouncedSearch || undefined,
+          bank_id: bankFilter || undefined,
+          account_type: accountTypeFilter || undefined,
           category_id: categoryFilter || undefined,
           type: typeFilter || undefined,
           date_from: dateFrom || undefined,
           date_to: dateTo || (dateFrom ? undefined : todayIso()),
-          page_size: 100,
+          page,
+          page_size: PAGE_SIZE,
         },
         signal
       ),
-    [debouncedSearch, categoryFilter, typeFilter, dateFrom, dateTo]
+    [debouncedSearch, bankFilter, accountTypeFilter, categoryFilter, typeFilter, dateFrom, dateTo, page]
   );
 
   const transactions = txData?.transactions || [];
-  const filteredByBank = useMemo(() => {
-    return transactions.filter((t) => {
-      const account = accountById(t.account_id) || t.account;
-      if (bankFilter && account?.bank_id !== bankFilter) return false;
-      if (accountTypeFilter && account?.type !== accountTypeFilter) return false;
-      return true;
-    });
-  }, [transactions, bankFilter, accountTypeFilter, accountById]);
-
-  const entradas = filteredByBank
-    .filter((t) => t.type === 'income' && !t.is_transfer)
-    .reduce((s, t) => s + t.amount, 0);
-  const saidas = filteredByBank
-    .filter((t) => t.type === 'expense' && !t.is_transfer)
-    .reduce((s, t) => s + t.amount, 0);
+  const total = txData?.total || 0;
+  const entradas = txData?.sum_income || 0;
+  const saidas = txData?.sum_expense || 0;
 
   const hasActiveFilters = !!(
     search ||
@@ -248,11 +247,11 @@ export default function Transactions() {
       </div>
       <div className="card">
         <h3>
-          {filteredByBank.length} transações · <span style={{ color: 'var(--teal)' }}>entradas {fmt(entradas)}</span>{' '}
+          {total} transações · <span style={{ color: 'var(--teal)' }}>entradas {fmt(entradas)}</span>{' '}
           · <span style={{ color: 'var(--brick)' }}>saídas {fmt(saidas)}</span>
         </h3>
-        {filteredByBank.length === 0 && <div className="empty-state">Nenhuma transação encontrada.</div>}
-        {filteredByBank.map((t) => {
+        {transactions.length === 0 && <div className="empty-state">Nenhuma transação encontrada.</div>}
+        {transactions.map((t) => {
           const pos = t.type === 'income';
           const category = categoryById(t.category_id) || t.category;
           const account = accountById(t.account_id) || t.account;
@@ -292,6 +291,7 @@ export default function Transactions() {
             </div>
           );
         })}
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
       </div>
 
       <TransactionModal

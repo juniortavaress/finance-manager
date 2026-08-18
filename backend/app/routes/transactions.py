@@ -80,6 +80,28 @@ def _parse_filters():
 def list_transactions():
     filters = _parse_filters()
     query = Transaction.query.filter(Transaction.user_id == g.current_user.id, *filters)
+
+    bank_id = request.args.get("bank_id")
+    account_type = request.args.get("account_type")
+    if bank_id or account_type:
+        query = query.join(Account, Account.id == Transaction.account_id)
+        if bank_id:
+            query = query.filter(Account.bank_id == bank_id)
+        if account_type:
+            query = query.filter(Account.type == account_type)
+
+    sums_query = query.filter(Transaction.is_transfer.is_(False))
+    sum_income = (
+        sums_query.filter(Transaction.type == "income")
+        .with_entities(db.func.coalesce(db.func.sum(Transaction.amount), 0))
+        .scalar()
+    ) or 0
+    sum_expense = (
+        sums_query.filter(Transaction.type == "expense")
+        .with_entities(db.func.coalesce(db.func.sum(Transaction.amount), 0))
+        .scalar()
+    ) or 0
+
     query = query.order_by(Transaction.date.desc(), Transaction.created_at.desc())
 
     page = int(request.args.get("page", 1))
@@ -92,6 +114,8 @@ def list_transactions():
         "total": total,
         "page": page,
         "page_size": page_size,
+        "sum_income": float(sum_income),
+        "sum_expense": float(sum_expense),
     }
 
 
