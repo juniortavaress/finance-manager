@@ -56,6 +56,7 @@ export default function Investments() {
   const dividends = dividendsData?.dividends || [];
   const schedules = schedulesData?.dividend_schedules || [];
   const totalInvested = summaryData?.total_invested || 0;
+  const totalAllocatedCost = summaryData?.total_allocated_cost || 0;
 
   function reload() {
     reloadSummary();
@@ -109,7 +110,10 @@ export default function Investments() {
     0
   );
   const totalDividends = activeAssets.reduce((s, a) => s + (a.position.dividends_total || 0), 0);
-  const allocatedCostBasis = activeAssets.reduce((s, a) => s + a.position.invested_amount, 0);
+  const allocatedCostBasis =
+    summaryData?.total_allocated_cost != null
+      ? summaryData.total_allocated_cost
+      : activeAssets.reduce((s, a) => s + a.position.invested_amount, 0);
   const rentabilidade =
     summaryData?.rentability_total != null
       ? summaryData.rentability_total
@@ -186,9 +190,15 @@ export default function Investments() {
       </div>
 
       <div className="grid grid-4" style={{ marginBottom: 20 }}>
-        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
-          <div className="label">Total investido</div>
+        <div className="card stat-card" style={{ '--stripe': '#3D7A8C' }}>
+          <div className="label">Aporte líquido</div>
           <div className="value num">{fmt(totalInvested)}</div>
+          <div className="delta">dinheiro que saiu do banco pra carteira</div>
+        </div>
+        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
+          <div className="label">Investido</div>
+          <div className="value num">{fmt(allocatedCostBasis)}</div>
+          <div className="delta">custo das posições atuais</div>
         </div>
         <div className="card stat-card" style={{ '--stripe': '#8B9A97' }}>
           <div className="label">Caixa disponível</div>
