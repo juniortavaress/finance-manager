@@ -261,7 +261,11 @@ def investments_summary():
             "unallocated_by_bank": [],
             "evolution": [],
             "total_transferred": 0,
+            "total_invested": 0,
             "total_unallocated": 0,
+            "rentability_total": None,
+            "rentability_last_month": None,
+            "rentability_last_year": None,
         }
 
     accounts_by_ia_id = {
@@ -286,20 +290,13 @@ def investments_summary():
             if earliest_date is None or tx.date < earliest_date:
                 earliest_date = tx.date
 
-    unallocated_by_bank = []
-    total_unallocated = Decimal("0")
-    total_transferred = Decimal("0")
-    for ia in inv_accounts:
-        account = accounts_by_ia_id[ia.id]
-        if bank_filter and str(account.bank_id) != bank_filter:
-            continue
-
-        transferred = (
+    def _transfer_flow(account, tx_type):
+        return (
             db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
             .filter(
                 Transaction.account_id == account.id,
                 Transaction.is_transfer.is_(True),
-                Transaction.type == "income",
+                Transaction.type == tx_type,
                 Transaction.status == "confirmed",
                 ~Transaction.description.startswith("Compra "),
                 ~Transaction.description.startswith("Venda "),
@@ -307,7 +304,25 @@ def investments_summary():
             )
             .scalar()
         ) or Decimal("0")
-        total_transferred += transferred
+
+    unallocated_by_bank = []
+    total_unallocated = Decimal("0")
+    total_transferred = Decimal("0")
+    total_invested = Decimal("0")
+    for ia in inv_accounts:
+        account = accounts_by_ia_id[ia.id]
+        if bank_filter and str(account.bank_id) != bank_filter:
+            continue
+
+        if ia.is_unified:
+            ia_assets = [a for a in all_assets if a.investment_account_id == ia.id]
+            total_invested += sum(
+                (Decimal(str(_asset_position(a)["invested_amount"])) for a in ia_assets), Decimal("0")
+            )
+        else:
+            net_transferred = _transfer_flow(account, "income") - _transfer_flow(account, "expense")
+            total_transferred += net_transferred
+            total_invested += net_transferred
 
         if account.balance <= 0:
             continue
@@ -370,12 +385,53 @@ def investments_summary():
                 }
             )
 
+    active_assets_result = [a for a in assets_result if a["position"]["quantity"] > 0]
+    allocated_cost_basis = sum(
+        (Decimal(str(a["position"]["invested_amount"])) for a in active_assets_result), Decimal("0")
+    )
+    total_current = sum(
+        (Decimal(str(a["position"]["current_amount"] if a["position"]["current_amount"] is not None else a["position"]["invested_amount"])) for a in active_assets_result),
+        Decimal("0"),
+    )
+    total_dividends = sum((Decimal(str(a["position"]["dividends_total"])) for a in active_assets_result), Decimal("0"))
+
+    rentability_total = (
+        float(((total_current + total_dividends - allocated_cost_basis) / allocated_cost_basis) * 100)
+        if allocated_cost_basis > 0
+        else None
+    )
+
+    def _rentability_from(base_current):
+        if base_current is None or base_current <= 0 or not evolution:
+            return None
+        last_current = Decimal(str(evolution[-1]["current"]))
+        return float(((last_current - base_current) / base_current) * 100)
+
+    rentability_last_month = (
+        _rentability_from(Decimal(str(evolution[-2]["current"]))) if len(evolution) >= 2 else None
+    )
+
+    rentability_last_year = None
+    if len(evolution) >= 2:
+        last_point = evolution[-1]
+        target_year = last_point["year"] - 1
+        year_ago_point = next(
+            (p for p in evolution if p["year"] == target_year and p["month"] == last_point["month"]), None
+        )
+        base_point = year_ago_point or evolution[0]
+        if base_point is not evolution[-1]:
+            rentability_last_year = _rentability_from(Decimal(str(base_point["current"])))
+
     return {
         "assets": assets_result,
         "unallocated_by_bank": unallocated_by_bank,
         "evolution": evolution,
         "total_transferred": float(total_transferred),
+        "total_invested": float(total_invested),
         "total_unallocated": float(total_unallocated),
+        "rentability_total": rentability_total,
+        "rentability_last_month": rentability_last_month,
+        "rentability_last_year": rentability_last_year,
     }
 
 

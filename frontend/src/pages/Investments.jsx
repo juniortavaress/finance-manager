@@ -55,10 +55,10 @@ export default function Investments() {
   const assets = summaryData?.assets || [];
   const unallocatedByBank = summaryData?.unallocated_by_bank || [];
   const evolution = summaryData?.evolution || [];
-  const totalTransferred = summaryData?.total_transferred || 0;
   const totalUnallocated = summaryData?.total_unallocated || 0;
   const dividends = dividendsData?.dividends || [];
   const schedules = schedulesData?.dividend_schedules || [];
+  const totalInvested = summaryData?.total_invested || 0;
 
   function reload() {
     reloadSummary();
@@ -107,14 +107,18 @@ export default function Investments() {
     return monthBuckets;
   }, [schedules, assets]);
 
-  const totalInvested = activeAssets.reduce((s, a) => s + a.position.invested_amount, 0);
   const totalCurrent = activeAssets.reduce(
     (s, a) => s + (a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount),
     0
   );
   const totalDividends = activeAssets.reduce((s, a) => s + (a.position.dividends_total || 0), 0);
+  const allocatedCostBasis = activeAssets.reduce((s, a) => s + a.position.invested_amount, 0);
   const rentabilidade =
-    totalInvested > 0 ? ((totalCurrent + totalDividends - totalInvested) / totalInvested) * 100 : 0;
+    summaryData?.rentability_total != null
+      ? summaryData.rentability_total
+      : allocatedCostBasis > 0
+      ? ((totalCurrent + totalDividends - allocatedCostBasis) / allocatedCostBasis) * 100
+      : 0;
 
   const byType = useMemo(() => {
     const map = {};
@@ -195,10 +199,6 @@ export default function Investments() {
       </div>
 
       <div className="grid grid-4" style={{ marginBottom: 20 }}>
-        <div className="card stat-card" style={{ '--stripe': '#3D7A8C' }}>
-          <div className="label">Total transferido</div>
-          <div className="value num">{fmt(totalTransferred)}</div>
-        </div>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
           <div className="label">Total investido</div>
           <div className="value num">{fmt(totalInvested)}</div>
