@@ -22,3 +22,16 @@ export function numberToMasked(value) {
   const cents = Math.round((Number(value) || 0) * 100);
   return maskCurrencyDigits(String(cents));
 }
+
+export const CURRENCY_OPTIONS = [
+  { code: 'BRL', label: 'Real (R$)', symbol: 'R$' },
+  { code: 'USD', label: 'Dólar (US$)', symbol: 'US$' },
+  { code: 'EUR', label: 'Euro (€)', symbol: '€' },
+  { code: 'GBP', label: 'Libra (£)', symbol: '£' },
+];
+
+const CURRENCY_SYMBOLS = Object.fromEntries(CURRENCY_OPTIONS.map((c) => [c.code, c.symbol]));
+
+export function currencySymbol(code) {
+  return CURRENCY_SYMBOLS[code] || code || 'R$';
+}

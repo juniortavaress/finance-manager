@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { banksApi, accountsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
-import { maskToNumber, numberToMasked } from '../../utils/currency';
+import { maskToNumber, numberToMasked, CURRENCY_OPTIONS } from '../../utils/currency';
 import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
@@ -26,12 +26,13 @@ function todayIso() {
  * Modal unico para criar OU editar um banco.
  * Se `bank` for passado, edita (e permite excluir); senao, cria um banco novo com contas checking/credit_card/investment.
  */
-export default function BankConfigModal({ open, onClose, onSaved, bank, creditCardAccount }) {
+export default function BankConfigModal({ open, onClose, onSaved, bank, creditCardAccount, checkingAccount }) {
   const isEditing = !!bank;
   const { showSuccess, showError } = useToast();
 
   const [name, setName] = useState('');
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
+  const [currency, setCurrency] = useState('BRL');
   const [openingBalance, setOpeningBalance] = useState('');
   const [creditLimit, setCreditLimit] = useState('');
   const [closingDay, setClosingDay] = useState(5);
@@ -50,6 +51,7 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
     if (isEditing) {
       setName(bank.name);
       setColor(bank.color_hex);
+      setCurrency(checkingAccount?.currency || 'BRL');
       setCreditLimit(
         creditCardAccount?.credit_card ? numberToMasked(creditCardAccount.credit_card.credit_limit) : ''
       );
@@ -59,13 +61,14 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
     } else {
       setName('');
       setColor(COLOR_OPTIONS[0]);
+      setCurrency('BRL');
       setOpeningBalance('');
       setCreditLimit('');
       setClosingDay(5);
       setDueDay(15);
       setUnifyInvestment(false);
     }
-  }, [open, isEditing, bank, creditCardAccount]);
+  }, [open, isEditing, bank, creditCardAccount, checkingAccount]);
 
   if (!open) return null;
 
@@ -83,6 +86,9 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
     try {
       if (isEditing) {
         await banksApi.update(bank.id, { name: name.trim(), color_hex: color });
+        if (checkingAccount && currency !== (checkingAccount.currency || 'BRL')) {
+          await accountsApi.update(checkingAccount.id, { currency });
+        }
         if (creditCardAccount) {
           await accountsApi.update(creditCardAccount.id, {
             credit_card: {
@@ -98,10 +104,11 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
         const balance = maskToNumber(openingBalance);
         const limit = maskToNumber(creditLimit);
 
-        const { account: checkingAccount } = await accountsApi.create({
+        const { account: newCheckingAccount } = await accountsApi.create({
           bank_id: newBank.id,
           type: 'checking',
           name: `Conta corrente ${newBank.name}`,
+          currency,
           opening_balance: balance,
           opening_balance_date: todayIso(),
         });
@@ -117,13 +124,14 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
           await accountsApi.create({
             bank_id: newBank.id,
             type: 'investment',
-            unify_with_account_id: checkingAccount.id,
+            unify_with_account_id: newCheckingAccount.id,
           });
         } else {
           await accountsApi.create({
             bank_id: newBank.id,
             type: 'investment',
             name: `Investimentos ${newBank.name}`,
+            currency,
           });
         }
       }
@@ -203,6 +211,17 @@ export default function BankConfigModal({ open, onClose, onSaved, bank, creditCa
                 />
               ))}
             </div>
+          </div>
+
+          <div className="field">
+            <label>Moeda da conta</label>
+            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {!isEditing && (

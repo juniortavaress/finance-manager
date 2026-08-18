@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useData } from '../../context/DataContext';
 import { transactionsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
-import { maskToNumber } from '../../utils/currency';
+import { maskToNumber, currencySymbol } from '../../utils/currency';
 import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
@@ -18,6 +18,9 @@ export default function TransferModal({ open, onClose, onCreated }) {
   const [fromAccountId, setFromAccountId] = useState('');
   const [toAccountId, setToAccountId] = useState('');
   const [amount, setAmount] = useState('');
+  const [exchangeRate, setExchangeRate] = useState('');
+  const [amountDestination, setAmountDestination] = useState('');
+  const [lastEditedField, setLastEditedField] = useState('rate');
   const [date, setDate] = useState(todayIso());
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
@@ -26,12 +29,17 @@ export default function TransferModal({ open, onClose, onCreated }) {
   const allAccounts = [...checkingAccounts, ...investmentAccounts];
   const destinationOptions = allAccounts.filter((a) => a.id !== fromAccountId);
   const fromAccount = allAccounts.find((a) => a.id === fromAccountId);
+  const toAccount = allAccounts.find((a) => a.id === toAccountId);
+  const needsExchange = !!(fromAccount && toAccount && fromAccount.currency !== toAccount.currency);
 
   useEffect(() => {
     if (!open) return;
     setFromAccountId(checkingAccounts[0]?.id || '');
     setToAccountId(checkingAccounts[1]?.id || investmentAccounts[0]?.id || '');
     setAmount('');
+    setExchangeRate('');
+    setAmountDestination('');
+    setLastEditedField('rate');
     setDate(todayIso());
     setDescription('');
     setError('');
@@ -50,6 +58,38 @@ export default function TransferModal({ open, onClose, onCreated }) {
   if (!open) return null;
 
   const numericAmount = maskToNumber(amount);
+  const numericRate = maskToNumber(exchangeRate);
+  const numericAmountDestination = maskToNumber(amountDestination);
+
+  function handleAmountChange(v) {
+    setAmount(v);
+    if (needsExchange) {
+      const newAmount = maskToNumber(v);
+      if (lastEditedField === 'rate' && numericRate > 0) {
+        setAmountDestination(String((newAmount * numericRate).toFixed(2)).replace('.', ','));
+      } else if (lastEditedField === 'destAmount' && numericAmountDestination > 0 && newAmount > 0) {
+        setExchangeRate(String((numericAmountDestination / newAmount).toFixed(6)).replace('.', ','));
+      }
+    }
+  }
+
+  function handleRateChange(v) {
+    setExchangeRate(v);
+    setLastEditedField('rate');
+    const rate = maskToNumber(v);
+    if (numericAmount > 0) {
+      setAmountDestination(String((numericAmount * rate).toFixed(2)).replace('.', ','));
+    }
+  }
+
+  function handleDestAmountChange(v) {
+    setAmountDestination(v);
+    setLastEditedField('destAmount');
+    const destAmount = maskToNumber(v);
+    if (numericAmount > 0) {
+      setExchangeRate(String((destAmount / numericAmount).toFixed(6)).replace('.', ','));
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -62,6 +102,9 @@ export default function TransferModal({ open, onClose, onCreated }) {
       showError(`Saldo insuficiente. Disponível em ${fromAccount.name}: ${fmt(fromAccount.balance)}.`);
       return;
     }
+    if (needsExchange && numericRate <= 0 && numericAmountDestination <= 0) {
+      return setError('Informe o câmbio ou o valor na moeda de destino.');
+    }
 
     setSubmitting(true);
     try {
@@ -71,6 +114,9 @@ export default function TransferModal({ open, onClose, onCreated }) {
         amount: numericAmount,
         date,
         description: description.trim() || undefined,
+        exchange_rate: needsExchange && lastEditedField === 'rate' ? numericRate || undefined : undefined,
+        amount_destination:
+          needsExchange && lastEditedField === 'destAmount' ? numericAmountDestination || undefined : undefined,
       });
       showSuccess('Transferência realizada com sucesso.');
       onCreated?.();
@@ -124,7 +170,7 @@ export default function TransferModal({ open, onClose, onCreated }) {
             </select>
             {fromAccount && (
               <div style={{ fontSize: 11.5, color: 'var(--ink-soft)', marginTop: 4 }}>
-                Saldo disponível: {fmt(fromAccount.balance)}
+                Saldo disponível: {fmt(fromAccount.balance, fromAccount.currency)}
               </div>
             )}
           </div>
@@ -155,14 +201,27 @@ export default function TransferModal({ open, onClose, onCreated }) {
 
           <div className="field-row">
             <div className="field">
-              <label>Valor</label>
-              <CurrencyInput value={amount} onChange={setAmount} />
+              <label>Valor {fromAccount ? `(${currencySymbol(fromAccount.currency)})` : ''}</label>
+              <CurrencyInput value={amount} onChange={handleAmountChange} />
             </div>
             <div className="field">
               <label>Data</label>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
           </div>
+
+          {needsExchange && (
+            <div className="field-row">
+              <div className="field">
+                <label>Câmbio (1 {currencySymbol(fromAccount.currency)} =)</label>
+                <CurrencyInput value={exchangeRate} onChange={handleRateChange} />
+              </div>
+              <div className="field">
+                <label>Valor em {currencySymbol(toAccount.currency)}</label>
+                <CurrencyInput value={amountDestination} onChange={handleDestAmountChange} />
+              </div>
+            </div>
+          )}
 
           <div className="field">
             <label>Descrição (opcional)</label>

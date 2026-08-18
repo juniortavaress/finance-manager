@@ -331,6 +331,7 @@ export default function Accounts() {
         open={modalOpen}
         bank={editingBank}
         creditCardAccount={editingBank ? accounts.find((a) => a.bank_id === editingBank.id && a.type === 'credit_card') : null}
+        checkingAccount={editingBank ? accounts.find((a) => a.bank_id === editingBank.id && a.type === 'checking') : null}
         onClose={() => setModalOpen(false)}
         onSaved={() => {
           setModalOpen(false);

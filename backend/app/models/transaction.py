@@ -39,6 +39,7 @@ class Transaction(BaseModel):
     )
     is_transfer = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
     transfer_pair_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"), nullable=True, index=True)
+    exchange_rate = db.Column(db.Numeric(18, 8), nullable=True)
 
     account = db.relationship("Account", backref="transactions")
     category = db.relationship("Category", backref="transactions")
@@ -67,6 +68,7 @@ class Transaction(BaseModel):
             "invoice_payment_for_id": str(self.invoice_payment_for_id) if self.invoice_payment_for_id else None,
             "is_transfer": self.is_transfer,
             "transfer_pair_id": str(self.transfer_pair_id) if self.transfer_pair_id else None,
+            "exchange_rate": float(self.exchange_rate) if self.exchange_rate is not None else None,
             "transfer_pair_account_id": str(self.transfer_pair.account_id) if self.transfer_pair else None,
             "category": self.category.to_dict() if self.category else None,
             "account": self.account.to_dict() if self.account else None,

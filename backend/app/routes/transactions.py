@@ -278,6 +278,35 @@ def create_transaction():
     return {"transaction": tx.to_dict()}, 201
 
 
+def _resolve_transfer_amounts(data, amount, from_currency, to_currency):
+    """Quando origem e destino tem moedas diferentes, exige cambio (taxa) ou o
+    valor ja convertido na moeda de destino, e deriva o outro. Com a mesma
+    moeda, o valor de destino e sempre igual ao de origem (comportamento
+    historico, sem cambio)."""
+    if from_currency == to_currency:
+        return amount, amount, None
+
+    exchange_rate = data.get("exchange_rate")
+    amount_destination = data.get("amount_destination")
+    if not exchange_rate and not amount_destination:
+        raise ApiError(
+            "Contas em moedas diferentes: informe o câmbio ou o valor na moeda de destino", 400
+        )
+
+    if exchange_rate:
+        rate = Decimal(str(exchange_rate))
+        if rate <= 0:
+            raise ApiError("Câmbio deve ser maior que zero", 400)
+        dest_amount = (amount * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    else:
+        dest_amount = Decimal(str(amount_destination)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if dest_amount <= 0:
+            raise ApiError("Valor na moeda de destino deve ser maior que zero", 400)
+        rate = dest_amount / amount
+
+    return amount, dest_amount, rate
+
+
 @transactions_bp.post("/transfer")
 @login_required
 def create_transfer():
@@ -321,6 +350,10 @@ def create_transfer():
     if amount > from_account.balance:
         raise ApiError("Saldo insuficiente na conta de origem", 400)
 
+    out_amount, in_amount, exchange_rate = _resolve_transfer_amounts(
+        data, amount, from_account.currency, to_account.currency
+    )
+
     category = _get_or_create_transfer_category(g.current_user.id)
 
     tx_out = Transaction(
@@ -328,24 +361,26 @@ def create_transfer():
         account_id=from_account.id,
         category_id=category.id,
         description=description,
-        amount=amount,
+        amount=out_amount,
         type="expense",
         date=transfer_date,
         payment_method="debit",
         status="confirmed",
         is_transfer=True,
+        exchange_rate=exchange_rate,
     )
     tx_in = Transaction(
         user_id=g.current_user.id,
         account_id=to_account.id,
         category_id=category.id,
         description=description,
-        amount=amount,
+        amount=in_amount,
         type="income",
         date=transfer_date,
         payment_method="debit",
         status="confirmed",
         is_transfer=True,
+        exchange_rate=exchange_rate,
     )
     db.session.add(tx_out)
     db.session.add(tx_in)
@@ -421,8 +456,13 @@ def update_transfer(transaction_id):
         out_tx.date = new_date
         in_tx.date = new_date
 
-    out_tx.amount = new_amount
-    in_tx.amount = new_amount
+    out_amount, in_amount, exchange_rate = _resolve_transfer_amounts(
+        data, new_amount, new_from_account.currency, new_to_account.currency
+    )
+    out_tx.amount = out_amount
+    in_tx.amount = in_amount
+    out_tx.exchange_rate = exchange_rate
+    in_tx.exchange_rate = exchange_rate
     out_tx.account_id = new_from_account.id
     in_tx.account_id = new_to_account.id
 
