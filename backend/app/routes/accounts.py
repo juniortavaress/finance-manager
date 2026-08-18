@@ -133,7 +133,35 @@ def update_account(account_id):
             if field in cc:
                 setattr(account.credit_card, field, cc[field])
 
+    if account.type == "checking" and data.get("unify_investment") and account.investment_account is None:
+        investment_account = InvestmentAccount.query.join(
+            Account, Account.id == InvestmentAccount.account_id
+        ).filter(
+            Account.bank_id == account.bank_id, Account.user_id == g.current_user.id, Account.type == "investment"
+        ).first()
+        if investment_account is None:
+            raise ApiError("Nenhuma conta de investimento encontrada neste banco para unificar", 404)
+
+        old_investment_account_row = Account.query.get(investment_account.account_id)
+        leftover_balance = old_investment_account_row.balance if old_investment_account_row is not None else 0
+
+        if old_investment_account_row is not None:
+            Transaction.query.filter_by(
+                user_id=g.current_user.id, account_id=old_investment_account_row.id
+            ).update({"account_id": account.id})
+            RecurringTransaction.query.filter_by(
+                user_id=g.current_user.id, account_id=old_investment_account_row.id
+            ).update({"account_id": account.id})
+
+        investment_account.account_id = account.id
+        investment_account.is_unified = True
+        account.balance += leftover_balance
+        db.session.flush()
+        if old_investment_account_row is not None:
+            db.session.delete(old_investment_account_row)
+
     db.session.commit()
+    db.session.refresh(account)
     return {"account": account.to_dict()}
 
 
