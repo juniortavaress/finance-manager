@@ -1,7 +1,11 @@
-export function fmt(value) {
+import { getDefaultCurrency } from '../state/currentUserCurrency';
+import { currencySymbol } from './currency';
+
+export function fmt(value, currency) {
   const v = Number(value) || 0;
   const s = Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return (v < 0 ? '− R$ ' : 'R$ ') + s;
+  const symbol = currencySymbol(currency || getDefaultCurrency());
+  return (v < 0 ? `− ${symbol} ` : `${symbol} `) + s;
 }
 
 export function fmtCompact(value) {

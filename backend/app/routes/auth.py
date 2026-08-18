@@ -55,3 +55,24 @@ def login():
 @login_required
 def me():
     return {"user": g.current_user.to_dict()}
+
+
+@auth_bp.patch("/me")
+@login_required
+def update_me():
+    data = request.get_json(silent=True) or {}
+    user = g.current_user
+
+    if "name" in data:
+        name = (data["name"] or "").strip()
+        if not name:
+            raise ApiError("Informe seu nome", 400)
+        user.name = name
+    if "avatar_url" in data:
+        user.avatar_url = (data["avatar_url"] or "").strip() or None
+    if "currency_default" in data:
+        currency = (data["currency_default"] or "").strip() or "BRL"
+        user.currency_default = currency
+
+    db.session.commit()
+    return {"user": user.to_dict()}
