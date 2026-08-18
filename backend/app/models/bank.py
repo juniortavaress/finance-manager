@@ -92,7 +92,6 @@ class InvestmentAccount(BaseModel):
 
     account_id = db.Column(UUID(as_uuid=True), db.ForeignKey("accounts.id"), nullable=False, unique=True)
     broker_name = db.Column(db.Text, nullable=True)
-    is_unified = db.Column(db.Boolean, nullable=False, default=False)
 
     assets = db.relationship("Asset", backref="investment_account", cascade="all, delete-orphan")
 
@@ -101,5 +100,4 @@ class InvestmentAccount(BaseModel):
             "id": str(self.id),
             "account_id": str(self.account_id),
             "broker_name": self.broker_name,
-            "is_unified": self.is_unified,
         }

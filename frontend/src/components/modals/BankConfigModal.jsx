@@ -36,8 +36,6 @@ export default function BankConfigModal({
   investmentAccount,
 }) {
   const isEditing = !!bank;
-  const alreadyUnified = !!checkingAccount?.investment_account?.is_unified;
-  const hasSeparateInvestmentAccount = !!investmentAccount && !alreadyUnified;
   const { showSuccess, showError } = useToast();
 
   const [name, setName] = useState('');
@@ -47,7 +45,6 @@ export default function BankConfigModal({
   const [creditLimit, setCreditLimit] = useState('');
   const [closingDay, setClosingDay] = useState(5);
   const [dueDay, setDueDay] = useState(15);
-  const [unifyInvestment, setUnifyInvestment] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -68,7 +65,6 @@ export default function BankConfigModal({
       setClosingDay(creditCardAccount?.credit_card?.closing_day ?? 5);
       setDueDay(creditCardAccount?.credit_card?.due_day ?? 15);
       setOpeningBalance('');
-      setUnifyInvestment(alreadyUnified);
     } else {
       setName('');
       setColor(COLOR_OPTIONS[0]);
@@ -77,9 +73,8 @@ export default function BankConfigModal({
       setCreditLimit('');
       setClosingDay(5);
       setDueDay(15);
-      setUnifyInvestment(false);
     }
-  }, [open, isEditing, bank, creditCardAccount, checkingAccount, alreadyUnified]);
+  }, [open, isEditing, bank, creditCardAccount, checkingAccount]);
 
   if (!open) return null;
 
@@ -97,19 +92,15 @@ export default function BankConfigModal({
     try {
       if (isEditing) {
         await banksApi.update(bank.id, { name: name.trim(), color_hex: color });
-        const wantsUnify = unifyInvestment && !alreadyUnified && hasSeparateInvestmentAccount;
         const currencyChanged = currency !== (checkingAccount?.currency || 'BRL');
 
-        if (checkingAccount && (currencyChanged || wantsUnify)) {
-          await accountsApi.update(checkingAccount.id, {
-            ...(currencyChanged ? { currency } : {}),
-            ...(wantsUnify ? { unify_investment: true } : {}),
-          });
+        if (checkingAccount && currencyChanged) {
+          await accountsApi.update(checkingAccount.id, { currency });
         }
         if (currencyChanged && creditCardAccount) {
           await accountsApi.update(creditCardAccount.id, { currency });
         }
-        if (currencyChanged && investmentAccount && !wantsUnify && !alreadyUnified) {
+        if (currencyChanged && investmentAccount) {
           await accountsApi.update(investmentAccount.id, { currency });
         }
         if (creditCardAccount) {
@@ -127,7 +118,7 @@ export default function BankConfigModal({
         const balance = maskToNumber(openingBalance);
         const limit = maskToNumber(creditLimit);
 
-        const { account: newCheckingAccount } = await accountsApi.create({
+        await accountsApi.create({
           bank_id: newBank.id,
           type: 'checking',
           name: `Conta corrente ${newBank.name}`,
@@ -144,20 +135,12 @@ export default function BankConfigModal({
           credit_card: { credit_limit: limit, closing_day: Number(closingDay), due_day: Number(dueDay) },
         });
 
-        if (unifyInvestment) {
-          await accountsApi.create({
-            bank_id: newBank.id,
-            type: 'investment',
-            unify_with_account_id: newCheckingAccount.id,
-          });
-        } else {
-          await accountsApi.create({
-            bank_id: newBank.id,
-            type: 'investment',
-            name: `Investimentos ${newBank.name}`,
-            currency,
-          });
-        }
+        await accountsApi.create({
+          bank_id: newBank.id,
+          type: 'investment',
+          name: `Investimentos ${newBank.name}`,
+          currency,
+        });
       }
 
       showSuccess(isEditing ? 'Banco atualizado com sucesso.' : 'Banco criado com sucesso.');
@@ -252,36 +235,6 @@ export default function BankConfigModal({
             <div className="field">
               <label>Saldo inicial da conta corrente</label>
               <CurrencyInput value={openingBalance} onChange={setOpeningBalance} />
-            </div>
-          )}
-
-          {(!isEditing || hasSeparateInvestmentAccount || alreadyUnified) && (
-            <div className="field">
-              <label
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  cursor: alreadyUnified ? 'default' : 'pointer',
-                  opacity: alreadyUnified ? 0.7 : 1,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={unifyInvestment}
-                  disabled={alreadyUnified}
-                  onChange={(e) => setUnifyInvestment(e.target.checked)}
-                  style={{ width: 'auto' }}
-                />
-                Unificar conta corrente com investimentos
-              </label>
-              <div style={{ fontSize: 11.5, color: 'var(--ink-faint)', marginTop: 4 }}>
-                {alreadyUnified
-                  ? 'Esta conta já está unificada.'
-                  : isEditing
-                  ? 'A conta de investimento atual será combinada com a conta corrente, preservando o histórico. Esta ação não pode ser desfeita.'
-                  : 'O dinheiro de compra e venda de ativos entra e sai direto da conta corrente, sem precisar transferir para uma conta de investimento separada.'}
-              </div>
             </div>
           )}
 

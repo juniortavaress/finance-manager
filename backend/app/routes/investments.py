@@ -346,24 +346,9 @@ def investments_summary():
         if bank_filter and str(account.bank_id) != bank_filter:
             continue
 
-        if ia.is_unified:
-            # Sem transferencia pra rastrear (mesma conta), usa o fluxo liquido de
-            # capital que entrou/saiu da carteira via compras e vendas - assim,
-            # vender um ativo com lucro e reinvestir nao conta como novo aporte
-            # (o lucro reciclado se cancela: entra na venda, sai de novo na compra).
-            ia_assets = [a for a in all_assets if a.investment_account_id == ia.id]
-            net_trade_flow = Decimal("0")
-            for asset in ia_assets:
-                for tx in asset.asset_transactions:
-                    if tx.type == "buy":
-                        net_trade_flow += tx.total_amount
-                    else:
-                        net_trade_flow -= tx.total_amount
-            ia_invested = net_trade_flow
-        else:
-            net_transferred = _transfer_flow(account, "income") - _transfer_flow(account, "expense")
-            total_transferred += net_transferred
-            ia_invested = net_transferred
+        net_transferred = _transfer_flow(account, "income") - _transfer_flow(account, "expense")
+        total_transferred += net_transferred
+        ia_invested = net_transferred
 
         total_invested += ia_invested
         bank_for_ia = Bank.query.get(account.bank_id)
@@ -407,18 +392,14 @@ def investments_summary():
         relevant_assets = [a for a in all_assets if a.investment_account_id in relevant_ia_ids]
         current_amount_by_asset_id = {a["id"]: a["position"]["current_amount"] for a in assets_result}
 
-        # Movimentacoes de aporte liquido, com data, pra plotar em degrau: para
-        # contas separadas sao as transferencias externas (mesmo criterio de
-        # net_transferred acima); para unificadas, o proprio fluxo de compra/venda.
+        # Movimentacoes de aporte liquido, com data, pra plotar em degrau (mesmo
+        # criterio de net_transferred acima): transferencias externas para a
+        # conta de investimento, excluindo movimentacoes internas de compra/venda.
         net_flow_events = []
-        relevant_non_unified_account_ids = [
-            accounts_by_ia_id[ia_id].id
-            for ia_id in relevant_ia_ids
-            if not next(ia for ia in inv_accounts if ia.id == ia_id).is_unified
-        ]
-        if relevant_non_unified_account_ids:
+        relevant_account_ids = [accounts_by_ia_id[ia_id].id for ia_id in relevant_ia_ids]
+        if relevant_account_ids:
             transfer_txs = Transaction.query.filter(
-                Transaction.account_id.in_(relevant_non_unified_account_ids),
+                Transaction.account_id.in_(relevant_account_ids),
                 Transaction.is_transfer.is_(True),
                 Transaction.status == "confirmed",
                 ~Transaction.description.startswith("Compra "),
@@ -427,13 +408,6 @@ def investments_summary():
             ).all()
             for tx in transfer_txs:
                 signed_amount = tx.amount if tx.type == "income" else -tx.amount
-                net_flow_events.append((tx.date, signed_amount))
-        for asset in relevant_assets:
-            ia = next(ia for ia in inv_accounts if ia.id == asset.investment_account_id)
-            if not ia.is_unified:
-                continue
-            for tx in asset.asset_transactions:
-                signed_amount = tx.total_amount if tx.type == "buy" else -tx.total_amount
                 net_flow_events.append((tx.date, signed_amount))
 
         for month_start in months:
