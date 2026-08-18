@@ -288,6 +288,7 @@ def investments_summary():
         return {
             "assets": [],
             "unallocated_by_bank": [],
+            "invested_by_bank": [],
             "evolution": [],
             "total_transferred": 0,
             "total_invested": 0,
@@ -336,6 +337,7 @@ def investments_summary():
         ) or Decimal("0")
 
     unallocated_by_bank = []
+    invested_by_bank = []
     total_unallocated = Decimal("0")
     total_transferred = Decimal("0")
     total_invested = Decimal("0")
@@ -357,11 +359,22 @@ def investments_summary():
                         net_trade_flow += tx.total_amount
                     else:
                         net_trade_flow -= tx.total_amount
-            total_invested += net_trade_flow
+            ia_invested = net_trade_flow
         else:
             net_transferred = _transfer_flow(account, "income") - _transfer_flow(account, "expense")
             total_transferred += net_transferred
-            total_invested += net_transferred
+            ia_invested = net_transferred
+
+        total_invested += ia_invested
+        bank_for_ia = Bank.query.get(account.bank_id)
+        invested_by_bank.append(
+            {
+                "bank_id": str(account.bank_id),
+                "bank_name": bank_for_ia.name if bank_for_ia else None,
+                "bank_color": bank_for_ia.color_hex if bank_for_ia else None,
+                "value": float(ia_invested),
+            }
+        )
 
         if account.balance <= 0:
             continue
@@ -386,12 +399,42 @@ def investments_summary():
             months.append(cursor)
             cursor = add_months(cursor, 1)
 
-        relevant_assets = [
-            a
-            for a in all_assets
-            if not bank_filter or str(accounts_by_ia_id[a.investment_account_id].bank_id) == bank_filter
+        relevant_ia_ids = [
+            ia.id
+            for ia in inv_accounts
+            if not bank_filter or str(accounts_by_ia_id[ia.id].bank_id) == bank_filter
         ]
+        relevant_assets = [a for a in all_assets if a.investment_account_id in relevant_ia_ids]
         current_amount_by_asset_id = {a["id"]: a["position"]["current_amount"] for a in assets_result}
+
+        # Movimentacoes de aporte liquido, com data, pra plotar em degrau: para
+        # contas separadas sao as transferencias externas (mesmo criterio de
+        # net_transferred acima); para unificadas, o proprio fluxo de compra/venda.
+        net_flow_events = []
+        relevant_non_unified_account_ids = [
+            accounts_by_ia_id[ia_id].id
+            for ia_id in relevant_ia_ids
+            if not next(ia for ia in inv_accounts if ia.id == ia_id).is_unified
+        ]
+        if relevant_non_unified_account_ids:
+            transfer_txs = Transaction.query.filter(
+                Transaction.account_id.in_(relevant_non_unified_account_ids),
+                Transaction.is_transfer.is_(True),
+                Transaction.status == "confirmed",
+                ~Transaction.description.startswith("Compra "),
+                ~Transaction.description.startswith("Venda "),
+                ~Transaction.description.startswith("Provento "),
+            ).all()
+            for tx in transfer_txs:
+                signed_amount = tx.amount if tx.type == "income" else -tx.amount
+                net_flow_events.append((tx.date, signed_amount))
+        for asset in relevant_assets:
+            ia = next(ia for ia in inv_accounts if ia.id == asset.investment_account_id)
+            if not ia.is_unified:
+                continue
+            for tx in asset.asset_transactions:
+                signed_amount = tx.total_amount if tx.type == "buy" else -tx.total_amount
+                net_flow_events.append((tx.date, signed_amount))
 
         for month_start in months:
             month_end = add_months(month_start, 1)
@@ -424,12 +467,18 @@ def investments_summary():
                     current_total += quantity * asset.current_unit_price
                 else:
                     current_total += cost_basis
+
+            net_flow_total = sum(
+                (amount for date, amount in net_flow_events if date < month_end), Decimal("0")
+            )
+
             evolution.append(
                 {
                     "year": month_start.year,
                     "month": month_start.month,
                     "invested": float(invested_total),
                     "current": float(current_total),
+                    "net_flow": float(net_flow_total),
                 }
             )
 
@@ -473,6 +522,7 @@ def investments_summary():
     return {
         "assets": assets_result,
         "unallocated_by_bank": unallocated_by_bank,
+        "invested_by_bank": invested_by_bank,
         "evolution": evolution,
         "total_transferred": float(total_transferred),
         "total_invested": float(total_invested),

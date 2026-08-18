@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { investmentsApi, dividendsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
-import { fmt } from '../utils/format';
+import { fmt, monthLabelFull } from '../utils/format';
 import InvestmentEvolutionChart from '../components/charts/InvestmentEvolutionChart';
 import UpcomingDividendsChart from '../components/charts/UpcomingDividendsChart';
 import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
 import InvestmentBreakdownDrilldownModal from '../components/modals/InvestmentBreakdownDrilldownModal';
+import DividendsDrilldownModal from '../components/modals/DividendsDrilldownModal';
 import { IconChevronDown } from '../components/icons';
 
 const FREQUENCY_MONTHS = {
@@ -67,11 +68,32 @@ export default function Investments() {
 
   const activeAssets = useMemo(() => assets.filter((a) => a.position.quantity > 0), [assets]);
 
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const dividendsThisMonth = useMemo(
-    () => dividends.filter((d) => d.date.slice(0, 7) === currentMonth).reduce((s, d) => s + d.amount, 0),
-    [dividends, currentMonth]
-  );
+  const dividendsAllTime = useMemo(() => dividends.reduce((s, d) => s + d.amount, 0), [dividends]);
+
+  const dividendsByMonth = useMemo(() => {
+    const map = new Map();
+    dividends.forEach((d) => {
+      const key = d.date.slice(0, 7);
+      map.set(key, (map.get(key) || 0) + d.amount);
+    });
+    return [...map.entries()]
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([key, total]) => {
+        const [year, month] = key.split('-').map(Number);
+        return { label: `${monthLabelFull(month)} ${year}`, value: total };
+      });
+  }, [dividends]);
+
+  const dividendsByYear = useMemo(() => {
+    const map = new Map();
+    dividends.forEach((d) => {
+      const year = d.date.slice(0, 4);
+      map.set(year, (map.get(year) || 0) + d.amount);
+    });
+    return [...map.entries()]
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([year, total]) => ({ label: year, value: total }));
+  }, [dividends]);
 
   const upcomingDividends = useMemo(() => {
     const today = new Date();
@@ -146,6 +168,17 @@ export default function Investments() {
   const bankMax = Math.max(1, ...byBank.map((b) => b.total));
   const bankSum = byBank.reduce((s, b) => s + b.total, 0) || 1;
 
+  const investedByBank = useMemo(() => {
+    const map = {};
+    activeAssets.forEach((a) => {
+      map[a.bank_id] = map[a.bank_id] || { bank_id: a.bank_id, name: a.bank_name, color: a.bank_color, total: 0 };
+      map[a.bank_id].total += a.position.invested_amount;
+    });
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [activeAssets]);
+
+  const contributionsByBank = summaryData?.invested_by_bank || [];
+
   const bankOptions = useMemo(() => {
     const seen = new Map();
     assets.forEach((a) => {
@@ -191,31 +224,37 @@ export default function Investments() {
 
       <div className="grid grid-4" style={{ marginBottom: 20 }}>
         <div className="card stat-card" style={{ '--stripe': '#3D7A8C' }}>
-          <div className="label">Aporte líquido</div>
+          <div className="label">Aportes</div>
           <div className="value num">{fmt(totalInvested)}</div>
           <div className="delta">dinheiro que saiu do banco pra carteira</div>
-        </div>
-        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
-          <div className="label">Investido</div>
-          <div className="value num">{fmt(allocatedCostBasis)}</div>
-          <div className="delta">custo das posições atuais</div>
-        </div>
-        <div className="card stat-card" style={{ '--stripe': '#8B9A97' }}>
-          <div className="label">Caixa disponível</div>
-          <div className="value num">{fmt(totalUnallocated)}</div>
-          {unallocatedByBank.length > 0 && (
+          {contributionsByBank.length > 0 && (
             <button
               type="button"
               className="stat-card-expand"
               title="Ver por corretora"
-              onClick={() => setDrilldown({ kind: 'unallocated' })}
+              onClick={() => setDrilldown({ kind: 'contributions' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
+        </div>
+        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
+          <div className="label">Valor investido</div>
+          <div className="value num">{fmt(allocatedCostBasis)}</div>
+          <div className="delta">custo das posições atuais</div>
+          {investedByBank.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver por corretora"
+              onClick={() => setDrilldown({ kind: 'invested' })}
             >
               <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
             </button>
           )}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
-          <div className="label">Valor atual</div>
+          <div className="label">Valor atual investido</div>
           <div className="value num">{fmt(totalCurrent)}</div>
           {byBank.length > 0 && (
             <button
@@ -223,6 +262,20 @@ export default function Investments() {
               className="stat-card-expand"
               title="Ver por corretora"
               onClick={() => setDrilldown({ kind: 'current' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
+        </div>
+        <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
+          <div className="label">Dividendos</div>
+          <div className="value num">{fmt(dividendsAllTime)}</div>
+          {dividends.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver mês a mês / anual"
+              onClick={() => setDrilldown({ kind: 'dividends' })}
             >
               <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
             </button>
@@ -244,9 +297,19 @@ export default function Investments() {
             </button>
           )}
         </div>
-        <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
-          <div className="label">Dividendos este mês</div>
-          <div className="value num">{fmt(dividendsThisMonth)}</div>
+        <div className="card stat-card" style={{ '--stripe': '#8B9A97' }}>
+          <div className="label">Caixa disponível</div>
+          <div className="value num">{fmt(totalUnallocated)}</div>
+          {unallocatedByBank.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver por corretora"
+              onClick={() => setDrilldown({ kind: 'unallocated' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -318,6 +381,10 @@ export default function Investments() {
                   />
                   Investido
                 </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--ink-soft)' }}>
+                  <span style={{ width: 14, height: 2, background: 'var(--gold)', display: 'inline-block' }} />
+                  Aporte líquido
+                </span>
               </span>
             )}
           </h3>
@@ -385,6 +452,20 @@ export default function Investments() {
       />
 
       <InvestmentBreakdownDrilldownModal
+        open={drilldown?.kind === 'contributions'}
+        onClose={() => setDrilldown(null)}
+        title="Aportes por corretora"
+        rows={contributionsByBank.map((b) => ({ label: b.bank_name, value: b.value, color: b.bank_color }))}
+      />
+
+      <InvestmentBreakdownDrilldownModal
+        open={drilldown?.kind === 'invested'}
+        onClose={() => setDrilldown(null)}
+        title="Valor investido por corretora"
+        rows={investedByBank.map((b) => ({ label: b.name, value: b.total, color: b.color }))}
+      />
+
+      <InvestmentBreakdownDrilldownModal
         open={drilldown?.kind === 'unallocated'}
         onClose={() => setDrilldown(null)}
         title="Caixa disponível por corretora"
@@ -396,6 +477,13 @@ export default function Investments() {
         onClose={() => setDrilldown(null)}
         title="Valor atual por corretora"
         rows={byBank.map((b) => ({ label: b.name, value: b.total, color: b.color }))}
+      />
+
+      <DividendsDrilldownModal
+        open={drilldown?.kind === 'dividends'}
+        onClose={() => setDrilldown(null)}
+        byMonth={dividendsByMonth}
+        byYear={dividendsByYear}
       />
     </div>
   );

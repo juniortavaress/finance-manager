@@ -14,6 +14,7 @@ export default function InvestmentEvolutionChart({ periods }) {
     fullLabel: `${monthLabel(p.month)} ${p.year}`,
     invested: p.invested,
     current: p.current,
+    netFlow: p.net_flow,
   }));
 
   const labelByKey = Object.fromEntries(data.map((d) => [d.key, d.label]));
@@ -47,6 +48,14 @@ export default function InvestmentEvolutionChart({ periods }) {
             strokeWidth={2}
             strokeDasharray="5 4"
             dot={showDots ? { r: 3, fill: CHART_COLORS.inkFaint, strokeWidth: 0 } : false}
+          />
+          <Line
+            type="stepAfter"
+            dataKey="netFlow"
+            name="Aporte líquido"
+            stroke={CHART_COLORS.gold}
+            strokeWidth={1.5}
+            dot={showDots ? { r: 3, fill: CHART_COLORS.gold, strokeWidth: 0 } : false}
           />
           <Line
             type="monotone"
