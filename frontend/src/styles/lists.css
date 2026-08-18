@@ -205,9 +205,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 0;
+  padding: 12px 8px;
+  margin: 0 -8px;
   border-bottom: 1px solid var(--line);
+  border-radius: 8px;
   gap: 12px;
+  transition: background 0.12s ease;
+}
+.compra-row:hover {
+  background: var(--bg);
 }
 .compra-row:last-child {
   border-bottom: none;

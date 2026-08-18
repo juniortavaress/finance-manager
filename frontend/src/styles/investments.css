@@ -19,12 +19,12 @@
 }
 .asset-row {
   display: grid;
-  grid-template-columns: 1.8fr 1fr 1fr 0.7fr 1fr 1fr 1fr 1fr 1fr 0.8fr 32px;
+  grid-template-columns: 1.8fr 1fr 1fr 0.7fr 1fr 1fr 1fr 1fr 1fr 0.8fr;
   gap: 10px;
   align-items: center;
   padding: 12px 4px;
   border-bottom: 1px solid var(--line);
-  min-width: 870px;
+  min-width: 840px;
 }
 .asset-row:last-child {
   border-bottom: none;
