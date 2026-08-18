@@ -344,10 +344,19 @@ def investments_summary():
             continue
 
         if ia.is_unified:
+            # Sem transferencia pra rastrear (mesma conta), usa o fluxo liquido de
+            # capital que entrou/saiu da carteira via compras e vendas - assim,
+            # vender um ativo com lucro e reinvestir nao conta como novo aporte
+            # (o lucro reciclado se cancela: entra na venda, sai de novo na compra).
             ia_assets = [a for a in all_assets if a.investment_account_id == ia.id]
-            total_invested += sum(
-                (Decimal(str(_asset_position(a)["invested_amount"])) for a in ia_assets), Decimal("0")
-            )
+            net_trade_flow = Decimal("0")
+            for asset in ia_assets:
+                for tx in asset.asset_transactions:
+                    if tx.type == "buy":
+                        net_trade_flow += tx.total_amount
+                    else:
+                        net_trade_flow -= tx.total_amount
+            total_invested += net_trade_flow
         else:
             net_transferred = _transfer_flow(account, "income") - _transfer_flow(account, "expense")
             total_transferred += net_transferred
