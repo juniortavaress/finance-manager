@@ -24,3 +24,8 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Arquivos locais soltos na raiz (planilhas exportadas, paginas salvas, scripts soltos, etc.)
+/*.xlsx
+/*.html
+backend/scripts/

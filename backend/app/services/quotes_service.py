@@ -1,76 +1,20 @@
-import datetime as dt
-import json
-import logging
-import ssl
-import urllib.error
-import urllib.request
 from decimal import Decimal
 
-import certifi
+from app.models.quote import Quote
 
 QUOTE_CURRENCIES = ("USD", "EUR", "GBP")
-CACHE_TTL_SECONDS = 3600
-RETRY_BACKOFF_SECONDS = 60
-
-_cache = {"fetched_at": None, "rates": None}
-_last_failure_at = None
-_logger = logging.getLogger(__name__)
-_ssl_context = ssl.create_default_context(cafile=certifi.where())
-
-
-def _fetch_rates_brl_base():
-    """Busca cotacao de USD/EUR/GBP em BRL na AwesomeAPI (economia.awesomeapi.com.br,
-    sem chave). Retorna None em caso de falha de rede - quem chama decide o
-    fallback (cache antigo ou None)."""
-    pairs = ",".join(f"{code}-BRL" for code in QUOTE_CURRENCIES)
-    url = f"https://economia.awesomeapi.com.br/json/last/{pairs}"
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "finance-manager/1.0"})
-        with urllib.request.urlopen(req, timeout=10, context=_ssl_context) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        _logger.warning("Falha ao buscar cotacoes na AwesomeAPI: %s", exc)
-        return None
-
-    rates = {}
-    for code in QUOTE_CURRENCIES:
-        entry = payload.get(f"{code}BRL") or {}
-        bid = entry.get("bid")
-        if bid:
-            try:
-                rates[code] = float(bid)
-            except (TypeError, ValueError):
-                continue
-    return rates or None
 
 
 def get_brl_rates():
     """Cotacao atual de USD/EUR/GBP em BRL (quantos reais vale 1 unidade da
-    moeda), cacheada em memoria do processo por CACHE_TTL_SECONDS - evita bater
-    na API externa a cada request. Apos uma falha (ex: rate limit 429), espera
-    RETRY_BACKOFF_SECONDS antes de tentar de novo, para nao martelar a API a
-    cada request de usuario enquanto ela estiver limitando/fora do ar."""
-    global _last_failure_at
-    now = dt.datetime.now(dt.timezone.utc)
-    if (
-        _cache["rates"] is not None
-        and _cache["fetched_at"] is not None
-        and (now - _cache["fetched_at"]).total_seconds() < CACHE_TTL_SECONDS
-    ):
-        return _cache["rates"], _cache["fetched_at"]
-
-    if _last_failure_at is not None and (now - _last_failure_at).total_seconds() < RETRY_BACKOFF_SECONDS:
-        return _cache["rates"], _cache["fetched_at"]
-
-    fresh = _fetch_rates_brl_base()
-    if fresh is not None:
-        _cache["rates"] = fresh
-        _cache["fetched_at"] = now
-        _last_failure_at = None
-        return fresh, now
-
-    _last_failure_at = now
-    return _cache["rates"], _cache["fetched_at"]
+    moeda), lida da tabela `quotes` - atualizada por um script externo, nao
+    por chamada a API neste processo."""
+    rows = Quote.query.filter(Quote.currency.in_(QUOTE_CURRENCIES)).all()
+    if not rows:
+        return None, None
+    rates = {row.currency: float(row.brl_rate) for row in rows}
+    fetched_at = max(row.updated_at for row in rows)
+    return rates, fetched_at
 
 
 def convert_to_brl(amount, currency, rates):

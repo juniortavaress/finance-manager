@@ -7,6 +7,7 @@ from app.models.installment import InstallmentPlan
 from app.models.investment import Asset, AssetTransaction, DividendSchedule, Dividend
 from app.models.budget import Budget
 from app.models.friends import Friendship, Group, GroupMember, SharedExpense, ExpenseParticipant, Settlement
+from app.models.quote import Quote
 
 __all__ = [
     "User",
@@ -32,4 +33,5 @@ __all__ = [
     "SharedExpense",
     "ExpenseParticipant",
     "Settlement",
+    "Quote",
 ]
