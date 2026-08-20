@@ -426,18 +426,30 @@ def investments_summary():
                 signed_amount = tx.amount if tx.type == "income" else -tx.amount
                 net_flow_events.append((tx.date, signed_amount))
 
+        # Estado incremental por asset (quantidade/custo/preco medio acumulados
+        # ate o cursor atual). Como asset_transactions ja vem ordenado por data,
+        # cada asset avanca pelas suas transacoes uma unica vez ao longo dos
+        # meses, em vez de reprocessar o historico inteiro em cada iteracao
+        # (O(ativos x transacoes) no total, em vez de O(meses x ativos x transacoes)).
+        asset_state = {
+            asset.id: {"quantity": Decimal("0"), "cost_basis": Decimal("0"), "avg_price": Decimal("0"), "tx_idx": 0}
+            for asset in relevant_assets
+        }
+
         for month_start in months:
             month_end = add_months(month_start, 1)
             is_current_month = month_start == last
             invested_total = Decimal("0")
             current_total = Decimal("0")
             for asset in relevant_assets:
-                quantity = Decimal("0")
-                cost_basis = Decimal("0")
-                avg_price = Decimal("0")
-                for tx in asset.asset_transactions:
-                    if tx.date >= month_end:
-                        continue
+                state = asset_state[asset.id]
+                txs = asset.asset_transactions
+                idx = state["tx_idx"]
+                quantity = state["quantity"]
+                cost_basis = state["cost_basis"]
+                avg_price = state["avg_price"]
+                while idx < len(txs) and txs[idx].date < month_end:
+                    tx = txs[idx]
                     if tx.type == "buy":
                         cost_basis += tx.quantity * tx.unit_price
                         quantity += tx.quantity
@@ -445,6 +457,12 @@ def investments_summary():
                     else:
                         cost_basis -= tx.quantity * avg_price
                         quantity -= tx.quantity
+                    idx += 1
+                state["tx_idx"] = idx
+                state["quantity"] = quantity
+                state["cost_basis"] = cost_basis
+                state["avg_price"] = avg_price
+
                 invested_total += cost_basis
                 if is_current_month:
                     # No mes atual, usa exatamente o mesmo valor projetado do card
