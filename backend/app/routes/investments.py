@@ -2,6 +2,7 @@ import datetime as dt
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, g, request
+from sqlalchemy.orm import selectinload
 
 from app.auth_decorator import login_required
 from app.errors import ApiError
@@ -190,7 +191,7 @@ def _settle_all_matured_pre_fixado(user_id):
         Asset.fixed_income_type == "pre_fixado",
         Asset.maturity_date.isnot(None),
         Asset.maturity_date <= dt.date.today(),
-    ).all()
+    ).options(selectinload(Asset.asset_transactions)).all()
     for asset in assets:
         _settle_matured_pre_fixado(asset)
     if assets:
@@ -203,7 +204,13 @@ def list_assets():
     _settle_all_matured_pre_fixado(g.current_user.id)
 
     inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
-    all_assets = Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all() if inv_account_ids else []
+    all_assets = (
+        Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids))
+        .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
+        .all()
+        if inv_account_ids
+        else []
+    )
 
     active, archived = [], []
     for asset in all_assets:
@@ -225,11 +232,13 @@ def list_asset_transactions():
         ia_query = ia_query.filter(Account.bank_id == bank_id)
     inv_account_ids = [ia.id for ia in ia_query.all()]
 
-    asset_ids = (
-        [a.id for a in Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all()]
+    owned_assets = (
+        Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all()
         if inv_account_ids
         else []
     )
+    assets_by_id = {a.id: a for a in owned_assets}
+    asset_ids = list(assets_by_id.keys())
     if not asset_ids:
         return {"asset_transactions": [], "total": 0, "page": 1, "page_size": 15}
 
@@ -254,7 +263,7 @@ def list_asset_transactions():
         result = []
         for tx in query.all():
             data = tx.to_dict()
-            data["asset"] = tx.asset.to_dict()
+            data["asset"] = assets_by_id[tx.asset_id].to_dict()
             result.append(data)
         return {"asset_transactions": result, "total": len(result), "page": 1, "page_size": len(result) or 15}
 
@@ -266,7 +275,7 @@ def list_asset_transactions():
     result = []
     for tx in items:
         data = tx.to_dict()
-        data["asset"] = tx.asset.to_dict()
+        data["asset"] = assets_by_id[tx.asset_id].to_dict()
         result.append(data)
     return {"asset_transactions": result, "total": total, "page": page, "page_size": page_size}
 
@@ -299,18 +308,25 @@ def investments_summary():
             "rentability_last_year": None,
         }
 
-    accounts_by_ia_id = {
-        ia.id: Account.query.get(ia.account_id) for ia in inv_accounts
-    }
+    account_ids = [ia.account_id for ia in inv_accounts]
+    accounts_by_id = {a.id: a for a in Account.query.filter(Account.id.in_(account_ids)).all()}
+    accounts_by_ia_id = {ia.id: accounts_by_id[ia.account_id] for ia in inv_accounts}
 
-    all_assets = Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all()
+    bank_ids = {a.bank_id for a in accounts_by_id.values()}
+    banks_by_id = {b.id: b for b in Bank.query.filter(Bank.id.in_(bank_ids)).all()}
+
+    all_assets = (
+        Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids))
+        .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
+        .all()
+    )
     assets_result = []
     earliest_date = None
     for asset in all_assets:
         account = accounts_by_ia_id[asset.investment_account_id]
         if bank_filter and str(account.bank_id) != bank_filter:
             continue
-        bank = Bank.query.get(account.bank_id)
+        bank = banks_by_id.get(account.bank_id)
         data = asset.to_dict()
         data["position"] = _asset_position(asset)
         data["bank_id"] = str(account.bank_id)
@@ -351,7 +367,7 @@ def investments_summary():
         ia_invested = net_transferred
 
         total_invested += ia_invested
-        bank_for_ia = Bank.query.get(account.bank_id)
+        bank_for_ia = banks_by_id.get(account.bank_id)
         invested_by_bank.append(
             {
                 "bank_id": str(account.bank_id),
@@ -363,7 +379,7 @@ def investments_summary():
 
         if account.balance <= 0:
             continue
-        bank = Bank.query.get(account.bank_id)
+        bank = banks_by_id.get(account.bank_id)
         total_unallocated += account.balance
         unallocated_by_bank.append(
             {
