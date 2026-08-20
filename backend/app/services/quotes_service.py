@@ -10,23 +10,26 @@ _cache = {"fetched_at": None, "rates": None}
 
 
 def _fetch_rates_brl_base():
-    """Busca cotacao de USD/EUR/GBP em BRL na Frankfurter (API publica do BCE,
+    """Busca cotacao de USD/EUR/GBP em BRL na AwesomeAPI (economia.awesomeapi.com.br,
     sem chave). Retorna None em caso de falha de rede - quem chama decide o
     fallback (cache antigo ou None)."""
-    symbols = ",".join(QUOTE_CURRENCIES)
-    url = f"https://api.frankfurter.app/latest?from=BRL&to={symbols}"
+    pairs = ",".join(f"{code}-BRL" for code in QUOTE_CURRENCIES)
+    url = f"https://economia.awesomeapi.com.br/json/last/{pairs}"
     try:
         with urllib.request.urlopen(url, timeout=5) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, ValueError):
         return None
 
-    rates_from_brl = payload.get("rates") or {}
     rates = {}
     for code in QUOTE_CURRENCIES:
-        rate_from_brl = rates_from_brl.get(code)
-        if rate_from_brl:
-            rates[code] = 1 / rate_from_brl
+        entry = payload.get(f"{code}BRL") or {}
+        bid = entry.get("bid")
+        if bid:
+            try:
+                rates[code] = float(bid)
+            except (TypeError, ValueError):
+                continue
     return rates or None
 
 
