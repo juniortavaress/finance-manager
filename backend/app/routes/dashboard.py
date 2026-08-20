@@ -53,6 +53,7 @@ def summary():
     def period_totals(d_start, d_end):
         rows = (
             db.session.query(Transaction.type, db.func.coalesce(db.func.sum(Transaction.amount), 0))
+            .join(Account, Account.id == Transaction.account_id)
             .filter(
                 Transaction.user_id == g.current_user.id,
                 Transaction.date >= d_start,
@@ -60,6 +61,7 @@ def summary():
                 Transaction.status == "confirmed",
                 Transaction.is_invoice_payment.is_(False),
                 Transaction.is_transfer.is_(False),
+                Account.type == "checking",
             )
             .group_by(Transaction.type)
             .all()
@@ -73,7 +75,7 @@ def summary():
     previous = period_totals(prev_start, prev_end)
 
     income_count = (
-        Transaction.query.filter(
+        Transaction.query.join(Account, Account.id == Transaction.account_id).filter(
             Transaction.user_id == g.current_user.id,
             Transaction.type == "income",
             Transaction.date >= start,
@@ -81,6 +83,7 @@ def summary():
             Transaction.status == "confirmed",
             Transaction.is_invoice_payment.is_(False),
             Transaction.is_transfer.is_(False),
+            Account.type == "checking",
         ).count()
     )
 
@@ -169,12 +172,14 @@ def income_vs_expense():
             Transaction.type,
             db.func.coalesce(db.func.sum(Transaction.amount), 0),
         )
+        .join(Account, Account.id == Transaction.account_id)
         .filter(
             Transaction.user_id == g.current_user.id,
             Transaction.date >= start_date,
             Transaction.status == "confirmed",
             Transaction.is_invoice_payment.is_(False),
             Transaction.is_transfer.is_(False),
+            Account.type == "checking",
         )
         .group_by(
             db.func.extract("year", Transaction.date),

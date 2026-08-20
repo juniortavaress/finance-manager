@@ -8,7 +8,7 @@ function lastDayIso(year, month) {
   return new Date(year, month, 0).toISOString().slice(0, 10);
 }
 
-export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type }) {
+export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type, categoryId }) {
   const { categoryById } = useData();
   const { data, loading } = useFetch(
     () =>
@@ -16,12 +16,14 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
         date_from: `${year}-${String(month).padStart(2, '0')}-01`,
         date_to: lastDayIso(year, month),
         type,
+        category_id: categoryId || undefined,
+        account_type: categoryId ? undefined : 'checking',
         is_invoice_payment: false,
         is_transfer: false,
         status: 'confirmed',
         page_size: 200,
       }),
-    [year, month, type]
+    [year, month, type, categoryId]
   );
   const transactions = data?.transactions || [];
   const pos = type === 'income';
