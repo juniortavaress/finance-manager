@@ -424,17 +424,30 @@ export default function Investments() {
                 <div className="tx-icon" style={{ background: `${TYPE_COLORS[asset.type]}22`, color: TYPE_COLORS[asset.type] }}>
                   {(asset.code || asset.name).slice(0, 2).toUpperCase()}
                 </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div className="tx-desc">{asset.code || asset.name}</div>
-                    {asset.code && <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>{asset.name}</span>}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    <div className="tx-desc" style={{ flexShrink: 0 }}>{asset.code || asset.name}</div>
+                    {asset.code && (
+                      <span
+                        style={{
+                          fontSize: 11.5,
+                          color: 'var(--ink-faint)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0,
+                        }}
+                      >
+                        {asset.name}
+                      </span>
+                    )}
                   </div>
                   <div className="tx-meta">
                     {asset.bank_name} · {pos.quantity} un. · preço médio {fmt(pos.avg_unit_price)}
                   </div>
                 </div>
               </div>
-              <div style={{ textAlign: 'right' }}>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <div className="tx-val num">{fmt(pos.current_amount != null ? pos.current_amount : pos.invested_amount)}</div>
                 <div className="tx-meta">investido {fmt(pos.invested_amount)}</div>
               </div>
