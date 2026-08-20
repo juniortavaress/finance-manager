@@ -3,6 +3,7 @@ import json
 import logging
 import urllib.error
 import urllib.request
+from decimal import Decimal
 
 QUOTE_CURRENCIES = ("USD", "EUR", "GBP")
 CACHE_TTL_SECONDS = 3600
@@ -66,4 +67,6 @@ def convert_to_brl(amount, currency, rates):
     rate = (rates or {}).get(currency)
     if not rate:
         return amount
+    if isinstance(amount, Decimal):
+        rate = Decimal(str(rate))
     return amount * rate
