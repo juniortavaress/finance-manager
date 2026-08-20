@@ -1,4 +1,5 @@
 import ModalShell from './ModalShell';
+import Skeleton from '../Skeleton';
 
 function RentRow({ label, value }) {
   const hasValue = value != null;
@@ -20,6 +21,7 @@ function RentRow({ label, value }) {
 export default function InvestmentRentabilityDrilldownModal({
   open,
   onClose,
+  loading,
   rentabilityTotal,
   rentabilityLastMonth,
   rentabilityLastYear,
@@ -36,9 +38,22 @@ export default function InvestmentRentabilityDrilldownModal({
           </button>
         </div>
         <div className="modal-body">
-          <RentRow label="Acumulada (desde o início)" value={rentabilityTotal} />
-          <RentRow label="Últimos 12 meses" value={rentabilityLastYear} />
-          <RentRow label="Último mês" value={rentabilityLastMonth} />
+          {loading ? (
+            [0, 1, 2].map((i) => (
+              <div className="bank-row" key={i}>
+                <div className="bank-id">
+                  <Skeleton width={140} height={13} />
+                </div>
+                <Skeleton width={50} height={14} />
+              </div>
+            ))
+          ) : (
+            <>
+              <RentRow label="Acumulada (desde o início)" value={rentabilityTotal} />
+              <RentRow label="Últimos 12 meses" value={rentabilityLastYear} />
+              <RentRow label="Último mês" value={rentabilityLastMonth} />
+            </>
+          )}
         </div>
       </div>
     </ModalShell>

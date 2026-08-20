@@ -42,11 +42,11 @@ export default function Investments() {
   const navigate = useNavigate();
   const { bankById, reloadAll } = useData();
   const [bankFilter, setBankFilter] = useState('');
-  const { data: summaryData, reload: reloadSummary } = useFetch(
+  const { data: summaryData, loading: summaryLoading, reload: reloadSummary } = useFetch(
     () => investmentsApi.summary(bankFilter || undefined),
     [bankFilter]
   );
-  const { data: dividendsData, reload: reloadDividends } = useFetch(() => dividendsApi.list(), []);
+  const { data: dividendsData, loading: dividendsLoading, reload: reloadDividends } = useFetch(() => dividendsApi.list(), []);
   const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
   const [drilldown, setDrilldown] = useState(null);
 
@@ -446,6 +446,7 @@ export default function Investments() {
       <InvestmentRentabilityDrilldownModal
         open={drilldown?.kind === 'rentability'}
         onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
         rentabilityTotal={summaryData?.rentability_total}
         rentabilityLastMonth={summaryData?.rentability_last_month}
         rentabilityLastYear={summaryData?.rentability_last_year}
@@ -454,6 +455,7 @@ export default function Investments() {
       <InvestmentBreakdownDrilldownModal
         open={drilldown?.kind === 'contributions'}
         onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
         title="Aportes por corretora"
         rows={contributionsByBank.map((b) => ({ label: b.bank_name, value: b.value, color: b.bank_color }))}
       />
@@ -461,6 +463,7 @@ export default function Investments() {
       <InvestmentBreakdownDrilldownModal
         open={drilldown?.kind === 'invested'}
         onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
         title="Valor investido por corretora"
         rows={investedByBank.map((b) => ({ label: b.name, value: b.total, color: b.color }))}
       />
@@ -468,6 +471,7 @@ export default function Investments() {
       <InvestmentBreakdownDrilldownModal
         open={drilldown?.kind === 'unallocated'}
         onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
         title="Caixa disponível por corretora"
         rows={unallocatedByBank.map((b) => ({ label: b.bank_name, value: b.balance, color: b.bank_color }))}
       />
@@ -475,6 +479,7 @@ export default function Investments() {
       <InvestmentBreakdownDrilldownModal
         open={drilldown?.kind === 'current'}
         onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
         title="Valor atual por corretora"
         rows={byBank.map((b) => ({ label: b.name, value: b.total, color: b.color }))}
       />
@@ -482,6 +487,7 @@ export default function Investments() {
       <DividendsDrilldownModal
         open={drilldown?.kind === 'dividends'}
         onClose={() => setDrilldown(null)}
+        loading={dividendsLoading}
         byMonth={dividendsByMonth}
         byYear={dividendsByYear}
       />

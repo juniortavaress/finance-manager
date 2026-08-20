@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
+import Skeleton from '../Skeleton';
 
-export default function DividendsDrilldownModal({ open, onClose, byMonth, byYear }) {
+export default function DividendsDrilldownModal({ open, onClose, byMonth, byYear, loading }) {
   const [view, setView] = useState('month');
   if (!open) return null;
 
@@ -27,10 +28,19 @@ export default function DividendsDrilldownModal({ open, onClose, byMonth, byYear
             </div>
           </div>
 
-          {rows.length === 0 && (
+          {loading &&
+            [0, 1, 2].map((i) => (
+              <div className="bank-row" key={i}>
+                <div className="bank-id">
+                  <Skeleton width={110} height={13} />
+                </div>
+                <Skeleton width={70} height={14} />
+              </div>
+            ))}
+          {!loading && rows.length === 0 && (
             <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Nenhum provento recebido ainda.</p>
           )}
-          {rows.map((r) => (
+          {!loading && rows.map((r) => (
             <div className="bank-row" key={r.label}>
               <div className="bank-id">
                 <div className="bank-name">{r.label}</div>
