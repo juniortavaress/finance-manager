@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
@@ -71,6 +71,7 @@ export default function Portfolio() {
   const [editingPriceId, setEditingPriceId] = useState(null);
   const [editingPriceValue, setEditingPriceValue] = useState('');
   const [savingPrice, setSavingPrice] = useState(false);
+  const editSettledRef = useRef(false);
 
   const assets = showArchived ? assetsData?.archived_assets || [] : assetsData?.assets || [];
   const hasArchived = (assetsData?.archived_assets || []).length > 0;
@@ -163,16 +164,20 @@ export default function Portfolio() {
 
   function startEditTotal(asset) {
     const currentAmount = asset.position.current_amount != null ? asset.position.current_amount : asset.position.invested_amount;
+    editSettledRef.current = false;
     setEditingPriceId(asset.id);
     setEditingPriceValue(currentAmount != null ? numberToMasked(currentAmount) : '');
   }
 
   function cancelEditPrice() {
+    editSettledRef.current = true;
     setEditingPriceId(null);
     setEditingPriceValue('');
   }
 
   async function saveEditTotal(asset) {
+    if (editSettledRef.current) return;
+    editSettledRef.current = true;
     const total = maskToNumber(editingPriceValue);
     const quantity = asset.position.quantity || 0;
     const unitPrice = quantity > 0 && total > 0 ? total / quantity : null;
