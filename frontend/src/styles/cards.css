@@ -125,6 +125,18 @@
 .hbar-row {
   margin-bottom: 13px;
 }
+.hbar-row-clickable {
+  cursor: pointer;
+  border-radius: 8px;
+  padding: 4px 6px;
+  margin: 0 -6px 9px;
+  transition: background 0.12s ease;
+}
+.hbar-row-clickable:hover,
+.hbar-row-clickable:focus-visible {
+  background: var(--bg);
+  outline: none;
+}
 .hbar-top {
   display: flex;
   justify-content: space-between;

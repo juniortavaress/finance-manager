@@ -200,7 +200,16 @@ export default function Dashboard() {
             ))}
           {!catsLoading && categories.length === 0 && <div className="empty-state">Nenhum gasto neste período.</div>}
           {!catsLoading && categories.map((c) => (
-            <div className="hbar-row" key={c.id}>
+            <div
+              className="hbar-row hbar-row-clickable"
+              key={c.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDrilldown({ kind: 'category', categoryId: c.id, categoryName: c.name })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') setDrilldown({ kind: 'category', categoryId: c.id, categoryName: c.name });
+              }}
+            >
               <div className="hbar-top">
                 <span className="cat">
                   <span className="catdot" style={{ background: c.color_hex }} />
@@ -415,6 +424,17 @@ export default function Dashboard() {
       )}
       {drilldown?.kind === 'invoices' && (
         <InvoicesDrilldownModal open onClose={() => setDrilldown(null)} />
+      )}
+      {drilldown?.kind === 'category' && (
+        <TransactionsDrilldownModal
+          open
+          onClose={() => setDrilldown(null)}
+          title={`${drilldown.categoryName} — ${monthLabel(period.month).toLowerCase()}`}
+          year={period.year}
+          month={period.month}
+          type="expense"
+          categoryId={drilldown.categoryId}
+        />
       )}
     </div>
   );
