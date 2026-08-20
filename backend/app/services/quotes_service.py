@@ -10,8 +10,10 @@ import certifi
 
 QUOTE_CURRENCIES = ("USD", "EUR", "GBP")
 CACHE_TTL_SECONDS = 3600
+RETRY_BACKOFF_SECONDS = 60
 
 _cache = {"fetched_at": None, "rates": None}
+_last_failure_at = None
 _logger = logging.getLogger(__name__)
 _ssl_context = ssl.create_default_context(cafile=certifi.where())
 
@@ -45,7 +47,10 @@ def _fetch_rates_brl_base():
 def get_brl_rates():
     """Cotacao atual de USD/EUR/GBP em BRL (quantos reais vale 1 unidade da
     moeda), cacheada em memoria do processo por CACHE_TTL_SECONDS - evita bater
-    na API externa a cada request."""
+    na API externa a cada request. Apos uma falha (ex: rate limit 429), espera
+    RETRY_BACKOFF_SECONDS antes de tentar de novo, para nao martelar a API a
+    cada request de usuario enquanto ela estiver limitando/fora do ar."""
+    global _last_failure_at
     now = dt.datetime.now(dt.timezone.utc)
     if (
         _cache["rates"] is not None
@@ -54,12 +59,17 @@ def get_brl_rates():
     ):
         return _cache["rates"], _cache["fetched_at"]
 
+    if _last_failure_at is not None and (now - _last_failure_at).total_seconds() < RETRY_BACKOFF_SECONDS:
+        return _cache["rates"], _cache["fetched_at"]
+
     fresh = _fetch_rates_brl_base()
     if fresh is not None:
         _cache["rates"] = fresh
         _cache["fetched_at"] = now
+        _last_failure_at = None
         return fresh, now
 
+    _last_failure_at = now
     return _cache["rates"], _cache["fetched_at"]
 
 
