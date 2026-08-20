@@ -59,6 +59,7 @@ const NAV_GROUPS = [
     label: 'Outros',
     items: [
       { to: '/relatorios', label: 'Relatórios', icon: IconChart, disabled: true },
+      { to: '/cotacoes', label: 'Cotações', icon: IconCoin },
       { to: '/configuracoes', label: 'Configurações', icon: IconGear },
     ],
   },

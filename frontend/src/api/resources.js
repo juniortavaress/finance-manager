@@ -99,6 +99,10 @@ export const reportsApi = {
   monthlyComparison: (months) => api.get('/reports/monthly-comparison', { months }),
 };
 
+export const quotesApi = {
+  list: () => api.get('/quotes/'),
+};
+
 export const friendsApi = {
   search: (q) => api.get('/friends/search', { q }),
   list: () => api.get('/friends/'),

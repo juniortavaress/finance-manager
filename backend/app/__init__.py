@@ -35,6 +35,7 @@ def create_app():
     from app.routes.dividends import dividends_bp
     from app.routes.dashboard import dashboard_bp
     from app.routes.reports import reports_bp
+    from app.routes.quotes import quotes_bp
     from app.routes.friends import friends_bp
     from app.routes.groups import groups_bp
     from app.routes.shared_expenses import shared_expenses_bp
@@ -52,6 +53,7 @@ def create_app():
     app.register_blueprint(dividends_bp, url_prefix="/api/dividends")
     app.register_blueprint(dashboard_bp, url_prefix="/api/dashboard")
     app.register_blueprint(reports_bp, url_prefix="/api/reports")
+    app.register_blueprint(quotes_bp, url_prefix="/api/quotes")
     app.register_blueprint(friends_bp, url_prefix="/api/friends")
     app.register_blueprint(groups_bp, url_prefix="/api/groups")
     app.register_blueprint(shared_expenses_bp, url_prefix="/api/shared-expenses")
