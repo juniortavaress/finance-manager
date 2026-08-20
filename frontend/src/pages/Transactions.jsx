@@ -29,6 +29,7 @@ function RowActionButton({ title, onClick, color, children }) {
         background: 'transparent',
         color: 'var(--ink-faint)',
         cursor: 'pointer',
+        flexShrink: 0,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = 'var(--bg)';
@@ -284,9 +285,9 @@ export default function Transactions() {
                 >
                   {t.is_transfer ? '🔁' : t.group_icon || category?.icon || '📁'}
                 </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <div className="tx-desc">{t.description}</div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                    <div className="tx-desc" style={{ minWidth: 0 }}>{t.description}</div>
                     <RowActionButton title="Editar transação" onClick={() => setEditingTx(t)}>
                       <IconPencil style={{ width: 13, height: 13 }} />
                     </RowActionButton>

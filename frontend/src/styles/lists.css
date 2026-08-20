@@ -15,6 +15,11 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
+  flex: 1;
+}
+.tx-left > div:last-child {
+  min-width: 0;
+  flex: 1;
 }
 .tx-icon {
   width: 34px;
@@ -32,6 +37,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
 }
 .tx-meta {
   font-size: 11.5px;
@@ -367,4 +373,17 @@
   text-align: center;
   color: var(--ink-faint);
   font-size: 13px;
+}
+
+@media (max-width: 480px) {
+  .tx-row {
+    flex-wrap: wrap;
+  }
+  .tx-left {
+    min-width: 0;
+    width: 100%;
+  }
+  .tx-val {
+    margin-left: 46px;
+  }
 }
