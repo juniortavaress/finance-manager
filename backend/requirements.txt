@@ -9,3 +9,4 @@ PyJWT==2.9.0
 bcrypt==4.2.0
 gunicorn==23.0.0
 holidays==0.102
+certifi==2026.7.22

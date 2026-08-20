@@ -1,15 +1,19 @@
 import datetime as dt
 import json
 import logging
+import ssl
 import urllib.error
 import urllib.request
 from decimal import Decimal
+
+import certifi
 
 QUOTE_CURRENCIES = ("USD", "EUR", "GBP")
 CACHE_TTL_SECONDS = 3600
 
 _cache = {"fetched_at": None, "rates": None}
 _logger = logging.getLogger(__name__)
+_ssl_context = ssl.create_default_context(cafile=certifi.where())
 
 
 def _fetch_rates_brl_base():
@@ -20,7 +24,7 @@ def _fetch_rates_brl_base():
     url = f"https://economia.awesomeapi.com.br/json/last/{pairs}"
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "finance-manager/1.0"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=_ssl_context) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         _logger.warning("Falha ao buscar cotacoes na AwesomeAPI: %s", exc)
