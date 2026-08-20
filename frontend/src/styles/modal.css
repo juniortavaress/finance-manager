@@ -28,7 +28,13 @@
 }
 .modal-body-scroll {
   max-height: 60vh;
+  min-height: 200px;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.modal-body-scroll::-webkit-scrollbar {
+  display: none;
 }
 .modal-head {
   padding: 20px 24px;

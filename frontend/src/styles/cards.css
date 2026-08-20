@@ -130,11 +130,6 @@
   border-radius: 8px;
   padding: 4px 6px;
   margin: 0 -6px 9px;
-  transition: background 0.12s ease;
-}
-.hbar-row-clickable:hover,
-.hbar-row-clickable:focus-visible {
-  background: var(--bg);
   outline: none;
 }
 .hbar-top {
@@ -163,13 +158,18 @@
   height: 8px;
   background: var(--bg);
   border-radius: 5px;
-  overflow: hidden;
+  overflow: visible;
 }
 .hbar-fill {
   position: relative;
   height: 100%;
   border-radius: 5px;
-  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
+  transform-origin: left center;
+  transition: width 0.45s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease, transform 0.18s ease;
+}
+.hbar-row-clickable:hover .hbar-fill,
+.hbar-row-clickable:focus-visible .hbar-fill {
+  transform: scaleY(1.15);
 }
 .hbar-goal {
   position: absolute;

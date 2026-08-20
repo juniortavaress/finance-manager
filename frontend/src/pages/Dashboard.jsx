@@ -429,7 +429,7 @@ export default function Dashboard() {
         <TransactionsDrilldownModal
           open
           onClose={() => setDrilldown(null)}
-          title={`${drilldown.categoryName} — ${monthLabel(period.month).toLowerCase()}`}
+          title={drilldown.categoryName}
           year={period.year}
           month={period.month}
           type="expense"

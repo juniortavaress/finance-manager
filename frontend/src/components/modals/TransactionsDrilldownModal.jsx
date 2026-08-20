@@ -3,6 +3,7 @@ import { useFetch } from '../../hooks/useFetch';
 import { useData } from '../../context/DataContext';
 import { fmt, fmtDateShort } from '../../utils/format';
 import ModalShell from './ModalShell';
+import Skeleton from '../Skeleton';
 
 function lastDayIso(year, month) {
   return new Date(year, month, 0).toISOString().slice(0, 10);
@@ -10,7 +11,7 @@ function lastDayIso(year, month) {
 
 export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type, categoryId }) {
   const { categoryById } = useData();
-  const { data, loading } = useFetch(
+  const { data, initialLoading } = useFetch(
     () =>
       transactionsApi.list({
         date_from: `${year}-${String(month).padStart(2, '0')}-01`,
@@ -38,10 +39,23 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
           </button>
         </div>
         <div className="modal-body modal-body-scroll">
-          {!loading && transactions.length === 0 && (
+          {initialLoading &&
+            [0, 1, 2, 3, 4].map((i) => (
+              <div className="tx-row" key={i}>
+                <div className="tx-left">
+                  <Skeleton width={34} height={34} radius={8} />
+                  <div>
+                    <Skeleton width={140} height={13} style={{ marginBottom: 6 }} />
+                    <Skeleton width={90} height={11} />
+                  </div>
+                </div>
+                <Skeleton width={70} height={14} />
+              </div>
+            ))}
+          {!initialLoading && transactions.length === 0 && (
             <div className="empty-state">Nenhuma transação neste período.</div>
           )}
-          {transactions.map((t) => {
+          {!initialLoading && transactions.map((t) => {
             const category = categoryById(t.category_id) || t.category;
             return (
               <div className="tx-row" key={t.id}>
