@@ -93,6 +93,54 @@
   border-radius: 2px;
 }
 
+/* carteira de investimentos — cards (mobile) */
+.asset-card-list {
+  display: none;
+}
+.asset-card {
+  padding: 14px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.asset-card:last-child {
+  border-bottom: none;
+}
+.asset-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.asset-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 8px;
+  margin-bottom: 10px;
+}
+.asset-card-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--ink-faint);
+  margin-bottom: 2px;
+}
+.asset-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 720px) {
+  .asset-table-wrap {
+    display: none;
+  }
+  .asset-card-list {
+    display: block;
+  }
+}
+
 /* dividendos & proventos */
 .div-row {
   display: flex;

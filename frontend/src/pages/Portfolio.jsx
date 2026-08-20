@@ -368,6 +368,124 @@ export default function Portfolio() {
             );
           })}
         </div>
+
+        <div className="asset-card-list">
+          {sorted.length === 0 && (
+            <div style={{ padding: '20px 4px', fontSize: 12.5, color: 'var(--ink-faint)' }}>
+              {showArchived ? 'Nenhum ativo arquivado.' : 'Nenhum ativo encontrado com esses filtros.'}
+            </div>
+          )}
+          {sorted.map((a) => {
+            const color = TYPE_COLORS[a.type] || '#8B9A97';
+            const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
+            const isPreFixado = a.type === 'renda_fixa' && a.fixed_income_type === 'pre_fixado';
+            return (
+              <div className="asset-card" key={a.id}>
+                <div className="asset-card-head">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <div className="a-name">{a.code || a.name}</div>
+                      <button
+                        type="button"
+                        title="Editar ativo"
+                        onClick={() => setEditingAsset(a)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 22,
+                          height: 22,
+                          borderRadius: 6,
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--ink-faint)',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <IconPencil style={{ width: 11, height: 11 }} />
+                      </button>
+                    </div>
+                    <div className="a-sub">{a.type === 'renda_fixa' ? fixedIncomeSubLabel(a) : a.name}</div>
+                  </div>
+                  <span className="tipo-tag" style={{ background: `${color}22`, color, flexShrink: 0 }}>
+                    <span className="dot" style={{ background: color }} />
+                    {TYPE_LABELS[a.type] || a.type}
+                  </span>
+                </div>
+
+                <div className="bank-chip-mini" style={{ marginBottom: 10 }}>
+                  <span className="dot" style={{ background: a.bankColor }} />
+                  {a.bankName}
+                </div>
+
+                <div className="asset-card-grid">
+                  <div>
+                    <div className="asset-card-label">Qtd.</div>
+                    <div className="a-num">{a.position.quantity}</div>
+                  </div>
+                  <div>
+                    <div className="asset-card-label">Preço médio</div>
+                    <div className="a-num">{fmt(a.position.avg_unit_price, a.currency)}</div>
+                  </div>
+                  <div>
+                    <div className="asset-card-label">Preço atual</div>
+                    <div className="a-num">{a.current_unit_price != null ? fmt(a.current_unit_price, a.currency) : '—'}</div>
+                  </div>
+                  <div>
+                    <div className="asset-card-label">Investido</div>
+                    <div className="a-num">{fmt(a.position.invested_amount, a.currency)}</div>
+                  </div>
+                  <div>
+                    <div className="asset-card-label">Atual</div>
+                    {isPreFixado ? (
+                      <div className="a-num" title="Calculado automaticamente pela taxa pré-fixada">
+                        {currentAmount != null ? fmt(currentAmount, a.currency) : '—'}
+                      </div>
+                    ) : editingPriceId === a.id ? (
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <CurrencyInput
+                          autoFocus
+                          value={editingPriceValue}
+                          onChange={setEditingPriceValue}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveEditTotal(a);
+                            if (e.key === 'Escape') cancelEditPrice();
+                          }}
+                          onBlur={() => saveEditTotal(a)}
+                          disabled={savingPrice}
+                          style={{ width: '100%', padding: '4px 6px', fontSize: 12.5 }}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        className="a-num"
+                        title="Clique para editar"
+                        style={{ cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
+                        onClick={() => startEditTotal(a)}
+                      >
+                        {fmt(currentAmount, a.currency)}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="asset-card-label">Dividendos</div>
+                    <div className="a-num" style={{ color: a.position.dividends_total > 0 ? 'var(--gold)' : undefined }}>
+                      {fmt(a.position.dividends_total, a.currency)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="asset-card-foot">
+                  <span className="asset-card-label">Rentabilidade</span>
+                  <span className={`a-rent ${a.rent == null ? '' : a.rent >= 0 ? 'up' : 'down'}`}>
+                    {a.rent == null ? '—' : `${a.rent >= 0 ? '+' : ''}${a.rent.toFixed(1)}%`}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       <NewAssetModal
