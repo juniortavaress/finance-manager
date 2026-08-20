@@ -39,20 +39,20 @@ const NAV_GROUPS = [
     ],
   },
   {
-    label: 'Amigos',
-    items: [
-      { to: '/amigos', label: 'Visão geral', icon: IconUser, end: true },
-      { to: '/amigos/lista', label: 'Amigos', icon: IconUsers },
-      { to: '/amigos/grupos', label: 'Grupos', icon: IconGrid },
-    ],
-  },
-  {
     label: 'Investimentos',
     items: [
       { to: '/investimentos', label: 'Visão geral', icon: IconTrendUp, end: true },
       { to: '/investimentos/carteira', label: 'Carteira', icon: IconWallet, disabled: false },
       { to: '/investimentos/compras-vendas', label: 'Compras e vendas', icon: IconSwap, disabled: false },
       { to: '/investimentos/dividendos', label: 'Dividendos', icon: IconCoin, disabled: false },
+    ],
+  },
+  {
+    label: 'Amigos',
+    items: [
+      { to: '/amigos', label: 'Visão geral', icon: IconUser, end: true },
+      { to: '/amigos/lista', label: 'Amigos', icon: IconUsers },
+      { to: '/amigos/grupos', label: 'Grupos', icon: IconGrid },
     ],
   },
   {
