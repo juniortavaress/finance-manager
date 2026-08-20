@@ -11,6 +11,7 @@ from app.models import Account, Asset, AssetTransaction, Bank, Category, Investm
 from app.models.investment import ASSET_TYPES, FIXED_INCOME_TYPES
 from app.services.finance_service import add_months, recalc_account_balance
 from app.services.fixed_income_service import pre_fixado_current_value
+from app.services.quotes_service import convert_to_brl, get_brl_rates
 
 investments_bp = Blueprint("investments", __name__)
 
@@ -306,6 +307,8 @@ def investments_summary():
             "rentability_total": None,
             "rentability_last_month": None,
             "rentability_last_year": None,
+            "fx_rates": None,
+            "fx_updated_at": None,
         }
 
     account_ids = [ia.account_id for ia in inv_accounts]
@@ -314,6 +317,16 @@ def investments_summary():
 
     bank_ids = {a.bank_id for a in accounts_by_id.values()}
     banks_by_id = {b.id: b for b in Bank.query.filter(Bank.id.in_(bank_ids)).all()}
+
+    # Sem filtro de corretora ("todas"), valores em moeda estrangeira sao
+    # convertidos para BRL pela cotacao atual para poder somar com o resto da
+    # carteira. Com uma corretora especifica selecionada, mostra na moeda dela.
+    fx_rates, fx_updated_at = (get_brl_rates() if not bank_filter else (None, None))
+
+    def _to_brl(value, currency):
+        if value is None:
+            return None
+        return float(convert_to_brl(Decimal(str(value)), currency, fx_rates))
 
     all_assets = (
         Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids))
@@ -328,10 +341,18 @@ def investments_summary():
             continue
         bank = banks_by_id.get(account.bank_id)
         data = asset.to_dict()
-        data["position"] = _asset_position(asset)
+        position = _asset_position(asset)
+        data["position"] = position
         data["bank_id"] = str(account.bank_id)
         data["bank_name"] = bank.name if bank else None
         data["bank_color"] = bank.color_hex if bank else None
+        data["currency"] = account.currency
+        if not bank_filter and account.currency != "BRL":
+            position["invested_amount_original"] = position["invested_amount"]
+            position["current_amount_original"] = position["current_amount"]
+            converted_invested = _to_brl(position["invested_amount"], account.currency)
+            position["invested_amount"] = converted_invested if converted_invested is not None else position["invested_amount"]
+            position["current_amount"] = _to_brl(position["current_amount"], account.currency)
         assets_result.append(data)
         for tx in asset.asset_transactions:
             if earliest_date is None or tx.date < earliest_date:
@@ -365,28 +386,34 @@ def investments_summary():
         net_transferred = _transfer_flow(account, "income") - _transfer_flow(account, "expense")
         total_transferred += net_transferred
         ia_invested = net_transferred
+        ia_invested_brl = Decimal(str(_to_brl(float(ia_invested), account.currency))) if not bank_filter and account.currency != "BRL" else ia_invested
 
-        total_invested += ia_invested
+        total_invested += ia_invested_brl
         bank_for_ia = banks_by_id.get(account.bank_id)
         invested_by_bank.append(
             {
                 "bank_id": str(account.bank_id),
                 "bank_name": bank_for_ia.name if bank_for_ia else None,
                 "bank_color": bank_for_ia.color_hex if bank_for_ia else None,
-                "value": float(ia_invested),
+                "value": float(ia_invested_brl),
+                "value_original": float(ia_invested) if account.currency != "BRL" else None,
+                "currency": account.currency,
             }
         )
 
         if account.balance <= 0:
             continue
         bank = banks_by_id.get(account.bank_id)
-        total_unallocated += account.balance
+        balance_brl = Decimal(str(_to_brl(float(account.balance), account.currency))) if not bank_filter and account.currency != "BRL" else account.balance
+        total_unallocated += balance_brl
         unallocated_by_bank.append(
             {
                 "bank_id": str(account.bank_id),
                 "bank_name": bank.name if bank else None,
                 "bank_color": bank.color_hex if bank else None,
-                "balance": float(account.balance),
+                "balance": float(balance_brl),
+                "balance_original": float(account.balance) if account.currency != "BRL" else None,
+                "currency": account.currency,
             }
         )
 
@@ -422,8 +449,13 @@ def investments_summary():
                 ~Transaction.description.startswith("Venda "),
                 ~Transaction.description.startswith("Provento "),
             ).all()
+            accounts_by_account_id = {a.id: a for a in accounts_by_id.values()}
             for tx in transfer_txs:
                 signed_amount = tx.amount if tx.type == "income" else -tx.amount
+                tx_currency = accounts_by_account_id[tx.account_id].currency
+                if not bank_filter and tx_currency != "BRL":
+                    fx_factor = Decimal(str((fx_rates or {}).get(tx_currency, 1)))
+                    signed_amount *= fx_factor
                 net_flow_events.append((tx.date, signed_amount))
 
         # Estado incremental por asset (quantidade/custo/preco medio acumulados
@@ -463,18 +495,28 @@ def investments_summary():
                 state["cost_basis"] = cost_basis
                 state["avg_price"] = avg_price
 
-                invested_total += cost_basis
+                asset_currency = accounts_by_ia_id[asset.investment_account_id].currency
+                # Sem cotacao historica, usa a taxa atual pra converter todo o
+                # historico do ativo estrangeiro - aproximacao, nao afeta ativos em BRL.
+                fx_factor = (
+                    Decimal(str((fx_rates or {}).get(asset_currency, 1)))
+                    if not bank_filter and asset_currency != "BRL"
+                    else Decimal("1")
+                )
+
+                invested_total += cost_basis * fx_factor
                 if is_current_month:
                     # No mes atual, usa exatamente o mesmo valor projetado do card
                     # "Valor atual" (_asset_position, com juros compostos para
                     # pre-fixado) em vez de recalcular cru - garante que o ultimo
-                    # ponto do grafico bata com o card.
+                    # ponto do grafico bata com o card. current_amount_by_asset_id
+                    # ja vem convertido para BRL quando aplicavel.
                     current_value = current_amount_by_asset_id.get(str(asset.id))
-                    current_total += Decimal(str(current_value)) if current_value is not None else cost_basis
+                    current_total += Decimal(str(current_value)) if current_value is not None else cost_basis * fx_factor
                 elif asset.current_unit_price is not None:
-                    current_total += quantity * asset.current_unit_price
+                    current_total += quantity * asset.current_unit_price * fx_factor
                 else:
-                    current_total += cost_basis
+                    current_total += cost_basis * fx_factor
 
             net_flow_total = sum(
                 (amount for date, amount in net_flow_events if date < month_end), Decimal("0")
@@ -539,6 +581,8 @@ def investments_summary():
         "rentability_total": rentability_total,
         "rentability_last_month": rentability_last_month,
         "rentability_last_year": rentability_last_year,
+        "fx_rates": fx_rates,
+        "fx_updated_at": fx_updated_at.isoformat() if fx_updated_at else None,
     }
 
 

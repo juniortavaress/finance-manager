@@ -160,8 +160,19 @@ export default function Investments() {
     const map = {};
     activeAssets.forEach((a) => {
       const value = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
-      map[a.bank_id] = map[a.bank_id] || { bank_id: a.bank_id, name: a.bank_name, color: a.bank_color, total: 0 };
+      const original = a.position.current_amount_original != null
+        ? a.position.current_amount_original
+        : a.position.invested_amount_original;
+      map[a.bank_id] = map[a.bank_id] || {
+        bank_id: a.bank_id,
+        name: a.bank_name,
+        color: a.bank_color,
+        total: 0,
+        originalTotal: a.currency !== 'BRL' ? 0 : null,
+        currency: a.currency,
+      };
       map[a.bank_id].total += value;
+      if (map[a.bank_id].originalTotal != null) map[a.bank_id].originalTotal += original != null ? original : value;
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [activeAssets]);
@@ -171,8 +182,20 @@ export default function Investments() {
   const investedByBank = useMemo(() => {
     const map = {};
     activeAssets.forEach((a) => {
-      map[a.bank_id] = map[a.bank_id] || { bank_id: a.bank_id, name: a.bank_name, color: a.bank_color, total: 0 };
+      map[a.bank_id] = map[a.bank_id] || {
+        bank_id: a.bank_id,
+        name: a.bank_name,
+        color: a.bank_color,
+        total: 0,
+        originalTotal: a.currency !== 'BRL' ? 0 : null,
+        currency: a.currency,
+      };
       map[a.bank_id].total += a.position.invested_amount;
+      if (map[a.bank_id].originalTotal != null) {
+        map[a.bank_id].originalTotal += a.position.invested_amount_original != null
+          ? a.position.invested_amount_original
+          : a.position.invested_amount;
+      }
     });
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [activeAssets]);
@@ -470,7 +493,13 @@ export default function Investments() {
         onClose={() => setDrilldown(null)}
         loading={summaryLoading}
         title="Aportes por corretora"
-        rows={contributionsByBank.map((b) => ({ label: b.bank_name, value: b.value, color: b.bank_color }))}
+        rows={contributionsByBank.map((b) => ({
+          label: b.bank_name,
+          value: b.value,
+          color: b.bank_color,
+          original: b.value_original,
+          originalCurrency: b.currency,
+        }))}
       />
 
       <InvestmentBreakdownDrilldownModal
@@ -478,7 +507,13 @@ export default function Investments() {
         onClose={() => setDrilldown(null)}
         loading={summaryLoading}
         title="Valor investido por corretora"
-        rows={investedByBank.map((b) => ({ label: b.name, value: b.total, color: b.color }))}
+        rows={investedByBank.map((b) => ({
+          label: b.name,
+          value: b.total,
+          color: b.color,
+          original: b.originalTotal,
+          originalCurrency: b.currency,
+        }))}
       />
 
       <InvestmentBreakdownDrilldownModal
@@ -486,7 +521,13 @@ export default function Investments() {
         onClose={() => setDrilldown(null)}
         loading={summaryLoading}
         title="Caixa disponível por corretora"
-        rows={unallocatedByBank.map((b) => ({ label: b.bank_name, value: b.balance, color: b.bank_color }))}
+        rows={unallocatedByBank.map((b) => ({
+          label: b.bank_name,
+          value: b.balance,
+          color: b.bank_color,
+          original: b.balance_original,
+          originalCurrency: b.currency,
+        }))}
       />
 
       <InvestmentBreakdownDrilldownModal
@@ -494,7 +535,13 @@ export default function Investments() {
         onClose={() => setDrilldown(null)}
         loading={summaryLoading}
         title="Valor atual por corretora"
-        rows={byBank.map((b) => ({ label: b.name, value: b.total, color: b.color }))}
+        rows={byBank.map((b) => ({
+          label: b.name,
+          value: b.total,
+          color: b.color,
+          original: b.originalTotal,
+          originalCurrency: b.currency,
+        }))}
       />
 
       <DividendsDrilldownModal
