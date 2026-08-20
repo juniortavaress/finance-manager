@@ -1,5 +1,6 @@
 import datetime as dt
 import json
+import logging
 import urllib.error
 import urllib.request
 
@@ -7,6 +8,7 @@ QUOTE_CURRENCIES = ("USD", "EUR", "GBP")
 CACHE_TTL_SECONDS = 3600
 
 _cache = {"fetched_at": None, "rates": None}
+_logger = logging.getLogger(__name__)
 
 
 def _fetch_rates_brl_base():
@@ -16,9 +18,11 @@ def _fetch_rates_brl_base():
     pairs = ",".join(f"{code}-BRL" for code in QUOTE_CURRENCIES)
     url = f"https://economia.awesomeapi.com.br/json/last/{pairs}"
     try:
-        with urllib.request.urlopen(url, timeout=5) as resp:
+        req = urllib.request.Request(url, headers={"User-Agent": "finance-manager/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, ValueError):
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        _logger.warning("Falha ao buscar cotacoes na AwesomeAPI: %s", exc)
         return None
 
     rates = {}
