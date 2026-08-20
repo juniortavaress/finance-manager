@@ -358,20 +358,32 @@ def investments_summary():
             if earliest_date is None or tx.date < earliest_date:
                 earliest_date = tx.date
 
+    def _transfer_txs(account, tx_type):
+        return Transaction.query.filter(
+            Transaction.account_id == account.id,
+            Transaction.is_transfer.is_(True),
+            Transaction.type == tx_type,
+            Transaction.status == "confirmed",
+            ~Transaction.description.startswith("Compra "),
+            ~Transaction.description.startswith("Venda "),
+            ~Transaction.description.startswith("Provento "),
+        ).all()
+
     def _transfer_flow(account, tx_type):
-        return (
-            db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
-            .filter(
-                Transaction.account_id == account.id,
-                Transaction.is_transfer.is_(True),
-                Transaction.type == tx_type,
-                Transaction.status == "confirmed",
-                ~Transaction.description.startswith("Compra "),
-                ~Transaction.description.startswith("Venda "),
-                ~Transaction.description.startswith("Provento "),
-            )
-            .scalar()
-        ) or Decimal("0")
+        return sum((tx.amount for tx in _transfer_txs(account, tx_type)), Decimal("0"))
+
+    def _transfer_flow_brl(account, tx_type):
+        """Soma os aportes convertidos para BRL usando o cambio registrado em
+        cada transacao (custo real de aquisicao da moeda), nao a cotacao
+        atual - transacoes antigas sem exchange_rate caem na cotacao atual
+        como fallback."""
+        total = Decimal("0")
+        for tx in _transfer_txs(account, tx_type):
+            if tx.exchange_rate:
+                total += tx.amount * tx.exchange_rate
+            else:
+                total += Decimal(str(_to_brl(float(tx.amount), account.currency)))
+        return total
 
     unallocated_by_bank = []
     invested_by_bank = []
@@ -386,7 +398,10 @@ def investments_summary():
         net_transferred = _transfer_flow(account, "income") - _transfer_flow(account, "expense")
         total_transferred += net_transferred
         ia_invested = net_transferred
-        ia_invested_brl = Decimal(str(_to_brl(float(ia_invested), account.currency))) if not bank_filter and account.currency != "BRL" else ia_invested
+        if not bank_filter and account.currency != "BRL":
+            ia_invested_brl = _transfer_flow_brl(account, "income") - _transfer_flow_brl(account, "expense")
+        else:
+            ia_invested_brl = ia_invested
 
         total_invested += ia_invested_brl
         bank_for_ia = banks_by_id.get(account.bank_id)
@@ -454,7 +469,7 @@ def investments_summary():
                 signed_amount = tx.amount if tx.type == "income" else -tx.amount
                 tx_currency = accounts_by_account_id[tx.account_id].currency
                 if not bank_filter and tx_currency != "BRL":
-                    fx_factor = Decimal(str((fx_rates or {}).get(tx_currency, 1)))
+                    fx_factor = tx.exchange_rate or Decimal(str((fx_rates or {}).get(tx_currency, 1)))
                     signed_amount *= fx_factor
                 net_flow_events.append((tx.date, signed_amount))
 

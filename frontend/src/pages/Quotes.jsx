@@ -48,11 +48,6 @@ export default function Quotes() {
             </div>
           ))}
       </div>
-
-      <div className="fatura-note show" style={{ marginTop: 16 }}>
-        Cotações usadas para converter automaticamente contas de investimento em moeda estrangeira na visão "todas as
-        corretoras". Atualizadas a cada hora.
-      </div>
     </div>
   );
 }
