@@ -68,13 +68,13 @@ export default function Investments() {
 
   const activeAssets = useMemo(() => assets.filter((a) => a.position.quantity > 0), [assets]);
 
-  const dividendsAllTime = useMemo(() => dividends.reduce((s, d) => s + d.amount, 0), [dividends]);
+  const dividendsAllTime = useMemo(() => dividends.reduce((s, d) => s + (d.amount_brl ?? d.amount), 0), [dividends]);
 
   const dividendsByMonth = useMemo(() => {
     const map = new Map();
     dividends.forEach((d) => {
       const key = d.date.slice(0, 7);
-      map.set(key, (map.get(key) || 0) + d.amount);
+      map.set(key, (map.get(key) || 0) + (d.amount_brl ?? d.amount));
     });
     return [...map.entries()]
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
@@ -88,7 +88,7 @@ export default function Investments() {
     const map = new Map();
     dividends.forEach((d) => {
       const year = d.date.slice(0, 4);
-      map.set(year, (map.get(year) || 0) + d.amount);
+      map.set(year, (map.get(year) || 0) + (d.amount_brl ?? d.amount));
     });
     return [...map.entries()]
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))

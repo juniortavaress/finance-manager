@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { dividendsApi, investmentsApi } from '../api/resources';
+import { dividendsApi, investmentsApi, quotesApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, fmtDateShort } from '../utils/format';
@@ -34,7 +34,16 @@ export default function Dividends() {
   const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
   const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
   const { data: dividendsData, reload: reloadDividends } = useFetch(() => dividendsApi.list(), []);
+  const { data: quotesData } = useFetch(() => quotesApi.list(), []);
   const { investmentAccounts, bankById, reloadAll } = useData();
+
+  const quotesByCurrency = useMemo(() => {
+    const map = {};
+    (quotesData?.quotes || []).forEach((q) => {
+      map[q.currency] = q.brl_rate;
+    });
+    return map;
+  }, [quotesData]);
 
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
@@ -65,11 +74,17 @@ export default function Dividends() {
   const currentYear = today.slice(0, 4);
 
   const recebidoMes = useMemo(
-    () => dividends.filter((d) => d.date.slice(0, 7) === currentMonth).reduce((s, d) => s + d.amount, 0),
+    () =>
+      dividends
+        .filter((d) => d.date.slice(0, 7) === currentMonth)
+        .reduce((s, d) => s + (d.amount_brl ?? d.amount), 0),
     [dividends, currentMonth]
   );
   const recebidoAno = useMemo(
-    () => dividends.filter((d) => d.date.slice(0, 4) === currentYear).reduce((s, d) => s + d.amount, 0),
+    () =>
+      dividends
+        .filter((d) => d.date.slice(0, 4) === currentYear)
+        .reduce((s, d) => s + (d.amount_brl ?? d.amount), 0),
     [dividends, currentYear]
   );
 
@@ -81,9 +96,10 @@ export default function Dividends() {
         const asset = assets.find((a) => a.id === sch.asset_id);
         const quantity = asset?.position?.quantity || 0;
         const value = sch.calc_mode === 'fixed' ? sch.fixed_amount || 0 : (sch.amount_per_share || 0) * quantity;
-        return s + value;
+        const rate = asset?.currency && asset.currency !== 'BRL' ? quotesByCurrency[asset.currency] : null;
+        return s + (rate ? value * rate : value);
       }, 0);
-  }, [schedules, assets, currentMonth]);
+  }, [schedules, assets, currentMonth, quotesByCurrency]);
 
   function scheduleValue(schedule) {
     const asset = assets.find((a) => a.id === schedule.asset_id);
@@ -160,7 +176,7 @@ export default function Dividends() {
               </div>
               <div className="div-right">
                 <div>
-                  <div className="div-val">{fmt(scheduleValue(s))}</div>
+                  <div className="div-val">{fmt(scheduleValue(s), asset?.currency)}</div>
                   <div className="div-next">todo dia {s.day_of_month}</div>
                 </div>
               </div>
@@ -196,7 +212,10 @@ export default function Dividends() {
                 </div>
               </div>
               <div className="div-right">
-                <div className="div-val">{fmt(d.amount)}</div>
+                <div className="div-val">{fmt(d.amount, d.currency)}</div>
+                {d.currency && d.currency !== 'BRL' && (
+                  <div className="div-next">{fmt(d.amount_brl)}</div>
+                )}
               </div>
             </div>
           );

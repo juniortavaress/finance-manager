@@ -122,6 +122,7 @@ def _asset_to_dict(asset: Asset):
     data = asset.to_dict()
     data["position"] = _asset_position(asset)
     data["archived"] = data["position"]["quantity"] <= 0
+    data["currency"] = asset.investment_account.account.currency
     return data
 
 
@@ -350,9 +351,12 @@ def investments_summary():
         if not bank_filter and account.currency != "BRL":
             position["invested_amount_original"] = position["invested_amount"]
             position["current_amount_original"] = position["current_amount"]
+            position["dividends_total_original"] = position["dividends_total"]
             converted_invested = _to_brl(position["invested_amount"], account.currency)
             position["invested_amount"] = converted_invested if converted_invested is not None else position["invested_amount"]
             position["current_amount"] = _to_brl(position["current_amount"], account.currency)
+            converted_dividends = _to_brl(position["dividends_total"], account.currency)
+            position["dividends_total"] = converted_dividends if converted_dividends is not None else position["dividends_total"]
         assets_result.append(data)
         for tx in asset.asset_transactions:
             if earliest_date is None or tx.date < earliest_date:

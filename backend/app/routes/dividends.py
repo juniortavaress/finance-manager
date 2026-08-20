@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models import Account, Asset, Category, Dividend, DividendSchedule, InvestmentAccount, Transaction
 from app.models.investment import DIVIDEND_CALC_MODES, DIVIDEND_FREQUENCIES, DIVIDEND_KINDS
 from app.services.finance_service import add_months, recalc_account_balance, safe_day
+from app.services.quotes_service import convert_to_brl, get_brl_rates
 from app.routes.investments import _asset_position
 
 dividends_bp = Blueprint("dividends", __name__)
@@ -304,10 +305,15 @@ def list_dividends():
     if limit:
         query = query.limit(int(limit))
 
+    fx_rates, _ = get_brl_rates()
+
     result = []
     for d in query.all():
         data = d.to_dict()
         data["asset"] = d.asset.to_dict()
+        currency = d.asset.investment_account.account.currency
+        data["currency"] = currency
+        data["amount_brl"] = float(convert_to_brl(d.amount, currency, fx_rates))
         result.append(data)
     return {"dividends": result}
 

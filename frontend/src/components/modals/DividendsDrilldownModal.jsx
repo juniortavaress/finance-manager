@@ -28,26 +28,28 @@ export default function DividendsDrilldownModal({ open, onClose, byMonth, byYear
             </div>
           </div>
 
-          {loading &&
-            [0, 1, 2].map((i) => (
-              <div className="bank-row" key={i}>
-                <div className="bank-id">
-                  <Skeleton width={110} height={13} />
+          <div className="modal-body-scroll" style={{ margin: 0, padding: 0, minHeight: 0 }}>
+            {loading &&
+              [0, 1, 2].map((i) => (
+                <div className="bank-row" key={i}>
+                  <div className="bank-id">
+                    <Skeleton width={110} height={13} />
+                  </div>
+                  <Skeleton width={70} height={14} />
                 </div>
-                <Skeleton width={70} height={14} />
+              ))}
+            {!loading && rows.length === 0 && (
+              <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Nenhum provento recebido ainda.</p>
+            )}
+            {!loading && rows.map((r) => (
+              <div className="bank-row" key={r.label}>
+                <div className="bank-id">
+                  <div className="bank-name">{r.label}</div>
+                </div>
+                <div className="bank-val num">{fmt(r.value)}</div>
               </div>
             ))}
-          {!loading && rows.length === 0 && (
-            <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Nenhum provento recebido ainda.</p>
-          )}
-          {!loading && rows.map((r) => (
-            <div className="bank-row" key={r.label}>
-              <div className="bank-id">
-                <div className="bank-name">{r.label}</div>
-              </div>
-              <div className="bank-val num">{fmt(r.value)}</div>
-            </div>
-          ))}
+          </div>
         </div>
       </div>
     </ModalShell>
