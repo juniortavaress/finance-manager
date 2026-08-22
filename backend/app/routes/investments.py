@@ -14,7 +14,6 @@ from app.services.crypto_service import (
     COINGECKO_VS_CURRENCIES,
     SUPPORTED_CRYPTOCURRENCIES,
     get_current_prices,
-    get_recent_historical_prices,
     resolve_symbol,
 )
 from app.services.fixed_income_service import pre_fixado_current_value
@@ -249,8 +248,6 @@ def _refresh_crypto_prices(user_id):
     if changed:
         db.session.commit()
 
-    _backfill_recent_crypto_history(assets_by_key.keys())
-
 
 def _upsert_crypto_price(symbol, currency, date, price):
     row = CryptoPrice.query.get((symbol, currency, date))
@@ -258,37 +255,6 @@ def _upsert_crypto_price(symbol, currency, date, price):
         db.session.add(CryptoPrice(symbol=symbol, currency=currency, date=date, price=price))
     else:
         row.price = price
-
-
-def _backfill_recent_crypto_history(keys, lookback_days=14):
-    """Preenche na tabela crypto_prices os dias dos ultimos `lookback_days`
-    que ainda estiverem faltando para cada (symbol, currency), via CoinGecko.
-    Roda a cada listagem, mas so' busca na API quando ha' de fato lacuna -
-    keep it cheap no caso comum (tabela ja' atualizada)."""
-    today = dt.date.today()
-    cutoff = today - dt.timedelta(days=lookback_days)
-    changed = False
-    for symbol, currency in keys:
-        existing_dates = {
-            row.date
-            for row in CryptoPrice.query.filter(
-                CryptoPrice.symbol == symbol,
-                CryptoPrice.currency == currency,
-                CryptoPrice.date >= cutoff,
-            ).all()
-        }
-        expected_dates = {cutoff + dt.timedelta(days=i) for i in range((today - cutoff).days + 1)}
-        if expected_dates <= existing_dates:
-            continue
-
-        daily_prices = get_recent_historical_prices(symbol, currency, lookback_days + 1)
-        for date, price in daily_prices:
-            if date < cutoff or date in existing_dates:
-                continue
-            _upsert_crypto_price(symbol, currency, date, price)
-            changed = True
-    if changed:
-        db.session.commit()
 
 
 @investments_bp.get("/assets")
