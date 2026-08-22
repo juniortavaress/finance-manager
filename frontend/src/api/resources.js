@@ -63,6 +63,7 @@ export const creditCardsApi = {
 export const investmentsApi = {
   summary: (bankId, signal) => api.get('/investments/summary', { bank_id: bankId || undefined }, signal),
   listAssets: (archived, signal) => api.get('/investments/assets', { archived: archived ? 'true' : undefined }, signal),
+  listCryptoSymbols: (signal) => api.get('/investments/crypto-symbols', {}, signal),
   createAsset: (data) => api.post('/investments/assets', data),
   updateAsset: (id, data) => api.patch(`/investments/assets/${id}`, data),
   removeAsset: (id) => api.delete(`/investments/assets/${id}`),

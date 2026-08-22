@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { investmentsApi } from '../../api/resources';
+import { useFetch } from '../../hooks/useFetch';
 import { useToast } from '../../context/ToastContext';
 import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
@@ -45,6 +46,13 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   const isRendaFixa = type === 'renda_fixa';
+  const isCripto = type === 'cripto';
+
+  const { data: cryptoSymbolsData } = useFetch(
+    (signal) => investmentsApi.listCryptoSymbols(signal),
+    []
+  );
+  const cryptoSymbols = cryptoSymbolsData?.symbols || [];
 
   useEffect(() => {
     if (!open) return;
@@ -82,7 +90,11 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
     e.preventDefault();
     setError('');
 
-    if (!name.trim()) return setError('Informe o nome do ativo.');
+    if (isCripto && !isEditing) {
+      if (!code) return setError('Selecione a criptomoeda.');
+    } else if (!name.trim()) {
+      return setError('Informe o nome do ativo.');
+    }
     if (!investmentAccountId) return setError('Selecione um banco/corretora.');
 
     // renda fixa exige os campos completos apenas ao CRIAR um ativo novo —
@@ -178,7 +190,16 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
 
           <div className="field">
             <label>Categoria</label>
-            <select value={type} onChange={(e) => setType(e.target.value)}>
+            <select
+              value={type}
+              onChange={(e) => {
+                setType(e.target.value);
+                if (!isEditing) {
+                  setName('');
+                  setCode('');
+                }
+              }}
+            >
               {TYPE_OPTIONS.map((t) => (
                 <option key={t.value} value={t.value}>
                   {t.label}
@@ -187,26 +208,49 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
             </select>
           </div>
 
-          <div className="field">
-            <label>Nome</label>
-            <input
-              type="text"
-              placeholder={isRendaFixa ? 'Ex.: CDB Banco XP 2029, Tesouro Selic 2029...' : 'Ex.: Petrobras, Tesouro Selic 2029...'}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          {!isRendaFixa && (
+          {isCripto && !isEditing ? (
             <div className="field">
-              <label>Código (opcional)</label>
-              <input
-                type="text"
-                placeholder="Ex.: PETR4, BTC..."
+              <label>Criptomoeda</label>
+              <select
                 value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
-              />
+                onChange={(e) => {
+                  const selected = cryptoSymbols.find((s) => s.code === e.target.value);
+                  setCode(selected?.code || '');
+                  setName(selected?.name || '');
+                }}
+              >
+                <option value="">Selecione...</option>
+                {cryptoSymbols.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.name} ({s.code})
+                  </option>
+                ))}
+              </select>
             </div>
+          ) : (
+            <>
+              <div className="field">
+                <label>Nome</label>
+                <input
+                  type="text"
+                  placeholder={isRendaFixa ? 'Ex.: CDB Banco XP 2029, Tesouro Selic 2029...' : 'Ex.: Petrobras, Tesouro Selic 2029...'}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+              </div>
+
+              {!isRendaFixa && (
+                <div className="field">
+                  <label>Código (opcional)</label>
+                  <input
+                    type="text"
+                    placeholder="Ex.: PETR4, BTC..."
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.toUpperCase())}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {isRendaFixa && (

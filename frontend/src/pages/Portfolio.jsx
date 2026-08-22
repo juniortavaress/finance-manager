@@ -286,6 +286,7 @@ export default function Portfolio() {
             const color = TYPE_COLORS[a.type] || '#8B9A97';
             const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
             const isPreFixado = a.type === 'renda_fixa' && a.fixed_income_type === 'pre_fixado';
+            const isAutoPrice = isPreFixado || a.price_auto_updated;
             return (
               <div className="asset-row" key={a.id}>
                 <div>
@@ -334,8 +335,11 @@ export default function Portfolio() {
                 <div className="a-num">{fmt(a.position.avg_unit_price, a.currency)}</div>
                 <div className="a-num">{a.current_unit_price != null ? fmt(a.current_unit_price, a.currency) : '—'}</div>
                 <div className="a-num">{fmt(a.position.invested_amount, a.currency)}</div>
-                {isPreFixado ? (
-                  <div className="a-num" title="Calculado automaticamente pela taxa pré-fixada">
+                {isAutoPrice ? (
+                  <div
+                    className="a-num"
+                    title={isPreFixado ? 'Calculado automaticamente pela taxa pré-fixada' : 'Atualizado automaticamente pela cotação da Binance'}
+                  >
                     {currentAmount != null ? fmt(currentAmount, a.currency) : '—'}
                   </div>
                 ) : editingPriceId === a.id ? (
@@ -384,6 +388,7 @@ export default function Portfolio() {
             const color = TYPE_COLORS[a.type] || '#8B9A97';
             const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
             const isPreFixado = a.type === 'renda_fixa' && a.fixed_income_type === 'pre_fixado';
+            const isAutoPrice = isPreFixado || a.price_auto_updated;
             return (
               <div className="asset-card" key={a.id}>
                 <div className="asset-card-head">
@@ -443,8 +448,11 @@ export default function Portfolio() {
                   </div>
                   <div>
                     <div className="asset-card-label">Atual</div>
-                    {isPreFixado ? (
-                      <div className="a-num" title="Calculado automaticamente pela taxa pré-fixada">
+                    {isAutoPrice ? (
+                      <div
+                        className="a-num"
+                        title={isPreFixado ? 'Calculado automaticamente pela taxa pré-fixada' : 'Atualizado automaticamente pela cotação da Binance'}
+                      >
                         {currentAmount != null ? fmt(currentAmount, a.currency) : '—'}
                       </div>
                     ) : editingPriceId === a.id ? (

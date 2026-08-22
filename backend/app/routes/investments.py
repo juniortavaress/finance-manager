@@ -10,6 +10,7 @@ from app.extensions import db
 from app.models import Account, Asset, AssetTransaction, Bank, Category, InvestmentAccount, Transaction
 from app.models.investment import ASSET_TYPES, FIXED_INCOME_TYPES
 from app.services.finance_service import add_months, recalc_account_balance
+from app.services.crypto_service import SUPPORTED_CRYPTOCURRENCIES, binance_pair, get_current_prices, get_historical_prices
 from app.services.fixed_income_service import pre_fixado_current_value
 from app.services.quotes_service import convert_to_brl, get_brl_rates
 
@@ -122,7 +123,9 @@ def _asset_to_dict(asset: Asset):
     data = asset.to_dict()
     data["position"] = _asset_position(asset)
     data["archived"] = data["position"]["quantity"] <= 0
-    data["currency"] = asset.investment_account.account.currency
+    currency = asset.investment_account.account.currency
+    data["currency"] = currency
+    data["price_auto_updated"] = asset.type == "cripto" and binance_pair(asset.code, currency) is not None
     return data
 
 
@@ -200,10 +203,46 @@ def _settle_all_matured_pre_fixado(user_id):
         db.session.commit()
 
 
+def _refresh_crypto_prices(user_id):
+    """Atualiza current_unit_price dos ativos cripto com o preco atual da
+    Binance, no par correspondente ao simbolo do ativo + moeda da conta que
+    o guarda (ex: BTC numa conta BRL busca BTCBRL, numa conta USD busca
+    BTCUSDT). Best-effort: simbolo/moeda nao suportados ou API fora do ar
+    mantem o preco existente, sem quebrar a listagem."""
+    inv_accounts = _owned_investment_accounts()
+    if not inv_accounts:
+        return
+    account_ids = [ia.account_id for ia in inv_accounts]
+    accounts_by_id = {a.id: a for a in Account.query.filter(Account.id.in_(account_ids)).all()}
+    currency_by_ia_id = {ia.id: accounts_by_id[ia.account_id].currency for ia in inv_accounts}
+
+    assets = Asset.query.filter(
+        Asset.investment_account_id.in_(currency_by_ia_id.keys()), Asset.type == "cripto"
+    ).all()
+    assets_by_pair = {}
+    for asset in assets:
+        currency = currency_by_ia_id.get(asset.investment_account_id)
+        pair = binance_pair(asset.code, currency)
+        if pair:
+            assets_by_pair.setdefault(pair, []).append(asset)
+    if not assets_by_pair:
+        return
+
+    prices = get_current_prices(assets_by_pair.keys())
+    changed = False
+    for pair, price in prices.items():
+        for asset in assets_by_pair[pair]:
+            asset.current_unit_price = price
+            changed = True
+    if changed:
+        db.session.commit()
+
+
 @investments_bp.get("/assets")
 @login_required
 def list_assets():
     _settle_all_matured_pre_fixado(g.current_user.id)
+    _refresh_crypto_prices(g.current_user.id)
 
     inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
     all_assets = (
@@ -219,6 +258,14 @@ def list_assets():
         data = _asset_to_dict(asset)
         (archived if data["position"]["quantity"] <= 0 else active).append(data)
     return {"assets": active, "archived_assets": archived}
+
+
+@investments_bp.get("/crypto-symbols")
+@login_required
+def list_crypto_symbols():
+    symbols = [{"code": symbol, "name": name} for symbol, name in SUPPORTED_CRYPTOCURRENCIES.items()]
+    symbols.sort(key=lambda s: s["name"])
+    return {"symbols": symbols}
 
 
 @investments_bp.get("/asset-transactions")
@@ -286,6 +333,51 @@ def list_asset_transactions():
 
 def _month_start(d: dt.date) -> dt.date:
     return d.replace(day=1)
+
+
+def _crypto_monthly_prices(assets, months, earliest_date, currency_by_ia_id):
+    """Preco de fechamento (na moeda da conta de cada ativo) por ativo cripto
+    reconhecido, um valor por mes em `months` (usa o ultimo preco diario
+    disponivel ate o fim do mes). Ativos sem simbolo/moeda suportados ou sem
+    historico disponivel simplesmente nao entram no dict retornado - quem
+    chama cai de volta no current_unit_price."""
+    if not months or earliest_date is None:
+        return {}
+
+    assets_by_pair = {}
+    for asset in assets:
+        if asset.type != "cripto":
+            continue
+        currency = currency_by_ia_id.get(asset.investment_account_id)
+        pair = binance_pair(asset.code, currency)
+        if pair:
+            assets_by_pair.setdefault(pair, []).append(asset)
+    if not assets_by_pair:
+        return {}
+
+    today = dt.date.today()
+    result = {}
+    for pair, assets_for_id in assets_by_pair.items():
+        daily_prices = get_historical_prices(pair, earliest_date, today)
+        if not daily_prices:
+            continue
+        daily_prices.sort(key=lambda item: item[0])
+
+        monthly = {}
+        price_idx = 0
+        last_price = None
+        for month_start in months:
+            month_end = add_months(month_start, 1)
+            while price_idx < len(daily_prices) and daily_prices[price_idx][0] < month_end:
+                last_price = daily_prices[price_idx][1]
+                price_idx += 1
+            if last_price is not None:
+                monthly[month_start] = last_price
+
+        for asset in assets_for_id:
+            result[asset.id] = monthly
+
+    return result
 
 
 @investments_bp.get("/summary")
@@ -455,6 +547,9 @@ def investments_summary():
         ]
         relevant_assets = [a for a in all_assets if a.investment_account_id in relevant_ia_ids]
         current_amount_by_asset_id = {a["id"]: a["position"]["current_amount"] for a in assets_result}
+        monthly_price_by_asset_id = _crypto_monthly_prices(
+            relevant_assets, months, earliest_date, {k: v.currency for k, v in accounts_by_ia_id.items()}
+        )
 
         # Movimentacoes de aporte liquido, com data, pra plotar em degrau (mesmo
         # criterio de net_transferred acima): transferencias externas para a
@@ -534,10 +629,14 @@ def investments_summary():
                     # ja vem convertido para BRL quando aplicavel.
                     current_value = current_amount_by_asset_id.get(str(asset.id))
                     current_total += Decimal(str(current_value)) if current_value is not None else cost_basis * fx_factor
-                elif asset.current_unit_price is not None:
-                    current_total += quantity * asset.current_unit_price * fx_factor
                 else:
-                    current_total += cost_basis * fx_factor
+                    month_price = monthly_price_by_asset_id.get(asset.id, {}).get(month_start)
+                    if month_price is not None:
+                        current_total += quantity * month_price * fx_factor
+                    elif asset.current_unit_price is not None:
+                        current_total += quantity * asset.current_unit_price * fx_factor
+                    else:
+                        current_total += cost_basis * fx_factor
 
             net_flow_total = sum(
                 (amount for date, amount in net_flow_events if date < month_end), Decimal("0")
@@ -693,9 +792,6 @@ def update_asset(asset_id):
         if data["type"] not in ASSET_TYPES:
             raise ApiError("Categoria do ativo inválida", 400)
         asset.type = data["type"]
-    if "current_unit_price" in data:
-        price = data["current_unit_price"]
-        asset.current_unit_price = Decimal(str(price)) if price not in (None, "") else None
     if "investment_account_id" in data:
         ia = InvestmentAccount.query.join(Account, Account.id == InvestmentAccount.account_id).filter(
             InvestmentAccount.id == data["investment_account_id"], Account.user_id == g.current_user.id
@@ -703,6 +799,12 @@ def update_asset(asset_id):
         if ia is None:
             raise ApiError("Conta de investimento não encontrada", 404)
         asset.investment_account_id = ia.id
+    if "current_unit_price" in data:
+        currency = asset.investment_account.account.currency
+        if asset.type == "cripto" and binance_pair(asset.code, currency) is not None:
+            raise ApiError("Preço de cripto reconhecida é atualizado automaticamente e não pode ser editado", 400)
+        price = data["current_unit_price"]
+        asset.current_unit_price = Decimal(str(price)) if price not in (None, "") else None
 
     for field, value in _parse_fixed_income_fields(data, required=False).items():
         setattr(asset, field, value)
