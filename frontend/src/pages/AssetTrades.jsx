@@ -16,6 +16,11 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function fmtDateShortYear(isoDate) {
+  const d = new Date(`${isoDate}T00:00:00`);
+  return `${fmtDateShort(isoDate)} ${d.getFullYear()}`;
+}
+
 function initials(text) {
   return (text || '?').slice(0, 2).toUpperCase();
 }
@@ -214,7 +219,7 @@ export default function AssetTrades() {
                   </RowActionButton>
                 </div>
                 <div className="compra-meta">
-                  {bankNameFor(t.asset)} · {fmtDateShort(t.date)}
+                  {bankNameFor(t.asset)} · {fmtDateShortYear(t.date)}
                 </div>
               </div>
             </div>
@@ -254,7 +259,7 @@ export default function AssetTrades() {
                   </RowActionButton>
                 </div>
                 <div className="compra-meta">
-                  {bankNameFor(t.asset)} · {fmtDateShort(t.date)}
+                  {bankNameFor(t.asset)} · {fmtDateShortYear(t.date)}
                 </div>
               </div>
             </div>

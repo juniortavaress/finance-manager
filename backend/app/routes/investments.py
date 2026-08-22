@@ -257,7 +257,9 @@ def list_asset_transactions():
     if date_to:
         query = query.filter(AssetTransaction.date <= dt.date.fromisoformat(date_to))
 
-    query = query.order_by(AssetTransaction.date.desc(), AssetTransaction.created_at.desc())
+    query = query.order_by(
+        AssetTransaction.date.desc(), AssetTransaction.created_at.desc(), AssetTransaction.id.desc()
+    )
 
     legacy_limit = request.args.get("limit")
     if legacy_limit and "page" not in request.args:
