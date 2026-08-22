@@ -25,6 +25,12 @@ function initials(text) {
   return (text || '?').slice(0, 2).toUpperCase();
 }
 
+function mergeById(existing, incoming) {
+  const seen = new Set(existing.map((t) => t.id));
+  const deduped = incoming.filter((t) => !seen.has(t.id));
+  return [...existing, ...deduped];
+}
+
 function RowActionButton({ title, onClick, color, children }) {
   return (
     <button
@@ -87,12 +93,12 @@ export default function AssetTrades() {
 
   useEffect(() => {
     if (!buyData) return;
-    setPurchasesAccumulated((prev) => (buyPage === 1 ? buyData.asset_transactions : [...prev, ...buyData.asset_transactions]));
+    setPurchasesAccumulated((prev) => mergeById(buyPage === 1 ? [] : prev, buyData.asset_transactions));
   }, [buyData, buyPage]);
 
   useEffect(() => {
     if (!sellData) return;
-    setSalesAccumulated((prev) => (sellPage === 1 ? sellData.asset_transactions : [...prev, ...sellData.asset_transactions]));
+    setSalesAccumulated((prev) => mergeById(sellPage === 1 ? [] : prev, sellData.asset_transactions));
   }, [sellData, sellPage]);
 
   const currentMonth = todayIso().slice(0, 7);
