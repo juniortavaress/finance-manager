@@ -8,6 +8,7 @@ from app.models.investment import Asset, AssetTransaction, DividendSchedule, Div
 from app.models.budget import Budget
 from app.models.friends import Friendship, Group, GroupMember, SharedExpense, ExpenseParticipant, Settlement
 from app.models.quote import Quote
+from app.models.crypto_price import CryptoPrice
 
 __all__ = [
     "User",
@@ -34,4 +35,5 @@ __all__ = [
     "ExpenseParticipant",
     "Settlement",
     "Quote",
+    "CryptoPrice",
 ]

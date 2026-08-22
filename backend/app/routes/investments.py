@@ -7,10 +7,16 @@ from sqlalchemy.orm import selectinload
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import Account, Asset, AssetTransaction, Bank, Category, InvestmentAccount, Transaction
+from app.models import Account, Asset, AssetTransaction, Bank, Category, CryptoPrice, InvestmentAccount, Transaction
 from app.models.investment import ASSET_TYPES, FIXED_INCOME_TYPES
 from app.services.finance_service import add_months, recalc_account_balance
-from app.services.crypto_service import SUPPORTED_CRYPTOCURRENCIES, binance_pair, get_current_prices, get_historical_prices
+from app.services.crypto_service import (
+    COINGECKO_VS_CURRENCIES,
+    SUPPORTED_CRYPTOCURRENCIES,
+    get_current_prices,
+    get_recent_historical_prices,
+    resolve_symbol,
+)
 from app.services.fixed_income_service import pre_fixado_current_value
 from app.services.quotes_service import convert_to_brl, get_brl_rates
 
@@ -125,7 +131,9 @@ def _asset_to_dict(asset: Asset):
     data["archived"] = data["position"]["quantity"] <= 0
     currency = asset.investment_account.account.currency
     data["currency"] = currency
-    data["price_auto_updated"] = asset.type == "cripto" and binance_pair(asset.code, currency) is not None
+    data["price_auto_updated"] = (
+        asset.type == "cripto" and resolve_symbol(asset.code) is not None and currency in COINGECKO_VS_CURRENCIES
+    )
     return data
 
 
@@ -205,10 +213,11 @@ def _settle_all_matured_pre_fixado(user_id):
 
 def _refresh_crypto_prices(user_id):
     """Atualiza current_unit_price dos ativos cripto com o preco atual da
-    Binance, no par correspondente ao simbolo do ativo + moeda da conta que
-    o guarda (ex: BTC numa conta BRL busca BTCBRL, numa conta USD busca
-    BTCUSDT). Best-effort: simbolo/moeda nao suportados ou API fora do ar
-    mantem o preco existente, sem quebrar a listagem."""
+    CoinGecko (no par simbolo+moeda da conta que o guarda) e aproveita pra
+    preencher na tabela crypto_prices os dias recentes que ainda faltarem
+    (backfill incremental - o historico profundo vem do script local de
+    backfill via Binance). Best-effort: simbolo/moeda nao suportados ou API
+    fora do ar mantem o preco existente, sem quebrar a listagem."""
     inv_accounts = _owned_investment_accounts()
     if not inv_accounts:
         return
@@ -219,20 +228,64 @@ def _refresh_crypto_prices(user_id):
     assets = Asset.query.filter(
         Asset.investment_account_id.in_(currency_by_ia_id.keys()), Asset.type == "cripto"
     ).all()
-    assets_by_pair = {}
+    assets_by_key = {}
     for asset in assets:
         currency = currency_by_ia_id.get(asset.investment_account_id)
-        pair = binance_pair(asset.code, currency)
-        if pair:
-            assets_by_pair.setdefault(pair, []).append(asset)
-    if not assets_by_pair:
+        symbol = resolve_symbol(asset.code)
+        if symbol and currency:
+            assets_by_key.setdefault((symbol, currency), []).append(asset)
+    if not assets_by_key:
         return
 
-    prices = get_current_prices(assets_by_pair.keys())
+    prices = get_current_prices(assets_by_key.keys())
     changed = False
-    for pair, price in prices.items():
-        for asset in assets_by_pair[pair]:
+    today = dt.date.today()
+    for (symbol, currency), price in prices.items():
+        for asset in assets_by_key[(symbol, currency)]:
             asset.current_unit_price = price
+            changed = True
+        _upsert_crypto_price(symbol, currency, today, price)
+        changed = True
+    if changed:
+        db.session.commit()
+
+    _backfill_recent_crypto_history(assets_by_key.keys())
+
+
+def _upsert_crypto_price(symbol, currency, date, price):
+    row = CryptoPrice.query.get((symbol, currency, date))
+    if row is None:
+        db.session.add(CryptoPrice(symbol=symbol, currency=currency, date=date, price=price))
+    else:
+        row.price = price
+
+
+def _backfill_recent_crypto_history(keys, lookback_days=14):
+    """Preenche na tabela crypto_prices os dias dos ultimos `lookback_days`
+    que ainda estiverem faltando para cada (symbol, currency), via CoinGecko.
+    Roda a cada listagem, mas so' busca na API quando ha' de fato lacuna -
+    keep it cheap no caso comum (tabela ja' atualizada)."""
+    today = dt.date.today()
+    cutoff = today - dt.timedelta(days=lookback_days)
+    changed = False
+    for symbol, currency in keys:
+        existing_dates = {
+            row.date
+            for row in CryptoPrice.query.filter(
+                CryptoPrice.symbol == symbol,
+                CryptoPrice.currency == currency,
+                CryptoPrice.date >= cutoff,
+            ).all()
+        }
+        expected_dates = {cutoff + dt.timedelta(days=i) for i in range((today - cutoff).days + 1)}
+        if expected_dates <= existing_dates:
+            continue
+
+        daily_prices = get_recent_historical_prices(symbol, currency, lookback_days + 1)
+        for date, price in daily_prices:
+            if date < cutoff or date in existing_dates:
+                continue
+            _upsert_crypto_price(symbol, currency, date, price)
             changed = True
     if changed:
         db.session.commit()
@@ -263,7 +316,7 @@ def list_assets():
 @investments_bp.get("/crypto-symbols")
 @login_required
 def list_crypto_symbols():
-    symbols = [{"code": symbol, "name": name} for symbol, name in SUPPORTED_CRYPTOCURRENCIES.items()]
+    symbols = [{"code": symbol, "name": info["name"]} for symbol, info in SUPPORTED_CRYPTOCURRENCIES.items()]
     symbols.sort(key=lambda s: s["name"])
     return {"symbols": symbols}
 
@@ -338,30 +391,39 @@ def _month_start(d: dt.date) -> dt.date:
 def _crypto_monthly_prices(assets, months, earliest_date, currency_by_ia_id):
     """Preco de fechamento (na moeda da conta de cada ativo) por ativo cripto
     reconhecido, um valor por mes em `months` (usa o ultimo preco diario
-    disponivel ate o fim do mes). Ativos sem simbolo/moeda suportados ou sem
-    historico disponivel simplesmente nao entram no dict retornado - quem
-    chama cai de volta no current_unit_price."""
+    disponivel ate o fim do mes), lido da tabela crypto_prices (populada pelo
+    script local de backfill via Binance + preenchimento incremental via
+    CoinGecko em _refresh_crypto_prices). Ativos sem simbolo/moeda suportados
+    ou sem historico na tabela simplesmente nao entram no dict retornado -
+    quem chama cai de volta no current_unit_price."""
     if not months or earliest_date is None:
         return {}
 
-    assets_by_pair = {}
+    assets_by_key = {}
     for asset in assets:
         if asset.type != "cripto":
             continue
         currency = currency_by_ia_id.get(asset.investment_account_id)
-        pair = binance_pair(asset.code, currency)
-        if pair:
-            assets_by_pair.setdefault(pair, []).append(asset)
-    if not assets_by_pair:
+        symbol = resolve_symbol(asset.code)
+        if symbol and currency:
+            assets_by_key.setdefault((symbol, currency), []).append(asset)
+    if not assets_by_key:
         return {}
 
-    today = dt.date.today()
     result = {}
-    for pair, assets_for_id in assets_by_pair.items():
-        daily_prices = get_historical_prices(pair, earliest_date, today)
-        if not daily_prices:
+    for (symbol, currency), assets_for_id in assets_by_key.items():
+        rows = (
+            CryptoPrice.query.filter(
+                CryptoPrice.symbol == symbol,
+                CryptoPrice.currency == currency,
+                CryptoPrice.date >= earliest_date,
+            )
+            .order_by(CryptoPrice.date)
+            .all()
+        )
+        if not rows:
             continue
-        daily_prices.sort(key=lambda item: item[0])
+        daily_prices = [(row.date, row.price) for row in rows]
 
         monthly = {}
         price_idx = 0
@@ -801,7 +863,7 @@ def update_asset(asset_id):
         asset.investment_account_id = ia.id
     if "current_unit_price" in data:
         currency = asset.investment_account.account.currency
-        if asset.type == "cripto" and binance_pair(asset.code, currency) is not None:
+        if asset.type == "cripto" and resolve_symbol(asset.code) is not None and currency in COINGECKO_VS_CURRENCIES:
             raise ApiError("Preço de cripto reconhecida é atualizado automaticamente e não pode ser editado", 400)
         price = data["current_unit_price"]
         asset.current_unit_price = Decimal(str(price)) if price not in (None, "") else None
