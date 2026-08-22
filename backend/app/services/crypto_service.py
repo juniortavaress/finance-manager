@@ -1,8 +1,11 @@
 import datetime as dt
 import json
+import logging
 import time
 import urllib.request
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 
 BINANCE_BASE_URL = "https://api.binance.com/api/v3"
 
@@ -84,6 +87,7 @@ def get_current_prices(pairs):
         try:
             price = _fetch_current_price(pair)
         except Exception:
+            logger.warning("Falha ao buscar preco atual da Binance para %s", pair, exc_info=True)
             cached = _price_cache.get(pair)
             if cached:
                 result[pair] = cached[0]
