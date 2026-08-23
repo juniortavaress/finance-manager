@@ -16,7 +16,8 @@ from app.services.crypto_service import (
     get_current_prices,
     resolve_symbol,
 )
-from app.services.fixed_income_service import pre_fixado_current_value
+from app.services.economic_index_service import get_daily_rates
+from app.services.fixed_income_service import pos_fixado_current_value, pre_fixado_current_value
 from app.services.quotes_service import convert_to_brl, get_brl_rates
 
 investments_bp = Blueprint("investments", __name__)
@@ -85,6 +86,42 @@ def _pre_fixado_projected_value(asset: Asset, as_of: dt.date):
     return projected_value if quantity > 0 else Decimal("0")
 
 
+def _pos_fixado_projected_value(asset: Asset, as_of: dt.date):
+    """Valor atual projetado de um ativo pos-fixado (ex: 110% do CDI): cada
+    compra rende juros compostos diarios do indexador desde sua propria data
+    ate `as_of` (ou o vencimento, o que vier primeiro). Mesma logica de custo
+    medio de _pre_fixado_projected_value para vendas parciais."""
+    if asset.fixed_income_rate_pct is None or asset.fixed_income_indexer is None:
+        return None
+    if not asset.asset_transactions:
+        return None
+
+    cutoff = min(as_of, asset.maturity_date) if asset.maturity_date else as_of
+    earliest_purchase = min(tx.date for tx in asset.asset_transactions)
+    daily_rates = get_daily_rates(asset.fixed_income_indexer, earliest_purchase, cutoff)
+    if not daily_rates:
+        return None
+
+    quantity = Decimal("0")
+    projected_value = Decimal("0")
+
+    for tx in asset.asset_transactions:
+        if tx.type == "buy":
+            lot_invested = tx.quantity * tx.unit_price + tx.fee_amount
+            lot_value = pos_fixado_current_value(
+                lot_invested, asset.fixed_income_rate_pct, daily_rates, tx.date, cutoff
+            )
+            quantity += tx.quantity
+            projected_value += lot_value
+        else:
+            if quantity > 0:
+                ratio = tx.quantity / quantity
+                projected_value -= projected_value * ratio
+            quantity -= tx.quantity
+
+    return projected_value if quantity > 0 else Decimal("0")
+
+
 def _asset_position(asset: Asset):
     """Quantidade, custo total e preco medio a partir do historico de compras/vendas.
     Vendas reduzem a quantidade mas nao alteram o preco medio das compras restantes
@@ -105,6 +142,10 @@ def _asset_position(asset: Asset):
 
     if asset.type == "renda_fixa" and asset.fixed_income_type == "pre_fixado":
         current_value = _pre_fixado_projected_value(asset, dt.date.today())
+    elif asset.type == "renda_fixa" and asset.fixed_income_type == "pos_fixado":
+        current_value = _pos_fixado_projected_value(asset, dt.date.today())
+        if current_value is None:
+            current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
     else:
         current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
     dividends_total = sum((d.amount for d in asset.dividends), Decimal("0"))

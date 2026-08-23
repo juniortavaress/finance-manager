@@ -21,7 +21,7 @@ const FIXED_INCOME_TYPE_OPTIONS = [
   { value: 'ipca', label: 'IPCA+' },
 ];
 
-const INDEXER_OPTIONS = ['CDI', 'Selic', 'IPCA'];
+const INDEXER_OPTIONS = ['CDI', 'Selic'];
 
 /**
  * Modal unico para criar OU editar um ativo.

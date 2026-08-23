@@ -62,6 +62,29 @@ def pre_fixado_current_value(invested_amount: Decimal, annual_rate_pct: Decimal,
     return (invested_amount * factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def pos_fixado_current_value(
+    invested_amount: Decimal, indexer_pct: Decimal, daily_rates: dict, purchase_date: dt.date, as_of: dt.date
+) -> Decimal:
+    """Valor atual de um lote pos-fixado (ex: 110% do CDI) por juros
+    compostos diarios: valor = investido * prod(1 + taxa_dia% * (pct/100))
+    para cada dia util com taxa publicada entre purchase_date (exclusive) e
+    as_of (inclusive). `daily_rates` e' {date: Decimal} com a taxa diaria
+    (percentual) do indexador, de app.services.economic_index_service -
+    dias sem taxa publicada (fins de semana/feriados/atraso de divulgacao)
+    simplesmente nao contribuem fator, igual a convencao do indexador em si
+    (CDI/Selic so' capitalizam em dia util)."""
+    if not daily_rates or indexer_pct is None:
+        return invested_amount
+
+    pct = indexer_pct / Decimal("100")
+    factor = Decimal("1")
+    for date, rate_pct in daily_rates.items():
+        if purchase_date < date <= as_of:
+            factor *= 1 + (rate_pct / Decimal("100")) * pct
+
+    return (invested_amount * factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def warm_up_holidays_cache():
     """Pre-computa o calendario de feriados (custo real do calculo pre-fixado,
     nao o loop em si) num range plausivel de anos, na subida do processo -

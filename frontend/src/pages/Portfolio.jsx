@@ -32,6 +32,20 @@ const FIXED_INCOME_TYPE_LABELS = {
   ipca: 'IPCA+',
 };
 
+// Indexadores pos-fixados com calculo automatico no backend (CDI/Selic via
+// API do Banco Central) - ver economic_index_service.py. IPCA+ ainda cai no
+// preco manual.
+const AUTO_POS_FIXADO_INDEXERS = ['CDI', 'SELIC'];
+
+function isAutoFixedIncome(asset) {
+  if (asset.type !== 'renda_fixa') return false;
+  if (asset.fixed_income_type === 'pre_fixado') return true;
+  if (asset.fixed_income_type === 'pos_fixado') {
+    return AUTO_POS_FIXADO_INDEXERS.includes((asset.fixed_income_indexer || '').toUpperCase());
+  }
+  return false;
+}
+
 function fixedIncomeSubLabel(asset) {
   const parts = [];
   if (asset.fixed_income_type) parts.push(FIXED_INCOME_TYPE_LABELS[asset.fixed_income_type] || asset.fixed_income_type);
@@ -285,8 +299,8 @@ export default function Portfolio() {
           {sorted.map((a) => {
             const color = TYPE_COLORS[a.type] || '#8B9A97';
             const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
-            const isPreFixado = a.type === 'renda_fixa' && a.fixed_income_type === 'pre_fixado';
-            const isAutoPrice = isPreFixado || a.price_auto_updated;
+            const isAutoFixed = isAutoFixedIncome(a);
+            const isAutoPrice = isAutoFixed || a.price_auto_updated;
             return (
               <div className="asset-row" key={a.id}>
                 <div>
@@ -338,7 +352,7 @@ export default function Portfolio() {
                 {isAutoPrice ? (
                   <div
                     className="a-num"
-                    title={isPreFixado ? 'Calculado automaticamente pela taxa pré-fixada' : 'Atualizado automaticamente pela cotação da Binance'}
+                    title={isAutoFixed ? 'Calculado automaticamente pela taxa de renda fixa' : 'Atualizado automaticamente pela cotação da Binance'}
                   >
                     {currentAmount != null ? fmt(currentAmount, a.currency) : '—'}
                   </div>
@@ -387,8 +401,8 @@ export default function Portfolio() {
           {sorted.map((a) => {
             const color = TYPE_COLORS[a.type] || '#8B9A97';
             const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
-            const isPreFixado = a.type === 'renda_fixa' && a.fixed_income_type === 'pre_fixado';
-            const isAutoPrice = isPreFixado || a.price_auto_updated;
+            const isAutoFixed = isAutoFixedIncome(a);
+            const isAutoPrice = isAutoFixed || a.price_auto_updated;
             return (
               <div className="asset-card" key={a.id}>
                 <div className="asset-card-head">
@@ -451,7 +465,7 @@ export default function Portfolio() {
                     {isAutoPrice ? (
                       <div
                         className="a-num"
-                        title={isPreFixado ? 'Calculado automaticamente pela taxa pré-fixada' : 'Atualizado automaticamente pela cotação da Binance'}
+                        title={isAutoFixed ? 'Calculado automaticamente pela taxa de renda fixa' : 'Atualizado automaticamente pela cotação da Binance'}
                       >
                         {currentAmount != null ? fmt(currentAmount, a.currency) : '—'}
                       </div>
