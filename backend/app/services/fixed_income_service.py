@@ -9,16 +9,23 @@ BUSINESS_DAYS_PER_YEAR = 252
 
 @lru_cache(maxsize=16)
 def _br_holidays_set(start_year: int, end_year: int) -> frozenset:
-    """Feriados nacionais BR para um intervalo de anos, memorizado por
+    """Feriados bancarios BR (calendario B3/Anbima, usado para contar dias
+    uteis de titulos de renda fixa) para um intervalo de anos, memorizado por
     processo. lru_cache aqui evita reconstruir o calendario a cada chamada -
     sem isso, 50 ativos x poucas compras cada vira centenas de reconstrucoes
-    de calendario por request."""
-    return frozenset(holidays.Brazil(years=range(start_year, end_year + 1)).keys())
+    de calendario por request.
+    Usa o calendario financeiro 'BVMF' (B3), nao holidays.Brazil(): o B3
+    inclui Carnaval (seg+ter) e Corpus Christi, que sao feriados bancarios
+    nacionais de fato mas nao constam no calendario de feriados nacionais
+    oficiais - sem eles o calculo conta dias uteis a mais e diverge do valor
+    real mostrado pela corretora."""
+    return frozenset(holidays.financial_holidays("BVMF", years=range(start_year, end_year + 1)).keys())
 
 
 def business_days_between(start: dt.date, end: dt.date) -> int:
-    """Dias uteis (seg-sex, exclui feriados nacionais BR) entre start (exclusive)
-    e end (inclusive) - convencao Anbima usada para render de titulos pre-fixados.
+    """Dias uteis (seg-sex, exclui feriados bancarios BR - calendario B3) entre
+    start (exclusive) e end (inclusive) - convencao Anbima usada para render
+    de titulos pre-fixados.
     Conta por aritmetica (semanas completas + resto), sem iterar dia a dia -
     o que permite escalar para dezenas de ativos sem pesar no request. So o
     desconto de feriados percorre a lista (curta: ~9/ano) de feriados no
