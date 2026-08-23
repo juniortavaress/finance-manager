@@ -33,13 +33,13 @@ const FIXED_INCOME_TYPE_LABELS = {
 };
 
 // Indexadores pos-fixados com calculo automatico no backend (CDI/Selic via
-// API do Banco Central) - ver economic_index_service.py. IPCA+ ainda cai no
-// preco manual.
+// API do Banco Central) - ver economic_index_service.py.
 const AUTO_POS_FIXADO_INDEXERS = ['CDI', 'SELIC'];
 
 function isAutoFixedIncome(asset) {
   if (asset.type !== 'renda_fixa') return false;
   if (asset.fixed_income_type === 'pre_fixado') return true;
+  if (asset.fixed_income_type === 'ipca') return true;
   if (asset.fixed_income_type === 'pos_fixado') {
     return AUTO_POS_FIXADO_INDEXERS.includes((asset.fixed_income_indexer || '').toUpperCase());
   }

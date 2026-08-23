@@ -85,6 +85,41 @@ def pos_fixado_current_value(
     return (invested_amount * factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
+def ipca_plus_current_value(
+    invested_amount: Decimal,
+    annual_rate_pct: Decimal,
+    monthly_ipca: dict,
+    purchase_date: dt.date,
+    as_of: dt.date,
+) -> Decimal:
+    """Valor atual de um lote IPCA+ (ex: IPCA + 7,5% ao ano): capitaliza o
+    IPCA acumulado nos meses FECHADOS entre a compra e hoje, multiplicado
+    pelo fator de juros compostos da taxa fixa contratada (dias uteis/252)
+    sobre o periodo inteiro (compra ate `as_of`, incluindo o mes corrente).
+
+    Aproximacao consciente: a convencao oficial Anbima usa uma PROJECAO de
+    IPCA (dado proprietario, sem API publica) para o mes corrente ainda nao
+    fechado; aqui esse pedaco fica sem capitalizacao de IPCA (so a taxa fixa
+    continua rendendo pro-rata) ate o IBGE publicar o indice, o que subestima
+    o valor por poucos dias/semanas e se autocorrige assim que o mes fecha -
+    ver conversa com o usuario sobre o tradeoff.
+    `monthly_ipca` e' {primeiro_dia_do_mes: Decimal} de
+    app.services.economic_index_service.get_ipca_monthly_variations, so' com
+    meses ja divulgados pelo IBGE."""
+    ipca_factor = Decimal("1")
+    cursor = purchase_date.replace(day=1)
+    while cursor < as_of.replace(day=1):
+        variation = monthly_ipca.get(cursor)
+        if variation is not None:
+            ipca_factor *= 1 + variation / Decimal("100")
+        cursor = dt.date(cursor.year + (cursor.month // 12), (cursor.month % 12) + 1, 1)
+
+    du = business_days_between(purchase_date, as_of)
+    rate_factor = (1 + annual_rate_pct / Decimal("100")) ** (Decimal(du) / Decimal(BUSINESS_DAYS_PER_YEAR)) if du > 0 else Decimal("1")
+
+    return (invested_amount * ipca_factor * rate_factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def warm_up_holidays_cache():
     """Pre-computa o calendario de feriados (custo real do calculo pre-fixado,
     nao o loop em si) num range plausivel de anos, na subida do processo -

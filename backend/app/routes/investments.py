@@ -16,8 +16,8 @@ from app.services.crypto_service import (
     get_current_prices,
     resolve_symbol,
 )
-from app.services.economic_index_service import get_daily_rates
-from app.services.fixed_income_service import pos_fixado_current_value, pre_fixado_current_value
+from app.services.economic_index_service import get_daily_rates, get_ipca_monthly_variations
+from app.services.fixed_income_service import ipca_plus_current_value, pos_fixado_current_value, pre_fixado_current_value
 from app.services.quotes_service import convert_to_brl, get_brl_rates
 
 investments_bp = Blueprint("investments", __name__)
@@ -58,13 +58,22 @@ def _owned_asset(asset_id):
     )
 
 
+def _lot_rate_pct(asset: Asset, tx):
+    """Taxa contratada de um lote (compra) especifico: usa a taxa gravada na
+    propria transacao (cada compra trava a taxa de mercado do dia) e cai para
+    a taxa do ativo so' como fallback de transacoes antigas, de antes desta
+    coluna existir na compra."""
+    return tx.fixed_income_rate_pct if tx.fixed_income_rate_pct is not None else asset.fixed_income_rate_pct
+
+
 def _pre_fixado_projected_value(asset: Asset, as_of: dt.date):
     """Valor atual projetado de um ativo pre-fixado: cada compra rende juros
-    compostos (dias uteis/252) desde sua propria data ate `as_of` (ou o
-    vencimento, o que vier primeiro - o titulo "congela" apos vencer).
-    Vendas reduzem a base restante proporcionalmente (mesmo metodo de custo
-    medio usado em _asset_position, sem FIFO/LIFO)."""
-    if asset.fixed_income_rate_pct is None or asset.maturity_date is None:
+    compostos (dias uteis/252), na taxa contratada naquela propria compra,
+    desde sua propria data ate `as_of` (ou o vencimento, o que vier primeiro -
+    o titulo "congela" apos vencer). Vendas reduzem a base restante
+    proporcionalmente (mesmo metodo de custo medio usado em _asset_position,
+    sem FIFO/LIFO)."""
+    if asset.maturity_date is None:
         return None
 
     cutoff = min(as_of, asset.maturity_date)
@@ -73,8 +82,11 @@ def _pre_fixado_projected_value(asset: Asset, as_of: dt.date):
 
     for tx in asset.asset_transactions:
         if tx.type == "buy":
+            rate_pct = _lot_rate_pct(asset, tx)
+            if rate_pct is None:
+                continue
             lot_invested = tx.quantity * tx.unit_price + tx.fee_amount
-            lot_value = pre_fixado_current_value(lot_invested, asset.fixed_income_rate_pct, tx.date, cutoff)
+            lot_value = pre_fixado_current_value(lot_invested, rate_pct, tx.date, cutoff)
             quantity += tx.quantity
             projected_value += lot_value
         else:
@@ -91,7 +103,7 @@ def _pos_fixado_projected_value(asset: Asset, as_of: dt.date):
     compra rende juros compostos diarios do indexador desde sua propria data
     ate `as_of` (ou o vencimento, o que vier primeiro). Mesma logica de custo
     medio de _pre_fixado_projected_value para vendas parciais."""
-    if asset.fixed_income_rate_pct is None or asset.fixed_income_indexer is None:
+    if asset.fixed_income_indexer is None:
         return None
     if not asset.asset_transactions:
         return None
@@ -107,10 +119,47 @@ def _pos_fixado_projected_value(asset: Asset, as_of: dt.date):
 
     for tx in asset.asset_transactions:
         if tx.type == "buy":
+            rate_pct = _lot_rate_pct(asset, tx)
+            if rate_pct is None:
+                continue
             lot_invested = tx.quantity * tx.unit_price + tx.fee_amount
-            lot_value = pos_fixado_current_value(
-                lot_invested, asset.fixed_income_rate_pct, daily_rates, tx.date, cutoff
-            )
+            lot_value = pos_fixado_current_value(lot_invested, rate_pct, daily_rates, tx.date, cutoff)
+            quantity += tx.quantity
+            projected_value += lot_value
+        else:
+            if quantity > 0:
+                ratio = tx.quantity / quantity
+                projected_value -= projected_value * ratio
+            quantity -= tx.quantity
+
+    return projected_value if quantity > 0 else Decimal("0")
+
+
+def _ipca_plus_projected_value(asset: Asset, as_of: dt.date):
+    """Valor atual projetado de um ativo IPCA+ (ex: IPCA + 7,5% ao ano): cada
+    compra capitaliza o IPCA acumulado desde sua propria data (na taxa fixa
+    contratada naquela compra - pode variar entre compras do mesmo ativo, ex.
+    IPCA+7,5% numa e IPCA+6,8% noutra) ate `as_of` (ou o vencimento, o que
+    vier primeiro). Mesma logica de custo medio de _pre_fixado_projected_value
+    para vendas parciais. Ver ipca_plus_current_value para a aproximacao do
+    mes corrente (sem IPCA fechado ainda)."""
+    if not asset.asset_transactions:
+        return None
+
+    cutoff = min(as_of, asset.maturity_date) if asset.maturity_date else as_of
+    earliest_purchase = min(tx.date for tx in asset.asset_transactions)
+    monthly_ipca = get_ipca_monthly_variations(earliest_purchase, cutoff)
+
+    quantity = Decimal("0")
+    projected_value = Decimal("0")
+
+    for tx in asset.asset_transactions:
+        if tx.type == "buy":
+            rate_pct = _lot_rate_pct(asset, tx)
+            if rate_pct is None:
+                continue
+            lot_invested = tx.quantity * tx.unit_price + tx.fee_amount
+            lot_value = ipca_plus_current_value(lot_invested, rate_pct, monthly_ipca, tx.date, cutoff)
             quantity += tx.quantity
             projected_value += lot_value
         else:
@@ -146,6 +195,10 @@ def _asset_position(asset: Asset):
         current_value = _pos_fixado_projected_value(asset, dt.date.today())
         if current_value is None:
             current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
+    elif asset.type == "renda_fixa" and asset.fixed_income_type == "ipca":
+        current_value = _ipca_plus_projected_value(asset, dt.date.today())
+        if current_value is None:
+            current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
     else:
         current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
     dividends_total = sum((d.amount for d in asset.dividends), Decimal("0"))
@@ -174,6 +227,11 @@ def _asset_to_dict(asset: Asset):
     data["price_auto_updated"] = (
         asset.type == "cripto" and resolve_symbol(asset.code) is not None and currency in COINGECKO_VS_CURRENCIES
     )
+    last_buy = next(
+        (tx for tx in reversed(asset.asset_transactions) if tx.type == "buy" and tx.fixed_income_rate_pct is not None),
+        None,
+    )
+    data["fixed_income_last_rate_pct"] = float(last_buy.fixed_income_rate_pct) if last_buy else None
     return data
 
 
@@ -184,7 +242,7 @@ def _settle_matured_pre_fixado(asset: Asset):
     posicao e creditando a conta - igual um resgate real de corretora."""
     if asset.type != "renda_fixa" or asset.fixed_income_type != "pre_fixado":
         return
-    if asset.maturity_date is None or asset.fixed_income_rate_pct is None:
+    if asset.maturity_date is None:
         return
     if asset.maturity_date > dt.date.today():
         return
@@ -902,6 +960,7 @@ def _create_asset_transaction(asset, kind, data):
     unit_price = data.get("unit_price")
     fee_amount = data.get("fee_amount") or 0
     note_id = (data.get("note_id") or "").strip() or None
+    rate_raw = data.get("fixed_income_rate_pct")
 
     if not date_raw:
         raise ApiError("Data é obrigatória", 400)
@@ -911,6 +970,9 @@ def _create_asset_transaction(asset, kind, data):
         raise ApiError("Valor unitário deve ser maior que zero", 400)
     if Decimal(str(fee_amount)) < 0:
         raise ApiError("Taxa não pode ser negativa", 400)
+    if kind == "buy" and asset.type == "renda_fixa" and asset.fixed_income_type in ("pre_fixado", "pos_fixado", "ipca"):
+        if rate_raw in (None, ""):
+            raise ApiError("Informe a taxa contratada nesta compra", 400)
 
     quantity = Decimal(str(quantity))
     unit_price = Decimal(str(unit_price))
@@ -962,6 +1024,7 @@ def _create_asset_transaction(asset, kind, data):
         total_amount=total_amount,
         fee_amount=fee_amount,
         note_id=note_id,
+        fixed_income_rate_pct=Decimal(str(rate_raw)) if rate_raw not in (None, "") else None,
     )
     db.session.add(asset_tx)
     db.session.flush()
@@ -1026,6 +1089,11 @@ def update_asset_transaction(asset_transaction_id):
     )
     trade_date = dt.date.fromisoformat(data["date"]) if "date" in data else asset_tx.date
     note_id = (data["note_id"] or "").strip() or None if "note_id" in data else asset_tx.note_id
+    rate_pct = (
+        (Decimal(str(data["fixed_income_rate_pct"])) if data["fixed_income_rate_pct"] not in (None, "") else None)
+        if "fixed_income_rate_pct" in data
+        else asset_tx.fixed_income_rate_pct
+    )
 
     if quantity <= 0:
         raise ApiError("Quantidade deve ser maior que zero", 400)
@@ -1057,6 +1125,7 @@ def update_asset_transaction(asset_transaction_id):
     asset_tx.date = trade_date
     asset_tx.total_amount = total_amount
     asset_tx.note_id = note_id
+    asset_tx.fixed_income_rate_pct = rate_pct
 
     if tx:
         tx.amount = total_amount

@@ -16,6 +16,12 @@ BCB_SGS_BASE_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{code}/dados"
 # dias uteis de defasagem.
 INDEXER_SGS_CODES = {"CDI": 12, "SELIC": 11}
 
+# IPCA (serie 433) e' MENSAL, nao diaria: cada linha e' a variacao do mes
+# inteiro, data marcada no dia 1 do mes de referencia. Guardado na mesma
+# tabela (rate_pct = variacao do mes, nao taxa diaria) - quem consome (IPCA+)
+# trata a semantica diferente do CDI/Selic.
+IPCA_SGS_CODE = 433
+
 
 def _normalize_indexer(indexer):
     if not indexer:
@@ -100,5 +106,64 @@ def get_daily_rates(indexer, start_date, end_date):
         EconomicIndexRate.indexer == indexer,
         EconomicIndexRate.date > start_date,
         EconomicIndexRate.date <= end_date,
+    ).all()
+    return {row.date: row.rate_pct for row in rows}
+
+
+def _month_start(date):
+    return date.replace(day=1)
+
+
+def _add_month(date):
+    return dt.date(date.year + (date.month // 12), (date.month % 12) + 1, 1)
+
+
+def get_ipca_monthly_variations(start_date, end_date):
+    """Variacao mensal do IPCA (serie SGS 433) para cada mes FECHADO entre
+    start_date e end_date (inclusive nos dois extremos, por mes de
+    referencia). Retorna {primeiro_dia_do_mes: Decimal} - so' meses que o
+    IBGE ja divulgou (o IPCA sai por volta do dia 10 do mes seguinte ao de
+    referencia); o mes corrente, ainda nao fechado, nunca aparece aqui."""
+    if end_date < start_date:
+        return {}
+
+    range_start, range_end = _month_start(start_date), _month_start(end_date)
+    existing = {
+        row.date
+        for row in EconomicIndexRate.query.filter(
+            EconomicIndexRate.indexer == "IPCA",
+            EconomicIndexRate.date >= range_start,
+            EconomicIndexRate.date <= range_end,
+        ).all()
+    }
+
+    # O mes corrente nunca tem IPCA publicado ainda (~dia 10 do mes seguinte)
+    # - excluir do "esperado" evita bater na API de novo a cada chamada so'
+    # porque o mes em aberto nunca aparece no cache.
+    last_closeable_month = _month_start(dt.date.today())
+    expected_months = set()
+    cursor = range_start
+    while cursor <= range_end and cursor < last_closeable_month:
+        expected_months.add(cursor)
+        cursor = _add_month(cursor)
+
+    if not expected_months - existing:
+        rows = EconomicIndexRate.query.filter(
+            EconomicIndexRate.indexer == "IPCA",
+            EconomicIndexRate.date >= range_start,
+            EconomicIndexRate.date <= range_end,
+        ).all()
+        return {row.date: row.rate_pct for row in rows}
+
+    fetched = _fetch_bcb_series(IPCA_SGS_CODE, range_start, dt.date.today())
+    for date, rate in fetched:
+        db.session.merge(EconomicIndexRate(indexer="IPCA", date=_month_start(date), rate_pct=rate))
+    if fetched:
+        db.session.commit()
+
+    rows = EconomicIndexRate.query.filter(
+        EconomicIndexRate.indexer == "IPCA",
+        EconomicIndexRate.date >= range_start,
+        EconomicIndexRate.date <= range_end,
     ).all()
     return {row.date: row.rate_pct for row in rows}

@@ -62,6 +62,7 @@ class AssetTransaction(BaseModel):
     total_amount = db.Column(db.Numeric(14, 2), nullable=False)
     fee_amount = db.Column(db.Numeric(14, 2), nullable=False, default=0, server_default="0")
     note_id = db.Column(db.Text, nullable=True)
+    fixed_income_rate_pct = db.Column(db.Numeric(7, 3), nullable=True)
 
     def to_dict(self):
         return {
@@ -75,6 +76,7 @@ class AssetTransaction(BaseModel):
             "total_amount": float(self.total_amount),
             "fee_amount": float(self.fee_amount),
             "note_id": self.note_id,
+            "fixed_income_rate_pct": float(self.fixed_income_rate_pct) if self.fixed_income_rate_pct is not None else None,
         }
 
 

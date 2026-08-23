@@ -37,8 +37,12 @@ export default function TradeAssetModal({
   const [feeAmount, setFeeAmount] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
   const [noteId, setNoteId] = useState('');
+  const [fixedIncomeRatePct, setFixedIncomeRatePct] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const isFixedIncomeBuy =
+    !isSell && asset?.type === 'renda_fixa' && ['pre_fixado', 'pos_fixado', 'ipca'].includes(asset?.fixed_income_type);
 
   useEffect(() => {
     if (!open) return;
@@ -49,6 +53,7 @@ export default function TradeAssetModal({
       setFeeAmount(numberToMasked(trade.fee_amount));
       setTotalAmount(numberToMasked(trade.total_amount));
       setNoteId(trade.note_id || '');
+      setFixedIncomeRatePct(trade.fixed_income_rate_pct != null ? String(trade.fixed_income_rate_pct) : '');
     } else {
       setDate(todayIso());
       setQuantity('');
@@ -56,9 +61,11 @@ export default function TradeAssetModal({
       setFeeAmount('');
       setTotalAmount('');
       setNoteId('');
+      const suggestedRate = asset?.fixed_income_last_rate_pct ?? asset?.fixed_income_rate_pct;
+      setFixedIncomeRatePct(suggestedRate != null ? String(suggestedRate) : '');
     }
     setError('');
-  }, [open, trade]);
+  }, [open, trade, asset]);
 
   if (!open || !asset) return null;
 
@@ -107,6 +114,9 @@ export default function TradeAssetModal({
     if (isSell && numericQuantity > availableQuantity) {
       return setError(`Quantidade insuficiente. Disponível: ${availableQuantity}.`);
     }
+    if (isFixedIncomeBuy && !fixedIncomeRatePct.trim()) {
+      return setError('Informe a taxa contratada nesta compra.');
+    }
 
     setSubmitting(true);
     try {
@@ -116,6 +126,9 @@ export default function TradeAssetModal({
         unit_price: numericUnitPrice,
         fee_amount: numericFee,
         note_id: noteId.trim() || undefined,
+        ...(isFixedIncomeBuy
+          ? { fixed_income_rate_pct: Number(fixedIncomeRatePct.replace(',', '.')) }
+          : {}),
       };
       if (isEdit) {
         await investmentsApi.updateAssetTransaction(trade.id, payload);
@@ -194,9 +207,28 @@ export default function TradeAssetModal({
             </div>
           </div>
 
+          {isFixedIncomeBuy && (
+            <div className="field">
+              <label>
+                {asset.fixed_income_type === 'pos_fixado'
+                  ? `% do ${asset.fixed_income_indexer || 'indexador'} contratado nesta compra`
+                  : asset.fixed_income_type === 'ipca'
+                  ? 'Taxa adicional ao IPCA contratada nesta compra (%)'
+                  : 'Taxa fixa ao ano contratada nesta compra (%)'}
+              </label>
+              <input
+                type="text"
+                inputMode="decimal"
+                placeholder={asset.fixed_income_type === 'pos_fixado' ? 'Ex.: 110' : 'Ex.: 14,5'}
+                value={fixedIncomeRatePct}
+                onChange={(e) => setFixedIncomeRatePct(e.target.value.replace(/[^\d,.]/g, ''))}
+              />
+            </div>
+          )}
+
           <div className="field-row">
             <div className="field">
-              <label>Taxa</label>
+              <label>Taxa de corretagem</label>
               <CurrencyInput value={feeAmount} onChange={handleFeeChange} />
             </div>
             <div className="field">
