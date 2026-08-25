@@ -106,6 +106,14 @@ export const IconPencil = (props) => (
   </svg>
 );
 
+export const IconInfo = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <circle cx="12" cy="12" r="9" />
+    <line x1="12" y1="11" x2="12" y2="16.5" />
+    <circle cx="12" cy="7.8" r="0.9" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const IconTrash = (props) => (
   <svg viewBox="0 0 24 24" {...base} {...props}>
     <path d="M3 6h18" />

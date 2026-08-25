@@ -599,12 +599,16 @@ def delete_transaction(transaction_id):
     payment_for_invoice = tx.invoice_payment_for if tx.is_invoice_payment else None
     pair = tx.transfer_pair if tx.is_transfer else None
     pair_account = pair.account if pair else None
+    dividend = Dividend.query.filter_by(transaction_id=tx.id).first()
 
     if pair:
         tx.transfer_pair_id = None
         pair.transfer_pair_id = None
         db.session.flush()
         db.session.delete(pair)
+    if dividend:
+        db.session.delete(dividend)
+        db.session.flush()
     db.session.delete(tx)
     db.session.flush()
 

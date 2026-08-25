@@ -296,6 +296,13 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
                     value={fixedIncomeRatePct}
                     onChange={(e) => setFixedIncomeRatePct(e.target.value.replace(/[^\d,.]/g, ''))}
                   />
+                  {isEditing && asset?.fixed_income_avg_rate_pct != null && (
+                    <div className="field-hint">
+                      Média ponderada das compras: {asset.fixed_income_avg_rate_pct.toFixed(2).replace('.', ',')}%
+                      {fixedIncomeType === 'pos_fixado' ? ` do ${fixedIncomeIndexer.trim() || 'indexador'}` : ''}
+                      {' '}(cada lote usa sua própria taxa no cálculo — este campo não é editável aqui)
+                    </div>
+                  )}
                 </div>
               )}
 

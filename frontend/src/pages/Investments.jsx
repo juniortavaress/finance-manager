@@ -292,7 +292,7 @@ export default function Investments() {
         </div>
         <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
           <div className="label">Dividendos</div>
-          <div className="value num">{fmt(dividendsAllTime)}</div>
+          <div className="value num">{fmt(totalDividends)}</div>
           {dividends.length > 0 && (
             <button
               type="button"

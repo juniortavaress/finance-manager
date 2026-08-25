@@ -16,8 +16,8 @@ from app.services.crypto_service import (
     get_current_prices,
     resolve_symbol,
 )
-from app.services.economic_index_service import get_daily_rates, get_ipca_monthly_variations
-from app.services.fixed_income_service import ipca_plus_current_value, pos_fixado_current_value, pre_fixado_current_value
+from app.services.economic_index_service import get_daily_rates
+from app.services.fixed_income_service import pos_fixado_current_value, pre_fixado_current_value
 from app.services.quotes_service import convert_to_brl, get_brl_rates
 
 investments_bp = Blueprint("investments", __name__)
@@ -67,12 +67,14 @@ def _lot_rate_pct(asset: Asset, tx):
 
 
 def _pre_fixado_projected_value(asset: Asset, as_of: dt.date):
-    """Valor atual projetado de um ativo pre-fixado: cada compra rende juros
+    """Valor atual (ou projetado para um `as_of` passado, ex: um mes do
+    grafico de evolucao) de um ativo pre-fixado: cada compra rende juros
     compostos (dias uteis/252), na taxa contratada naquela propria compra,
     desde sua propria data ate `as_of` (ou o vencimento, o que vier primeiro -
-    o titulo "congela" apos vencer). Vendas reduzem a base restante
-    proporcionalmente (mesmo metodo de custo medio usado em _asset_position,
-    sem FIFO/LIFO)."""
+    o titulo "congela" apos vencer). Ignora transacoes posteriores a `as_of`
+    (necessario para reconstruir um ponto passado do grafico). Vendas
+    reduzem a base restante proporcionalmente (mesmo metodo de custo medio
+    usado em _asset_position, sem FIFO/LIFO)."""
     if asset.maturity_date is None:
         return None
 
@@ -81,6 +83,8 @@ def _pre_fixado_projected_value(asset: Asset, as_of: dt.date):
     projected_value = Decimal("0")
 
     for tx in asset.asset_transactions:
+        if tx.date > as_of:
+            break
         if tx.type == "buy":
             rate_pct = _lot_rate_pct(asset, tx)
             if rate_pct is None:
@@ -98,19 +102,25 @@ def _pre_fixado_projected_value(asset: Asset, as_of: dt.date):
     return projected_value if quantity > 0 else Decimal("0")
 
 
-def _pos_fixado_projected_value(asset: Asset, as_of: dt.date):
-    """Valor atual projetado de um ativo pos-fixado (ex: 110% do CDI): cada
+def _pos_fixado_projected_value(asset: Asset, as_of: dt.date, daily_rates=None):
+    """Valor atual (ou projetado para um `as_of` passado, ex: um mes do
+    grafico de evolucao) de um ativo pos-fixado (ex: 110% do CDI): cada
     compra rende juros compostos diarios do indexador desde sua propria data
-    ate `as_of` (ou o vencimento, o que vier primeiro). Mesma logica de custo
-    medio de _pre_fixado_projected_value para vendas parciais."""
+    ate `as_of` (ou o vencimento, o que vier primeiro). Ignora transacoes
+    posteriores a `as_of`. Mesma logica de custo medio de
+    _pre_fixado_projected_value para vendas parciais.
+    `daily_rates` pode ser passado pronto (ja buscado por quem chama, ex: o
+    grafico de evolucao reaproveitando uma unica busca pra varios meses) -
+    por padrao busca do zero via get_daily_rates."""
     if asset.fixed_income_indexer is None:
         return None
     if not asset.asset_transactions:
         return None
 
     cutoff = min(as_of, asset.maturity_date) if asset.maturity_date else as_of
-    earliest_purchase = min(tx.date for tx in asset.asset_transactions)
-    daily_rates = get_daily_rates(asset.fixed_income_indexer, earliest_purchase, cutoff)
+    if daily_rates is None:
+        earliest_purchase = min(tx.date for tx in asset.asset_transactions)
+        daily_rates = get_daily_rates(asset.fixed_income_indexer, earliest_purchase, cutoff)
     if not daily_rates:
         return None
 
@@ -118,6 +128,8 @@ def _pos_fixado_projected_value(asset: Asset, as_of: dt.date):
     projected_value = Decimal("0")
 
     for tx in asset.asset_transactions:
+        if tx.date > as_of:
+            break
         if tx.type == "buy":
             rate_pct = _lot_rate_pct(asset, tx)
             if rate_pct is None:
@@ -135,40 +147,21 @@ def _pos_fixado_projected_value(asset: Asset, as_of: dt.date):
     return projected_value if quantity > 0 else Decimal("0")
 
 
-def _ipca_plus_projected_value(asset: Asset, as_of: dt.date):
-    """Valor atual projetado de um ativo IPCA+ (ex: IPCA + 7,5% ao ano): cada
-    compra capitaliza o IPCA acumulado desde sua propria data (na taxa fixa
-    contratada naquela compra - pode variar entre compras do mesmo ativo, ex.
-    IPCA+7,5% numa e IPCA+6,8% noutra) ate `as_of` (ou o vencimento, o que
-    vier primeiro). Mesma logica de custo medio de _pre_fixado_projected_value
-    para vendas parciais. Ver ipca_plus_current_value para a aproximacao do
-    mes corrente (sem IPCA fechado ainda)."""
-    if not asset.asset_transactions:
+def _fixed_income_month_value(asset: Asset, as_of: dt.date, daily_rates):
+    """Valor projetado (juros compostos reais, nao preco unitario achatado)
+    de um ativo pre-fixado ou pos-fixado CDI/Selic num mes passado do grafico
+    de evolucao. `daily_rates` e' a serie do indexador ja buscada para o
+    ativo (None se nao aplicavel/nao pos-fixado). Retorna None para IPCA+ e
+    qualquer outro caso sem calculo automatico confiavel - quem chama cai de
+    volta no preco unitario atual (ver _asset_position para o motivo do
+    IPCA+ nao ter calculo automatico: marcacao a mercado, nao "na curva")."""
+    if asset.type != "renda_fixa":
         return None
-
-    cutoff = min(as_of, asset.maturity_date) if asset.maturity_date else as_of
-    earliest_purchase = min(tx.date for tx in asset.asset_transactions)
-    monthly_ipca = get_ipca_monthly_variations(earliest_purchase, cutoff)
-
-    quantity = Decimal("0")
-    projected_value = Decimal("0")
-
-    for tx in asset.asset_transactions:
-        if tx.type == "buy":
-            rate_pct = _lot_rate_pct(asset, tx)
-            if rate_pct is None:
-                continue
-            lot_invested = tx.quantity * tx.unit_price + tx.fee_amount
-            lot_value = ipca_plus_current_value(lot_invested, rate_pct, monthly_ipca, tx.date, cutoff)
-            quantity += tx.quantity
-            projected_value += lot_value
-        else:
-            if quantity > 0:
-                ratio = tx.quantity / quantity
-                projected_value -= projected_value * ratio
-            quantity -= tx.quantity
-
-    return projected_value if quantity > 0 else Decimal("0")
+    if asset.fixed_income_type == "pre_fixado":
+        return _pre_fixado_projected_value(asset, as_of)
+    if asset.fixed_income_type == "pos_fixado" and daily_rates is not None:
+        return _pos_fixado_projected_value(asset, as_of, daily_rates=daily_rates)
+    return None
 
 
 def _asset_position(asset: Asset):
@@ -193,10 +186,6 @@ def _asset_position(asset: Asset):
         current_value = _pre_fixado_projected_value(asset, dt.date.today())
     elif asset.type == "renda_fixa" and asset.fixed_income_type == "pos_fixado":
         current_value = _pos_fixado_projected_value(asset, dt.date.today())
-        if current_value is None:
-            current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
-    elif asset.type == "renda_fixa" and asset.fixed_income_type == "ipca":
-        current_value = _ipca_plus_projected_value(asset, dt.date.today())
         if current_value is None:
             current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
     else:
@@ -232,7 +221,29 @@ def _asset_to_dict(asset: Asset):
         None,
     )
     data["fixed_income_last_rate_pct"] = float(last_buy.fixed_income_rate_pct) if last_buy else None
+    data["fixed_income_avg_rate_pct"] = _fixed_income_avg_rate_pct(asset)
     return data
+
+
+def _fixed_income_avg_rate_pct(asset: Asset):
+    """Taxa media ponderada pelo valor investido de cada lote de compra
+    (quantidade * preco unitario + taxas), so' considerando lotes com taxa
+    propria gravada. Usada apenas como informacao de exibicao (ex: quando um
+    ativo tem varias compras em taxas diferentes, como titulos Tesouro
+    Renda+) - o calculo de valor atual sempre usa a taxa de cada lote
+    individualmente, nunca essa media."""
+    weighted_sum = Decimal("0")
+    total_invested = Decimal("0")
+    for tx in asset.asset_transactions:
+        if tx.type != "buy" or tx.fixed_income_rate_pct is None:
+            continue
+        lot_invested = tx.quantity * tx.unit_price + tx.fee_amount
+        weighted_sum += lot_invested * tx.fixed_income_rate_pct
+        total_invested += lot_invested
+
+    if total_invested <= 0:
+        return None
+    return float(weighted_sum / total_invested)
 
 
 def _settle_matured_pre_fixado(asset: Asset):
@@ -601,11 +612,16 @@ def investments_summary():
         """Soma os aportes convertidos para BRL usando o cambio registrado em
         cada transacao (custo real de aquisicao da moeda), nao a cotacao
         atual - transacoes antigas sem exchange_rate caem na cotacao atual
-        como fallback."""
+        como fallback.
+        `tx.exchange_rate` e' gravado como BRL->moeda_destino (quantas
+        unidades da moeda estrangeira 1 BRL compra - ver _resolve_transfer_amounts
+        em transactions.py: dest_amount = amount_brl * exchange_rate), entao
+        pra voltar de `tx.amount` (na moeda estrangeira) para BRL e' preciso
+        dividir pelo cambio, nao multiplicar."""
         total = Decimal("0")
         for tx in _transfer_txs(account, tx_type):
             if tx.exchange_rate:
-                total += tx.amount * tx.exchange_rate
+                total += tx.amount / tx.exchange_rate
             else:
                 total += Decimal(str(_to_brl(float(tx.amount), account.currency)))
         return total
@@ -677,6 +693,20 @@ def investments_summary():
         monthly_price_by_asset_id = _crypto_monthly_prices(
             relevant_assets, months, earliest_date, {k: v.currency for k, v in accounts_by_ia_id.items()}
         )
+        # Indexadores CDI/Selic buscados uma unica vez por ativo pos-fixado
+        # (cobrindo toda a janela do grafico), em vez de uma vez por mes -
+        # get_daily_rates() bate no banco (e possivelmente no BCB) a cada
+        # chamada, entao chamar dentro do loop de meses seria bem mais lento.
+        daily_rates_by_asset_id = {}
+        for asset in relevant_assets:
+            if (
+                asset.type == "renda_fixa"
+                and asset.fixed_income_type == "pos_fixado"
+                and asset.fixed_income_indexer
+                and asset.asset_transactions
+            ):
+                earliest_purchase = min(tx.date for tx in asset.asset_transactions)
+                daily_rates_by_asset_id[asset.id] = get_daily_rates(asset.fixed_income_indexer, earliest_purchase, today)
 
         # Movimentacoes de aporte liquido, com data, pra plotar em degrau (mesmo
         # criterio de net_transferred acima): transferencias externas para a
@@ -697,8 +727,13 @@ def investments_summary():
                 signed_amount = tx.amount if tx.type == "income" else -tx.amount
                 tx_currency = accounts_by_account_id[tx.account_id].currency
                 if not bank_filter and tx_currency != "BRL":
-                    fx_factor = tx.exchange_rate or Decimal(str((fx_rates or {}).get(tx_currency, 1)))
-                    signed_amount *= fx_factor
+                    # tx.exchange_rate e' BRL->moeda_destino (ver
+                    # _transfer_flow_brl acima) - dividir, nao multiplicar,
+                    # pra converter o valor (na moeda estrangeira) para BRL.
+                    if tx.exchange_rate:
+                        signed_amount /= tx.exchange_rate
+                    else:
+                        signed_amount *= Decimal(str((fx_rates or {}).get(tx_currency, 1)))
                 net_flow_events.append((tx.date, signed_amount))
 
         # Estado incremental por asset (quantidade/custo/preco medio acumulados
@@ -757,8 +792,12 @@ def investments_summary():
                     current_value = current_amount_by_asset_id.get(str(asset.id))
                     current_total += Decimal(str(current_value)) if current_value is not None else cost_basis * fx_factor
                 else:
+                    month_end_cutoff = min(month_end - dt.timedelta(days=1), today)
+                    projected = _fixed_income_month_value(asset, month_end_cutoff, daily_rates_by_asset_id.get(asset.id))
                     month_price = monthly_price_by_asset_id.get(asset.id, {}).get(month_start)
-                    if month_price is not None:
+                    if projected is not None:
+                        current_total += projected * fx_factor
+                    elif month_price is not None:
                         current_total += quantity * month_price * fx_factor
                     elif asset.current_unit_price is not None:
                         current_total += quantity * asset.current_unit_price * fx_factor

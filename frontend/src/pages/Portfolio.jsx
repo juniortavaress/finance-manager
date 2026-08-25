@@ -5,7 +5,7 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import { fmt, fmtDateFull } from '../utils/format';
 import { maskToNumber, numberToMasked } from '../utils/currency';
-import { IconSearch, IconPencil } from '../components/icons';
+import { IconSearch, IconPencil, IconInfo } from '../components/icons';
 import CurrencyInput from '../components/CurrencyInput';
 import NewAssetModal from '../components/modals/NewAssetModal';
 
@@ -39,11 +39,21 @@ const AUTO_POS_FIXADO_INDEXERS = ['CDI', 'SELIC'];
 function isAutoFixedIncome(asset) {
   if (asset.type !== 'renda_fixa') return false;
   if (asset.fixed_income_type === 'pre_fixado') return true;
-  if (asset.fixed_income_type === 'ipca') return true;
   if (asset.fixed_income_type === 'pos_fixado') {
     return AUTO_POS_FIXADO_INDEXERS.includes((asset.fixed_income_indexer || '').toUpperCase());
   }
   return false;
+}
+
+const IPCA_INFO_TEXT =
+  'Títulos indexados ao IPCA (Tesouro IPCA+, CDBs IPCA+ etc.) oscilam por marcação a mercado — o preço de negociação muda com a taxa de juros de longo prazo, podendo ficar abaixo do valor investido mesmo com IPCA positivo. Não é possível calcular esse valor automaticamente; insira manualmente o valor atual mostrado na sua corretora.';
+
+function IpcaInfoIcon() {
+  return (
+    <span title={IPCA_INFO_TEXT} style={{ display: 'inline-flex', color: 'var(--ink-faint)', cursor: 'help', flexShrink: 0 }}>
+      <IconInfo style={{ width: 13, height: 13 }} />
+    </span>
+  );
 }
 
 function fixedIncomeSubLabel(asset) {
@@ -332,6 +342,7 @@ export default function Portfolio() {
                     >
                       <IconPencil style={{ width: 11, height: 11 }} />
                     </button>
+                    {a.fixed_income_type === 'ipca' && <IpcaInfoIcon />}
                   </div>
                   <div className="a-sub">{a.type === 'renda_fixa' ? fixedIncomeSubLabel(a) : a.name}</div>
                 </div>
@@ -429,6 +440,7 @@ export default function Portfolio() {
                       >
                         <IconPencil style={{ width: 11, height: 11 }} />
                       </button>
+                      {a.fixed_income_type === 'ipca' && <IpcaInfoIcon />}
                     </div>
                     <div className="a-sub">{a.type === 'renda_fixa' ? fixedIncomeSubLabel(a) : a.name}</div>
                   </div>
