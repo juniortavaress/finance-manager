@@ -5,9 +5,10 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import { fmt, fmtDateFull } from '../utils/format';
 import { maskToNumber, numberToMasked } from '../utils/currency';
-import { IconSearch, IconPencil, IconInfo } from '../components/icons';
+import { IconSearch, IconPencil, IconInfo, IconChevronDown } from '../components/icons';
 import CurrencyInput from '../components/CurrencyInput';
 import NewAssetModal from '../components/modals/NewAssetModal';
+import AssetDetailModal from '../components/modals/AssetDetailModal';
 
 const TYPE_LABELS = {
   renda_fixa: 'Renda fixa',
@@ -92,6 +93,7 @@ export default function Portfolio() {
   const [sort, setSort] = useState({ key: 'current_amount', dir: 'desc' });
 
   const [editingAsset, setEditingAsset] = useState(null);
+  const [detailAsset, setDetailAsset] = useState(null);
   const [editingPriceId, setEditingPriceId] = useState(null);
   const [editingPriceValue, setEditingPriceValue] = useState('');
   const [savingPrice, setSavingPrice] = useState(false);
@@ -285,7 +287,7 @@ export default function Portfolio() {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card asset-list-card">
         <div className="asset-table-wrap">
           <div className="asset-row asset-head">
             {COLUMNS.map((c) => (
@@ -341,6 +343,32 @@ export default function Portfolio() {
                       }}
                     >
                       <IconPencil style={{ width: 11, height: 11 }} />
+                    </button>
+                    <button
+                      type="button"
+                      title="Ver detalhes"
+                      onClick={() => setDetailAsset(a)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: 20,
+                        height: 20,
+                        borderRadius: 6,
+                        border: 'none',
+                        background: 'transparent',
+                        color: 'var(--ink-faint)',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = 'var(--teal)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = 'var(--ink-faint)';
+                      }}
+                    >
+                      <IconChevronDown style={{ width: 11, height: 11, transform: 'rotate(-90deg)' }} />
                     </button>
                     {a.fixed_income_type === 'ipca' && <IpcaInfoIcon />}
                   </div>
@@ -440,6 +468,26 @@ export default function Portfolio() {
                       >
                         <IconPencil style={{ width: 11, height: 11 }} />
                       </button>
+                      <button
+                        type="button"
+                        title="Ver detalhes"
+                        onClick={() => setDetailAsset(a)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: 22,
+                          height: 22,
+                          borderRadius: 6,
+                          border: 'none',
+                          background: 'transparent',
+                          color: 'var(--ink-faint)',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <IconChevronDown style={{ width: 11, height: 11, transform: 'rotate(-90deg)' }} />
+                      </button>
                       {a.fixed_income_type === 'ipca' && <IpcaInfoIcon />}
                     </div>
                     <div className="a-sub">{a.type === 'renda_fixa' ? fixedIncomeSubLabel(a) : a.name}</div>
@@ -538,6 +586,8 @@ export default function Portfolio() {
           reload();
         }}
       />
+
+      <AssetDetailModal open={!!detailAsset} asset={detailAsset} onClose={() => setDetailAsset(null)} />
     </div>
   );
 }

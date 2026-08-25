@@ -417,6 +417,11 @@ def list_asset_transactions():
     )
     assets_by_id = {a.id: a for a in owned_assets}
     asset_ids = list(assets_by_id.keys())
+
+    asset_id = request.args.get("asset_id")
+    if asset_id:
+        asset_ids = [aid for aid in asset_ids if str(aid) == asset_id]
+
     if not asset_ids:
         return {"asset_transactions": [], "total": 0, "page": 1, "page_size": 15}
 
@@ -516,6 +521,146 @@ def _crypto_monthly_prices(assets, months, earliest_date, currency_by_ia_id):
             result[asset.id] = monthly
 
     return result
+
+
+def _compute_asset_evolution(assets, months, today, current_amount_by_asset_id, fx_rates, bank_filter, accounts_by_ia_id):
+    """Serie mensal {year, month, invested, current} para o conjunto de
+    `assets` informado (pode ser um unico ativo ou o portfolio inteiro).
+    Nao inclui net_flow - isso e' um conceito de conta/portfolio (aporte
+    externo via transferencia), sem correspondente por ativo individual.
+    Fatorado de investments_summary para ser reutilizado pelo endpoint de
+    evolucao de um ativo individual (GET /investments/assets/<id>/evolution)."""
+    last = _month_start(today)
+    earliest = months[0] if months else today
+
+    monthly_price_by_asset_id = _crypto_monthly_prices(
+        assets, months, earliest, {k: v.currency for k, v in accounts_by_ia_id.items()}
+    )
+    # Indexadores CDI/Selic buscados uma unica vez por ativo pos-fixado
+    # (cobrindo toda a janela do grafico), em vez de uma vez por mes -
+    # get_daily_rates() bate no banco (e possivelmente no BCB) a cada
+    # chamada, entao chamar dentro do loop de meses seria bem mais lento.
+    daily_rates_by_asset_id = {}
+    for asset in assets:
+        if (
+            asset.type == "renda_fixa"
+            and asset.fixed_income_type == "pos_fixado"
+            and asset.fixed_income_indexer
+            and asset.asset_transactions
+        ):
+            earliest_purchase = min(tx.date for tx in asset.asset_transactions)
+            daily_rates_by_asset_id[asset.id] = get_daily_rates(asset.fixed_income_indexer, earliest_purchase, today)
+
+    # Estado incremental por asset (quantidade/custo/preco medio acumulados
+    # ate o cursor atual). Como asset_transactions ja vem ordenado por data,
+    # cada asset avanca pelas suas transacoes uma unica vez ao longo dos
+    # meses, em vez de reprocessar o historico inteiro em cada iteracao
+    # (O(ativos x transacoes) no total, em vez de O(meses x ativos x transacoes)).
+    asset_state = {
+        asset.id: {"quantity": Decimal("0"), "cost_basis": Decimal("0"), "avg_price": Decimal("0"), "tx_idx": 0}
+        for asset in assets
+    }
+
+    evolution = []
+    for month_start in months:
+        month_end = add_months(month_start, 1)
+        is_current_month = month_start == last
+        invested_total = Decimal("0")
+        current_total = Decimal("0")
+        for asset in assets:
+            state = asset_state[asset.id]
+            txs = asset.asset_transactions
+            idx = state["tx_idx"]
+            quantity = state["quantity"]
+            cost_basis = state["cost_basis"]
+            avg_price = state["avg_price"]
+            while idx < len(txs) and txs[idx].date < month_end:
+                tx = txs[idx]
+                if tx.type == "buy":
+                    cost_basis += tx.quantity * tx.unit_price
+                    quantity += tx.quantity
+                    avg_price = (cost_basis / quantity) if quantity > 0 else Decimal("0")
+                else:
+                    cost_basis -= tx.quantity * avg_price
+                    quantity -= tx.quantity
+                idx += 1
+            state["tx_idx"] = idx
+            state["quantity"] = quantity
+            state["cost_basis"] = cost_basis
+            state["avg_price"] = avg_price
+
+            asset_currency = accounts_by_ia_id[asset.investment_account_id].currency
+            # Sem cotacao historica, usa a taxa atual pra converter todo o
+            # historico do ativo estrangeiro - aproximacao, nao afeta ativos em BRL.
+            fx_factor = (
+                Decimal(str((fx_rates or {}).get(asset_currency, 1)))
+                if not bank_filter and asset_currency != "BRL"
+                else Decimal("1")
+            )
+
+            invested_total += cost_basis * fx_factor
+            if is_current_month:
+                # No mes atual, usa exatamente o mesmo valor projetado do card
+                # "Valor atual" (_asset_position, com juros compostos para
+                # pre-fixado) em vez de recalcular cru - garante que o ultimo
+                # ponto do grafico bata com o card. current_amount_by_asset_id
+                # ja vem convertido para BRL quando aplicavel.
+                current_value = current_amount_by_asset_id.get(str(asset.id))
+                current_total += Decimal(str(current_value)) if current_value is not None else cost_basis * fx_factor
+            else:
+                month_end_cutoff = min(month_end - dt.timedelta(days=1), today)
+                projected = _fixed_income_month_value(asset, month_end_cutoff, daily_rates_by_asset_id.get(asset.id))
+                month_price = monthly_price_by_asset_id.get(asset.id, {}).get(month_start)
+                if projected is not None:
+                    current_total += projected * fx_factor
+                elif month_price is not None:
+                    current_total += quantity * month_price * fx_factor
+                elif asset.current_unit_price is not None:
+                    current_total += quantity * asset.current_unit_price * fx_factor
+                else:
+                    current_total += cost_basis * fx_factor
+
+        evolution.append(
+            {
+                "year": month_start.year,
+                "month": month_start.month,
+                "invested": float(invested_total),
+                "current": float(current_total),
+            }
+        )
+    return evolution
+
+
+@investments_bp.get("/assets/<uuid:asset_id>/evolution")
+@login_required
+def asset_evolution(asset_id):
+    asset = _owned_asset(asset_id)
+    if asset is None:
+        raise ApiError("Ativo não encontrado", 404)
+
+    if not asset.asset_transactions:
+        return {"evolution": []}
+
+    today = dt.date.today()
+    earliest_date = min(tx.date for tx in asset.asset_transactions)
+    cursor = _month_start(earliest_date)
+    last = _month_start(today)
+    months = []
+    while cursor <= last:
+        months.append(cursor)
+        cursor = add_months(cursor, 1)
+
+    position = _asset_position(asset)
+    current_amount_by_asset_id = {str(asset.id): position["current_amount"]}
+    accounts_by_ia_id = {asset.investment_account_id: asset.investment_account.account}
+
+    # fx_rates=None e bank_filter=None mantem o valor na moeda nativa do
+    # ativo (sem conversao BRL) - consistente com a mesma convencao usada em
+    # investments_summary quando um bank_id especifico e' filtrado.
+    evolution = _compute_asset_evolution(
+        [asset], months, today, current_amount_by_asset_id, fx_rates=None, bank_filter=None, accounts_by_ia_id=accounts_by_ia_id
+    )
+    return {"evolution": evolution}
 
 
 @investments_bp.get("/summary")
@@ -690,27 +835,12 @@ def investments_summary():
         ]
         relevant_assets = [a for a in all_assets if a.investment_account_id in relevant_ia_ids]
         current_amount_by_asset_id = {a["id"]: a["position"]["current_amount"] for a in assets_result}
-        monthly_price_by_asset_id = _crypto_monthly_prices(
-            relevant_assets, months, earliest_date, {k: v.currency for k, v in accounts_by_ia_id.items()}
-        )
-        # Indexadores CDI/Selic buscados uma unica vez por ativo pos-fixado
-        # (cobrindo toda a janela do grafico), em vez de uma vez por mes -
-        # get_daily_rates() bate no banco (e possivelmente no BCB) a cada
-        # chamada, entao chamar dentro do loop de meses seria bem mais lento.
-        daily_rates_by_asset_id = {}
-        for asset in relevant_assets:
-            if (
-                asset.type == "renda_fixa"
-                and asset.fixed_income_type == "pos_fixado"
-                and asset.fixed_income_indexer
-                and asset.asset_transactions
-            ):
-                earliest_purchase = min(tx.date for tx in asset.asset_transactions)
-                daily_rates_by_asset_id[asset.id] = get_daily_rates(asset.fixed_income_indexer, earliest_purchase, today)
 
         # Movimentacoes de aporte liquido, com data, pra plotar em degrau (mesmo
         # criterio de net_transferred acima): transferencias externas para a
         # conta de investimento, excluindo movimentacoes internas de compra/venda.
+        # Conceito de conta/portfolio (nao de ativo individual), por isso fica
+        # de fora de _compute_asset_evolution e e' mesclado de volta abaixo.
         net_flow_events = []
         relevant_account_ids = [accounts_by_ia_id[ia_id].id for ia_id in relevant_ia_ids]
         if relevant_account_ids:
@@ -736,86 +866,13 @@ def investments_summary():
                         signed_amount *= Decimal(str((fx_rates or {}).get(tx_currency, 1)))
                 net_flow_events.append((tx.date, signed_amount))
 
-        # Estado incremental por asset (quantidade/custo/preco medio acumulados
-        # ate o cursor atual). Como asset_transactions ja vem ordenado por data,
-        # cada asset avanca pelas suas transacoes uma unica vez ao longo dos
-        # meses, em vez de reprocessar o historico inteiro em cada iteracao
-        # (O(ativos x transacoes) no total, em vez de O(meses x ativos x transacoes)).
-        asset_state = {
-            asset.id: {"quantity": Decimal("0"), "cost_basis": Decimal("0"), "avg_price": Decimal("0"), "tx_idx": 0}
-            for asset in relevant_assets
-        }
-
-        for month_start in months:
+        evolution = _compute_asset_evolution(
+            relevant_assets, months, today, current_amount_by_asset_id, fx_rates, bank_filter, accounts_by_ia_id
+        )
+        for point, month_start in zip(evolution, months):
             month_end = add_months(month_start, 1)
-            is_current_month = month_start == last
-            invested_total = Decimal("0")
-            current_total = Decimal("0")
-            for asset in relevant_assets:
-                state = asset_state[asset.id]
-                txs = asset.asset_transactions
-                idx = state["tx_idx"]
-                quantity = state["quantity"]
-                cost_basis = state["cost_basis"]
-                avg_price = state["avg_price"]
-                while idx < len(txs) and txs[idx].date < month_end:
-                    tx = txs[idx]
-                    if tx.type == "buy":
-                        cost_basis += tx.quantity * tx.unit_price
-                        quantity += tx.quantity
-                        avg_price = (cost_basis / quantity) if quantity > 0 else Decimal("0")
-                    else:
-                        cost_basis -= tx.quantity * avg_price
-                        quantity -= tx.quantity
-                    idx += 1
-                state["tx_idx"] = idx
-                state["quantity"] = quantity
-                state["cost_basis"] = cost_basis
-                state["avg_price"] = avg_price
-
-                asset_currency = accounts_by_ia_id[asset.investment_account_id].currency
-                # Sem cotacao historica, usa a taxa atual pra converter todo o
-                # historico do ativo estrangeiro - aproximacao, nao afeta ativos em BRL.
-                fx_factor = (
-                    Decimal(str((fx_rates or {}).get(asset_currency, 1)))
-                    if not bank_filter and asset_currency != "BRL"
-                    else Decimal("1")
-                )
-
-                invested_total += cost_basis * fx_factor
-                if is_current_month:
-                    # No mes atual, usa exatamente o mesmo valor projetado do card
-                    # "Valor atual" (_asset_position, com juros compostos para
-                    # pre-fixado) em vez de recalcular cru - garante que o ultimo
-                    # ponto do grafico bata com o card. current_amount_by_asset_id
-                    # ja vem convertido para BRL quando aplicavel.
-                    current_value = current_amount_by_asset_id.get(str(asset.id))
-                    current_total += Decimal(str(current_value)) if current_value is not None else cost_basis * fx_factor
-                else:
-                    month_end_cutoff = min(month_end - dt.timedelta(days=1), today)
-                    projected = _fixed_income_month_value(asset, month_end_cutoff, daily_rates_by_asset_id.get(asset.id))
-                    month_price = monthly_price_by_asset_id.get(asset.id, {}).get(month_start)
-                    if projected is not None:
-                        current_total += projected * fx_factor
-                    elif month_price is not None:
-                        current_total += quantity * month_price * fx_factor
-                    elif asset.current_unit_price is not None:
-                        current_total += quantity * asset.current_unit_price * fx_factor
-                    else:
-                        current_total += cost_basis * fx_factor
-
-            net_flow_total = sum(
-                (amount for date, amount in net_flow_events if date < month_end), Decimal("0")
-            )
-
-            evolution.append(
-                {
-                    "year": month_start.year,
-                    "month": month_start.month,
-                    "invested": float(invested_total),
-                    "current": float(current_total),
-                    "net_flow": float(net_flow_total),
-                }
+            point["net_flow"] = float(
+                sum((amount for date, amount in net_flow_events if date < month_end), Decimal("0"))
             )
 
     active_assets_result = [a for a in assets_result if a["position"]["quantity"] > 0]

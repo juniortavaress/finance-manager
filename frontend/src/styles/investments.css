@@ -96,13 +96,15 @@
 /* carteira de investimentos — cards (mobile) */
 .asset-card-list {
   display: none;
+  flex-direction: column;
+  gap: 12px;
 }
 .asset-card {
-  padding: 14px 4px;
-  border-bottom: 1px solid var(--line);
-}
-.asset-card:last-child {
-  border-bottom: none;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(28, 43, 41, 0.06);
 }
 .asset-card-head {
   display: flex;
@@ -137,7 +139,13 @@
     display: none;
   }
   .asset-card-list {
-    display: block;
+    display: flex;
+  }
+  .asset-list-card {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
   }
 }
 
