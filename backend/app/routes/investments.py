@@ -246,12 +246,11 @@ def _fixed_income_avg_rate_pct(asset: Asset):
     return float(weighted_sum / total_invested)
 
 
-def _settle_matured_pre_fixado(asset: Asset):
-    """Resgate automatico: quando um titulo pre-fixado passa do vencimento e
-    ainda tem posicao em aberto, gera a venda pelo valor projetado na data de
-    vencimento (mesmo formato de _create_asset_transaction), zerando a
-    posicao e creditando a conta - igual um resgate real de corretora."""
-    if asset.type != "renda_fixa" or asset.fixed_income_type != "pre_fixado":
+def _settle_matured_fixed_income(asset: Asset):
+    """Resgate automatico: quando um titulo pre-fixado ou pos-fixado passa do
+    vencimento e ainda tem posicao em aberto, gera a venda pelo valor
+    projetado na data de vencimento"""
+    if asset.type != "renda_fixa" or asset.fixed_income_type not in ("pre_fixado", "pos_fixado"):
         return
     if asset.maturity_date is None:
         return
@@ -263,7 +262,10 @@ def _settle_matured_pre_fixado(asset: Asset):
     if quantity <= 0:
         return
 
-    redemption_value = _pre_fixado_projected_value(asset, asset.maturity_date)
+    if asset.fixed_income_type == "pre_fixado":
+        redemption_value = _pre_fixado_projected_value(asset, asset.maturity_date)
+    else:
+        redemption_value = _pos_fixado_projected_value(asset, asset.maturity_date)
     if redemption_value is None or redemption_value <= 0:
         return
 
@@ -303,19 +305,19 @@ def _settle_matured_pre_fixado(asset: Asset):
     recalc_account_balance(account)
 
 
-def _settle_all_matured_pre_fixado(user_id):
+def _settle_all_matured_fixed_income(user_id):
     inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
     if not inv_account_ids:
         return
     assets = Asset.query.filter(
         Asset.investment_account_id.in_(inv_account_ids),
         Asset.type == "renda_fixa",
-        Asset.fixed_income_type == "pre_fixado",
+        Asset.fixed_income_type.in_(("pre_fixado", "pos_fixado")),
         Asset.maturity_date.isnot(None),
         Asset.maturity_date <= dt.date.today(),
     ).options(selectinload(Asset.asset_transactions)).all()
     for asset in assets:
-        _settle_matured_pre_fixado(asset)
+        _settle_matured_fixed_income(asset)
     if assets:
         db.session.commit()
 
@@ -370,7 +372,7 @@ def _upsert_crypto_price(symbol, currency, date, price):
 @investments_bp.get("/assets")
 @login_required
 def list_assets():
-    _settle_all_matured_pre_fixado(g.current_user.id)
+    _settle_all_matured_fixed_income(g.current_user.id)
     _refresh_crypto_prices(g.current_user.id)
 
     inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
@@ -666,7 +668,7 @@ def asset_evolution(asset_id):
 @investments_bp.get("/summary")
 @login_required
 def investments_summary():
-    _settle_all_matured_pre_fixado(g.current_user.id)
+    _settle_all_matured_fixed_income(g.current_user.id)
 
     bank_filter = request.args.get("bank_id")
 
@@ -1076,6 +1078,10 @@ def _create_asset_transaction(asset, kind, data):
     base_amount = quantity * unit_price
     trade_date = dt.date.fromisoformat(date_raw)
 
+    if kind == "buy" and asset.type == "renda_fixa" and asset.maturity_date is not None:
+        if trade_date > asset.maturity_date:
+            raise ApiError("Data de compra não pode ser posterior ao vencimento do título", 400)
+
     account = asset.investment_account.account
     category = _get_or_create_transfer_category(g.current_user.id)
 
@@ -1197,6 +1203,9 @@ def update_asset_transaction(asset_transaction_id):
         raise ApiError("Valor unitário deve ser maior que zero", 400)
     if fee_amount < 0:
         raise ApiError("Taxa não pode ser negativa", 400)
+    if asset_tx.type == "buy" and asset.type == "renda_fixa" and asset.maturity_date is not None:
+        if trade_date > asset.maturity_date:
+            raise ApiError("Data de compra não pode ser posterior ao vencimento do título", 400)
 
     base_amount = quantity * unit_price
 
