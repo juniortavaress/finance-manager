@@ -40,7 +40,7 @@ const TYPE_COLORS = {
 
 export default function Investments() {
   const navigate = useNavigate();
-  const { bankById, reloadAll } = useData();
+  const { bankById, investmentAccounts, reloadAll } = useData();
   const [bankFilter, setBankFilter] = useState('');
   const { data: summaryData, loading: summaryLoading, reload: reloadSummary } = useFetch(
     () => investmentsApi.summary(bankFilter || undefined),
@@ -204,11 +204,12 @@ export default function Investments() {
 
   const bankOptions = useMemo(() => {
     const seen = new Map();
-    assets.forEach((a) => {
-      if (!seen.has(a.bank_id)) seen.set(a.bank_id, a.bank_name);
+    investmentAccounts.forEach((a) => {
+      const bank = bankById(a.bank_id);
+      if (bank && !seen.has(bank.id)) seen.set(bank.id, bank.name);
     });
     return [...seen.entries()];
-  }, [assets]);
+  }, [investmentAccounts, bankById]);
 
   const topPositions = useMemo(
     () =>
