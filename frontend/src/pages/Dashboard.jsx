@@ -70,7 +70,9 @@ export default function Dashboard() {
     reloadInvoices();
   }
 
-  const categories = catData?.categories || [];
+  const categories = [...(catData?.categories || [])].sort(
+    (a, b) => Math.max(b.total, b.budget_amount || 0) - Math.max(a.total, a.budget_amount || 0)
+  );
   const catMax = Math.max(1, ...categories.map((c) => c.total), ...categories.map((c) => c.budget_amount || 0));
 
   const rdPeriods = rdData?.periods || [];
@@ -199,43 +201,46 @@ export default function Dashboard() {
               </div>
             ))}
           {!catsLoading && categories.length === 0 && <div className="empty-state">Nenhum gasto neste período.</div>}
-          {!catsLoading && categories.map((c) => (
-            <div
-              className="hbar-row hbar-row-clickable"
-              key={c.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => setDrilldown({ kind: 'category', categoryId: c.id, categoryName: c.name })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') setDrilldown({ kind: 'category', categoryId: c.id, categoryName: c.name });
-              }}
-            >
-              <div className="hbar-top">
-                <span className="cat">
-                  <span className="catdot" style={{ background: c.color_hex }} />
-                  {c.name}
-                </span>
-                <span className="val num">
-                  <AnimatedNumber value={c.total} />
+          {!catsLoading && categories.map((c) => {
+            const overBudget = c.budget_amount != null && c.total > c.budget_amount;
+            return (
+              <div
+                className="hbar-row hbar-row-clickable"
+                key={c.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setDrilldown({ kind: 'category', categoryId: c.id, categoryName: c.name })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') setDrilldown({ kind: 'category', categoryId: c.id, categoryName: c.name });
+                }}
+              >
+                <div className="hbar-top">
+                  <span className="cat">
+                    <span className="catdot" style={{ background: c.color_hex }} />
+                    {c.name}
+                  </span>
+                  <span className="val num" style={overBudget ? { color: 'var(--brick)' } : undefined}>
+                    <AnimatedNumber value={c.total} />
+                    {c.budget_amount != null && (
+                      <span style={{ color: overBudget ? 'var(--brick)' : 'var(--ink-faint)', fontWeight: 400 }}> / {fmt(c.budget_amount)}</span>
+                    )}
+                  </span>
+                </div>
+                <div className="hbar-track">
                   {c.budget_amount != null && (
-                    <span style={{ color: 'var(--ink-faint)', fontWeight: 400 }}> / {fmt(c.budget_amount)}</span>
+                    <div
+                      className="hbar-goal"
+                      style={{ width: `${Math.min((c.budget_amount / catMax) * 100, 100)}%`, background: hexToRgba(c.color_hex, 0.25) }}
+                    />
                   )}
-                </span>
-              </div>
-              <div className="hbar-track">
-                {c.budget_amount != null && (
                   <div
-                    className="hbar-goal"
-                    style={{ width: `${Math.min((c.budget_amount / catMax) * 100, 100)}%`, background: hexToRgba(c.color_hex, 0.25) }}
+                    className="hbar-fill"
+                    style={{ width: `${(c.total / catMax) * 100}%`, background: overBudget ? 'var(--brick)' : c.color_hex }}
                   />
-                )}
-                <div
-                  className="hbar-fill"
-                  style={{ width: `${(c.total / catMax) * 100}%`, background: c.color_hex }}
-                />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <div className="card">
           <h3>Saldo por banco</h3>
