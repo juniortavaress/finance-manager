@@ -6,7 +6,7 @@ from flask import Blueprint, g, request
 
 from app.extensions import db
 from app.auth_decorator import login_required
-from app.models import Account, Bank, Category, CreditCard, CreditCardInvoice, Transaction
+from app.models import Account, Bank, Category, CreditCard, CreditCardInvoice, RecurringTransaction, Transaction
 from app.services.finance_service import add_months
 
 INVESTMENT_ACCOUNT_TYPE = "investment"
@@ -159,7 +159,8 @@ def spending_by_category():
 @dashboard_bp.get("/expense-breakdown")
 @login_required
 def expense_breakdown():
-    """Transacoes que compoem 'Despesas do mes': debito/pix no periodo + faturas de credito que fecham no periodo."""
+    """Composicao de 'Despesas do mes': debito/pix item a item, faturas de cartao agregadas
+    (fecham no periodo) e gastos programados (recorrentes manuais ainda nao pagos no periodo)."""
     today = dt.date.today()
     year = int(request.args.get("year", today.year))
     month = int(request.args.get("month", today.month))
@@ -178,24 +179,67 @@ def expense_breakdown():
             Account.type == "checking",
             Transaction.payment_method != "credit",
         )
+        .order_by(Transaction.date.desc())
         .all()
     )
 
-    credit_txs = (
-        Transaction.query.join(CreditCardInvoice, CreditCardInvoice.id == Transaction.credit_card_invoice_id)
+    invoices = (
+        CreditCardInvoice.query.join(CreditCard, CreditCard.id == CreditCardInvoice.credit_card_id)
+        .join(Account, Account.id == CreditCard.account_id)
+        .join(Bank, Bank.id == Account.bank_id)
         .filter(
-            Transaction.user_id == g.current_user.id,
-            Transaction.type == "expense",
-            Transaction.status == "confirmed",
-            Transaction.payment_method == "credit",
+            Account.user_id == g.current_user.id,
             CreditCardInvoice.closing_date >= start,
             CreditCardInvoice.closing_date <= end,
+            CreditCardInvoice.total_amount > 0,
         )
+        .order_by(CreditCardInvoice.closing_date.desc())
         .all()
     )
+    invoice_items = []
+    for invoice in invoices:
+        card = invoice.credit_card
+        invoice_items.append(
+            {
+                "id": str(invoice.id),
+                "bank_name": card.account.bank.name,
+                "bank_color": card.account.bank.color_hex,
+                "closing_date": invoice.closing_date.isoformat(),
+                "due_date": invoice.due_date.isoformat(),
+                "total_amount": float(invoice.total_amount),
+                "status": invoice.status,
+            }
+        )
 
-    txs = sorted(debit_txs + credit_txs, key=lambda t: t.date, reverse=True)
-    return {"transactions": [t.to_dict() for t in txs]}
+    scheduled = (
+        RecurringTransaction.query.filter(
+            RecurringTransaction.user_id == g.current_user.id,
+            RecurringTransaction.type == "expense",
+            RecurringTransaction.active.is_(True),
+            RecurringTransaction.auto_debit.is_(False),
+            RecurringTransaction.paid_at.is_(None),
+            RecurringTransaction.current_due_date >= start,
+            RecurringTransaction.current_due_date <= end,
+        )
+        .order_by(RecurringTransaction.current_due_date.asc())
+        .all()
+    )
+    scheduled_items = [
+        {
+            "id": str(r.id),
+            "description": r.description,
+            "amount": float(r.amount),
+            "due_date": r.current_due_date.isoformat(),
+            "category": r.category.to_dict() if r.category else None,
+        }
+        for r in scheduled
+    ]
+
+    return {
+        "transactions": [t.to_dict() for t in debit_txs],
+        "invoices": invoice_items,
+        "scheduled": scheduled_items,
+    }
 
 
 @dashboard_bp.get("/balance-by-bank")
