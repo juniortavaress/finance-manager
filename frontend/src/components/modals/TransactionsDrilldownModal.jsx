@@ -9,14 +9,6 @@ function lastDayIso(year, month) {
   return new Date(year, month, 0).toISOString().slice(0, 10);
 }
 
-function SectionTitle({ children }) {
-  return (
-    <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--ink-faint)', textTransform: 'uppercase', letterSpacing: 0.4, margin: '18px 0 8px' }}>
-      {children}
-    </div>
-  );
-}
-
 export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type, categoryId }) {
   const { categoryById } = useData();
   const isMonthlyExpenseCard = type === 'expense' && !categoryId;
@@ -37,18 +29,58 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
           }),
     [year, month, type, categoryId]
   );
-  const transactions = data?.transactions || [];
-  const invoices = data?.invoices || [];
-  const scheduled = data?.scheduled || [];
   const pos = type === 'income';
-  const isEmpty = isMonthlyExpenseCard
-    ? transactions.length === 0 && invoices.length === 0 && scheduled.length === 0
-    : transactions.length === 0;
 
-  const confirmedTotal =
-    transactions.reduce((sum, t) => sum + t.amount, 0) + invoices.reduce((sum, i) => sum + i.total_amount, 0);
-  const scheduledTotal = scheduled.reduce((sum, s) => sum + s.amount, 0);
-  const grandTotal = confirmedTotal + scheduledTotal;
+  let items;
+  if (isMonthlyExpenseCard) {
+    const txItems = (data?.transactions || []).map((t) => {
+      const category = categoryById(t.category_id) || t.category;
+      return {
+        key: `tx-${t.id}`,
+        date: t.date,
+        icon: category?.icon || '📁',
+        desc: t.description,
+        meta: `${t.account?.name} · ${fmtDateShort(t.date)}`,
+        amount: t.amount,
+        scheduled: false,
+      };
+    });
+    const invoiceItems = (data?.invoices || []).map((inv) => ({
+      key: `inv-${inv.id}`,
+      date: inv.closing_date,
+      icon: '💳',
+      desc: `${inv.bank_name} · cartão`,
+      meta: `fechou ${fmtDateShort(inv.closing_date)}`,
+      amount: inv.total_amount,
+      scheduled: false,
+    }));
+    const scheduledItems = (data?.scheduled || []).map((s) => ({
+      key: `sch-${s.id}`,
+      date: s.due_date,
+      icon: s.category?.icon || '📁',
+      desc: s.description,
+      meta: `vence ${fmtDateShort(s.due_date)}`,
+      amount: s.amount,
+      scheduled: true,
+    }));
+    items = [...txItems, ...invoiceItems, ...scheduledItems].sort((a, b) => (a.date < b.date ? 1 : -1));
+  } else {
+    items = (data?.transactions || []).map((t) => {
+      const category = categoryById(t.category_id) || t.category;
+      return {
+        key: `tx-${t.id}`,
+        date: t.date,
+        icon: category?.icon || '📁',
+        desc: t.description,
+        meta: `${t.account?.name} · ${fmtDateShort(t.date)}`,
+        amount: t.amount,
+        scheduled: false,
+      };
+    });
+  }
+
+  const scheduledTotal = items.filter((i) => i.scheduled).reduce((sum, i) => sum + i.amount, 0);
+  const grandTotal = items.reduce((sum, i) => sum + i.amount, 0);
 
   return (
     <ModalShell open={open} onClose={onClose}>
@@ -73,74 +105,31 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
                 <Skeleton width={70} height={14} />
               </div>
             ))}
-          {!initialLoading && isEmpty && <div className="empty-state">Nenhuma transação neste período.</div>}
-
-          {!initialLoading && isMonthlyExpenseCard && invoices.length > 0 && (
-            <>
-              <SectionTitle>Faturas de cartão</SectionTitle>
-              {invoices.map((inv) => (
-                <div className="fat-row" key={inv.id}>
-                  <div>
-                    <div className="fat-bank">{inv.bank_name} · cartão</div>
-                    <div className="fat-due">fechou {fmtDateShort(inv.closing_date)}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div className="fat-val num">{fmt(inv.total_amount)}</div>
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
-
-          {!initialLoading && isMonthlyExpenseCard && transactions.length > 0 && (
-            <SectionTitle>Conta corrente</SectionTitle>
+          {!initialLoading && items.length === 0 && (
+            <div className="empty-state">Nenhuma transação neste período.</div>
           )}
           {!initialLoading &&
-            transactions.map((t) => {
-              const category = categoryById(t.category_id) || t.category;
-              return (
-                <div className="tx-row" key={t.id}>
-                  <div className="tx-left">
-                    <div className="tx-icon" style={{ background: pos ? 'var(--teal-soft)' : 'var(--bg)' }}>
-                      {category?.icon || '📁'}
-                    </div>
-                    <div>
-                      <div className="tx-desc">{t.description}</div>
-                      <div className="tx-meta">
-                        {t.account?.name} · {fmtDateShort(t.date)}
-                      </div>
-                    </div>
+            items.map((item) => (
+              <div className="tx-row" key={item.key}>
+                <div className="tx-left">
+                  <div className="tx-icon" style={{ background: item.scheduled ? 'var(--bg)' : pos ? 'var(--teal-soft)' : 'var(--bg)' }}>
+                    {item.icon}
                   </div>
-                  <div className={`tx-val num ${pos ? 'pos' : 'neg'}`}>
-                    {fmt(pos ? t.amount : -t.amount, t.account?.currency)}
+                  <div>
+                    <div className="tx-desc">{item.desc}</div>
+                    <div className="tx-meta">{item.meta}</div>
                   </div>
                 </div>
-              );
-            })}
-
-          {!initialLoading && isMonthlyExpenseCard && scheduled.length > 0 && (
-            <>
-              <SectionTitle>Gastos programados</SectionTitle>
-              {scheduled.map((s) => (
-                <div className="tx-row" key={s.id}>
-                  <div className="tx-left">
-                    <div className="tx-icon" style={{ background: 'var(--bg)' }}>
-                      {s.category?.icon || '📁'}
-                    </div>
-                    <div>
-                      <div className="tx-desc">{s.description}</div>
-                      <div className="tx-meta">vence {fmtDateShort(s.due_date)}</div>
-                    </div>
-                  </div>
-                  <div className="tx-val num" style={{ color: 'var(--ink-faint)' }}>
-                    {fmt(s.amount)}
-                  </div>
+                <div
+                  className={`tx-val num ${item.scheduled ? '' : pos ? 'pos' : 'neg'}`}
+                  style={item.scheduled ? { color: 'var(--ink-faint)' } : undefined}
+                >
+                  {item.scheduled ? fmt(item.amount) : fmt(pos ? item.amount : -item.amount)}
                 </div>
-              ))}
-            </>
-          )}
+              </div>
+            ))}
         </div>
-        {!initialLoading && isMonthlyExpenseCard && scheduled.length > 0 && (
+        {!initialLoading && scheduledTotal > 0 && (
           <div
             style={{
               display: 'flex',
@@ -150,9 +139,7 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
               borderTop: '1px solid var(--line)',
             }}
           >
-            <span style={{ fontSize: 12.5, color: 'var(--ink-faint)' }}>
-              Total com programados
-            </span>
+            <span style={{ fontSize: 12.5, color: 'var(--ink-faint)' }}>Total com programados</span>
             <span className="num" style={{ fontSize: 16, fontWeight: 700 }}>
               {fmt(grandTotal)}
             </span>
