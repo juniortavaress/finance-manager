@@ -1,4 +1,4 @@
-import { transactionsApi } from '../../api/resources';
+import { transactionsApi, dashboardApi } from '../../api/resources';
 import { useFetch } from '../../hooks/useFetch';
 import { useData } from '../../context/DataContext';
 import { fmt, fmtDateShort } from '../../utils/format';
@@ -11,19 +11,22 @@ function lastDayIso(year, month) {
 
 export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type, categoryId }) {
   const { categoryById } = useData();
+  const isMonthlyExpenseCard = type === 'expense' && !categoryId;
   const { data, initialLoading } = useFetch(
     () =>
-      transactionsApi.list({
-        date_from: `${year}-${String(month).padStart(2, '0')}-01`,
-        date_to: lastDayIso(year, month),
-        type,
-        category_id: categoryId || undefined,
-        account_type: categoryId ? undefined : 'checking',
-        is_invoice_payment: false,
-        is_transfer: false,
-        status: 'confirmed',
-        page_size: 200,
-      }),
+      isMonthlyExpenseCard
+        ? dashboardApi.expenseBreakdown(year, month)
+        : transactionsApi.list({
+            date_from: `${year}-${String(month).padStart(2, '0')}-01`,
+            date_to: lastDayIso(year, month),
+            type,
+            category_id: categoryId || undefined,
+            account_type: 'checking',
+            is_invoice_payment: false,
+            is_transfer: false,
+            status: 'confirmed',
+            page_size: 200,
+          }),
     [year, month, type, categoryId]
   );
   const transactions = data?.transactions || [];

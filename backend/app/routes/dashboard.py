@@ -9,6 +9,8 @@ from app.auth_decorator import login_required
 from app.models import Account, Bank, Category, CreditCard, CreditCardInvoice, Transaction
 from app.services.finance_service import add_months
 
+INVESTMENT_ACCOUNT_TYPE = "investment"
+
 dashboard_bp = Blueprint("dashboard", __name__)
 
 
@@ -62,6 +64,7 @@ def summary():
                 Transaction.is_invoice_payment.is_(False),
                 Transaction.is_transfer.is_(False),
                 Account.type == "checking",
+                Transaction.payment_method != "credit",
             )
             .group_by(Transaction.type)
             .all()
@@ -69,6 +72,21 @@ def summary():
         totals = {"income": Decimal("0"), "expense": Decimal("0")}
         for t, v in rows:
             totals[t] = v
+
+        credit_expense = (
+            db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
+            .join(CreditCardInvoice, CreditCardInvoice.id == Transaction.credit_card_invoice_id)
+            .filter(
+                Transaction.user_id == g.current_user.id,
+                Transaction.type == "expense",
+                Transaction.status == "confirmed",
+                Transaction.payment_method == "credit",
+                CreditCardInvoice.closing_date >= d_start,
+                CreditCardInvoice.closing_date <= d_end,
+            )
+            .scalar()
+        ) or Decimal("0")
+        totals["expense"] += credit_expense
         return totals
 
     current = period_totals(start, end)
@@ -138,6 +156,48 @@ def spending_by_category():
     }
 
 
+@dashboard_bp.get("/expense-breakdown")
+@login_required
+def expense_breakdown():
+    """Transacoes que compoem 'Despesas do mes': debito/pix no periodo + faturas de credito que fecham no periodo."""
+    today = dt.date.today()
+    year = int(request.args.get("year", today.year))
+    month = int(request.args.get("month", today.month))
+    start, end = _month_bounds(year, month)
+
+    debit_txs = (
+        Transaction.query.join(Account, Account.id == Transaction.account_id)
+        .filter(
+            Transaction.user_id == g.current_user.id,
+            Transaction.type == "expense",
+            Transaction.date >= start,
+            Transaction.date <= end,
+            Transaction.status == "confirmed",
+            Transaction.is_invoice_payment.is_(False),
+            Transaction.is_transfer.is_(False),
+            Account.type == "checking",
+            Transaction.payment_method != "credit",
+        )
+        .all()
+    )
+
+    credit_txs = (
+        Transaction.query.join(CreditCardInvoice, CreditCardInvoice.id == Transaction.credit_card_invoice_id)
+        .filter(
+            Transaction.user_id == g.current_user.id,
+            Transaction.type == "expense",
+            Transaction.status == "confirmed",
+            Transaction.payment_method == "credit",
+            CreditCardInvoice.closing_date >= start,
+            CreditCardInvoice.closing_date <= end,
+        )
+        .all()
+    )
+
+    txs = sorted(debit_txs + credit_txs, key=lambda t: t.date, reverse=True)
+    return {"transactions": [t.to_dict() for t in txs]}
+
+
 @dashboard_bp.get("/balance-by-bank")
 @login_required
 def balance_by_bank():
@@ -153,6 +213,10 @@ def balance_by_bank():
 
 def _first_transaction_date(user_id):
     return db.session.query(db.func.min(Transaction.date)).filter(Transaction.user_id == user_id).scalar()
+
+
+def _empty_period_totals():
+    return {"income": Decimal("0"), "expense": Decimal("0"), "investment": Decimal("0")}
 
 
 @dashboard_bp.get("/income-vs-expense")
@@ -180,6 +244,7 @@ def income_vs_expense():
             Transaction.is_invoice_payment.is_(False),
             Transaction.is_transfer.is_(False),
             Account.type == "checking",
+            Transaction.payment_method != "credit",
         )
         .group_by(
             db.func.extract("year", Transaction.date),
@@ -189,16 +254,66 @@ def income_vs_expense():
         .all()
     )
 
+    credit_rows = (
+        db.session.query(
+            db.func.extract("year", CreditCardInvoice.closing_date),
+            db.func.extract("month", CreditCardInvoice.closing_date),
+            db.func.coalesce(db.func.sum(Transaction.amount), 0),
+        )
+        .join(CreditCardInvoice, CreditCardInvoice.id == Transaction.credit_card_invoice_id)
+        .filter(
+            Transaction.user_id == g.current_user.id,
+            Transaction.type == "expense",
+            Transaction.status == "confirmed",
+            Transaction.payment_method == "credit",
+            CreditCardInvoice.closing_date >= start_date,
+        )
+        .group_by(
+            db.func.extract("year", CreditCardInvoice.closing_date),
+            db.func.extract("month", CreditCardInvoice.closing_date),
+        )
+        .all()
+    )
+
+    TransferPair = db.aliased(Transaction)
+    investment_rows = (
+        db.session.query(
+            db.func.extract("year", Transaction.date),
+            db.func.extract("month", Transaction.date),
+            db.func.coalesce(db.func.sum(Transaction.amount), 0),
+        )
+        .join(TransferPair, TransferPair.id == Transaction.transfer_pair_id)
+        .join(Account, Account.id == TransferPair.account_id)
+        .filter(
+            Transaction.user_id == g.current_user.id,
+            Transaction.type == "expense",
+            Transaction.is_transfer.is_(True),
+            Transaction.status == "confirmed",
+            Transaction.date >= start_date,
+            Account.type == INVESTMENT_ACCOUNT_TYPE,
+        )
+        .group_by(
+            db.func.extract("year", Transaction.date),
+            db.func.extract("month", Transaction.date),
+        )
+        .all()
+    )
+
     if granularity == "yearly":
         totals = {}
         for y, _m, t, v in rows:
-            totals.setdefault(int(y), {"income": Decimal("0"), "expense": Decimal("0")})[t] += v
+            totals.setdefault(int(y), _empty_period_totals())[t] += v
+        for y, _m, v in credit_rows:
+            totals.setdefault(int(y), _empty_period_totals())["expense"] += v
+        for y, _m, v in investment_rows:
+            totals.setdefault(int(y), _empty_period_totals())["investment"] += v
         years = list(range(start_date.year, today.year + 1))
         result = [
             {
                 "year": year,
                 "income": float(totals.get(year, {}).get("income", Decimal("0"))),
                 "expense": float(totals.get(year, {}).get("expense", Decimal("0"))),
+                "investment": float(totals.get(year, {}).get("investment", Decimal("0"))),
             }
             for year in years
         ]
@@ -206,7 +321,11 @@ def income_vs_expense():
 
     totals = {}
     for y, m, t, v in rows:
-        totals.setdefault((int(y), int(m)), {"income": Decimal("0"), "expense": Decimal("0")})[t] = v
+        totals.setdefault((int(y), int(m)), _empty_period_totals())[t] = v
+    for y, m, v in credit_rows:
+        totals.setdefault((int(y), int(m)), _empty_period_totals())["expense"] += v
+    for y, m, v in investment_rows:
+        totals.setdefault((int(y), int(m)), _empty_period_totals())["investment"] += v
     start_cursor = dt.date(start_date.year, start_date.month, 1)
     total_months = (today.year - start_cursor.year) * 12 + (today.month - start_cursor.month) + 1
     periods = [add_months(start_cursor, i) for i in range(total_months)]
@@ -216,6 +335,7 @@ def income_vs_expense():
             "month": period.month,
             "income": float(totals.get((period.year, period.month), {}).get("income", Decimal("0"))),
             "expense": float(totals.get((period.year, period.month), {}).get("expense", Decimal("0"))),
+            "investment": float(totals.get((period.year, period.month), {}).get("investment", Decimal("0"))),
         }
         for period in periods
     ]

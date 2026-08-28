@@ -95,6 +95,7 @@ export const dashboardApi = {
   upcomingInvoices: () => api.get('/dashboard/upcoming-invoices'),
   recentTransactions: (limit) => api.get('/dashboard/recent-transactions', { limit }),
   periodInvoices: () => api.get('/dashboard/period-invoices'),
+  expenseBreakdown: (year, month) => api.get('/dashboard/expense-breakdown', { year, month }),
 };
 
 export const reportsApi = {

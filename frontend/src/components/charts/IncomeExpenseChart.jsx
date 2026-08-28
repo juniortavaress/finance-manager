@@ -17,6 +17,7 @@ export default function IncomeExpenseChart({ periods, granularity, selectedPerio
     fullLabel: granularity === 'yearly' ? String(p.year) : `${monthLabel(p.month)} ${p.year}`,
     income: p.income,
     expense: p.expense,
+    investment: p.investment ?? 0,
     year: p.year,
     month: p.month,
   }));
@@ -72,6 +73,11 @@ export default function IncomeExpenseChart({ periods, granularity, selectedPerio
                 <Cell key={d.key} opacity={!hasSelection || isSelected(d) ? 1 : 0.25} style={{ transition: 'opacity 0.2s ease' }} />
               ))}
             </Bar>
+            <Bar dataKey="investment" name="Investimento" fill={CHART_COLORS.gold} radius={[2, 2, 0, 0]} barSize={9}>
+              {data.map((d) => (
+                <Cell key={d.key} opacity={!hasSelection || isSelected(d) ? 1 : 0.25} style={{ transition: 'opacity 0.2s ease' }} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </ChartScrollContainer>
@@ -83,6 +89,9 @@ export default function IncomeExpenseChart({ periods, granularity, selectedPerio
           </span>
           <span>
             Despesa <strong className="num">{fmt(highlighted.expense)}</strong>
+          </span>
+          <span>
+            Investimento <strong className="num">{fmt(highlighted.investment)}</strong>
           </span>
         </div>
       )}

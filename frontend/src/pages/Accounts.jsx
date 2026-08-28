@@ -290,7 +290,8 @@ export default function Accounts() {
                         <span style={{ color: 'var(--brick)', fontWeight: 600 }}>vencida</span>
                       ) : (
                         <>
-                          fecha dia {creditCard.credit_card.closing_day} · vence dia {creditCard.credit_card.due_day}
+                          fecha dia {Number(viewedInvoice.closing_date.slice(8, 10))} · vence dia{' '}
+                          {Number(viewedInvoice.due_date.slice(8, 10))}
                         </>
                       )}
                     </div>
