@@ -20,7 +20,7 @@ def _month_bounds(year: int, month: int):
     return start, end
 
 
-def _outstanding_invoices(user_id, year, month):
+def _outstanding_invoices(user_id):
     cards = (
         CreditCard.query.join(Account, Account.id == CreditCard.account_id)
         .filter(Account.user_id == user_id, Account.archived.is_(False))
@@ -28,11 +28,9 @@ def _outstanding_invoices(user_id, year, month):
     )
     if not cards:
         return [], {}
-    current_month_start = dt.date(year, month, 1)
     unpaid_invoices = CreditCardInvoice.query.filter(
         CreditCardInvoice.credit_card_id.in_([c.id for c in cards]),
         CreditCardInvoice.status.in_(("open", "closed")),
-        CreditCardInvoice.reference_month <= current_month_start,
         CreditCardInvoice.total_amount > CreditCardInvoice.paid_amount,
     ).all()
     card_by_id = {c.id: c for c in cards}
@@ -105,7 +103,7 @@ def summary():
         ).count()
     )
 
-    outstanding_invoices, _ = _outstanding_invoices(g.current_user.id, today.year, today.month)
+    outstanding_invoices, _ = _outstanding_invoices(g.current_user.id)
     faturas_abertas_total = sum((i.total_amount - i.paid_amount for i in outstanding_invoices), Decimal("0"))
 
     def pct_change(curr, prev):
@@ -444,7 +442,7 @@ def balance_evolution():
 @login_required
 def period_invoices():
     today = dt.date.today()
-    invoices, card_by_id = _outstanding_invoices(g.current_user.id, today.year, today.month)
+    invoices, card_by_id = _outstanding_invoices(g.current_user.id)
     invoices = sorted(invoices, key=lambda i: i.due_date)
     result = []
     for invoice in invoices:
@@ -474,7 +472,6 @@ def upcoming_invoices():
                 CreditCardInvoice.total_amount > CreditCardInvoice.paid_amount,
             )
             .order_by(CreditCardInvoice.due_date.asc())
-            .limit(3)
             .all()
         )
         for invoice in pending:
