@@ -5,7 +5,7 @@ import { useData } from '../context/DataContext';
 import { useToast } from '../context/ToastContext';
 import { fmt, fmtDateFull } from '../utils/format';
 import { maskToNumber, numberToMasked } from '../utils/currency';
-import { IconSearch, IconPencil, IconInfo, IconChevronDown } from '../components/icons';
+import { IconSearch, IconPencil, IconInfo } from '../components/icons';
 import CurrencyInput from '../components/CurrencyInput';
 import NewAssetModal from '../components/modals/NewAssetModal';
 import AssetDetailModal from '../components/modals/AssetDetailModal';
@@ -73,13 +73,17 @@ const COLUMNS = [
   { key: 'type', label: 'Tipo' },
   { key: 'bank', label: 'Corretora' },
   { key: 'quantity', label: 'Qtd.' },
-  { key: 'avg_unit_price', label: 'Preço médio' },
-  { key: 'current_unit_price', label: 'Preço atual' },
   { key: 'invested_amount', label: 'Investido' },
   { key: 'current_amount', label: 'Atual' },
   { key: 'dividends_total', label: 'Dividendos' },
+  { key: 'profit_amount', label: 'Lucro' },
   { key: 'rent', label: 'Rent.' },
 ];
+
+function profitAmount(a) {
+  const current = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
+  return current + (a.position.dividends_total || 0) - a.position.invested_amount;
+}
 
 export default function Portfolio() {
   const [showArchived, setShowArchived] = useState(false);
@@ -158,11 +162,10 @@ export default function Portfolio() {
       type: (a) => a.type,
       bank: (a) => a.bankName.toLowerCase(),
       quantity: (a) => a.position.quantity,
-      avg_unit_price: (a) => a.position.avg_unit_price,
-      current_unit_price: (a) => a.current_unit_price ?? -Infinity,
       invested_amount: (a) => a.position.invested_amount,
       current_amount: (a) => a.position.current_amount ?? a.position.invested_amount,
       dividends_total: (a) => a.position.dividends_total,
+      profit_amount: (a) => profitAmount(a),
       rent: (a) => (a.rent != null ? a.rent : -Infinity),
     }[sort.key];
 
@@ -313,15 +316,19 @@ export default function Portfolio() {
             const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
             const isAutoFixed = isAutoFixedIncome(a);
             const isAutoPrice = isAutoFixed || a.price_auto_updated;
+            const profit = profitAmount(a);
             return (
-              <div className="asset-row" key={a.id}>
+              <div className="asset-row clickable" key={a.id} onClick={() => setDetailAsset(a)}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <div className="a-name">{a.code || a.name}</div>
                     <button
                       type="button"
                       title="Editar ativo"
-                      onClick={() => setEditingAsset(a)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingAsset(a);
+                      }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -344,32 +351,6 @@ export default function Portfolio() {
                     >
                       <IconPencil style={{ width: 11, height: 11 }} />
                     </button>
-                    <button
-                      type="button"
-                      title="Ver detalhes"
-                      onClick={() => setDetailAsset(a)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: 20,
-                        height: 20,
-                        borderRadius: 6,
-                        border: 'none',
-                        background: 'transparent',
-                        color: 'var(--ink-faint)',
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = 'var(--teal)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = 'var(--ink-faint)';
-                      }}
-                    >
-                      <IconChevronDown style={{ width: 11, height: 11, transform: 'rotate(-90deg)' }} />
-                    </button>
                     {a.fixed_income_type === 'ipca' && <IpcaInfoIcon />}
                   </div>
                   <div className="a-sub">{a.type === 'renda_fixa' ? fixedIncomeSubLabel(a) : a.name}</div>
@@ -385,8 +366,6 @@ export default function Portfolio() {
                   {a.bankName}
                 </div>
                 <div className="a-num">{a.position.quantity}</div>
-                <div className="a-num">{fmt(a.position.avg_unit_price, a.currency)}</div>
-                <div className="a-num">{a.current_unit_price != null ? fmt(a.current_unit_price, a.currency) : '—'}</div>
                 <div className="a-num">{fmt(a.position.invested_amount, a.currency)}</div>
                 {isAutoPrice ? (
                   <div
@@ -415,13 +394,20 @@ export default function Portfolio() {
                     className="a-num"
                     title="Clique para editar"
                     style={{ cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
-                    onClick={() => startEditTotal(a)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEditTotal(a);
+                    }}
                   >
                     {fmt(currentAmount, a.currency)}
                   </div>
                 )}
                 <div className="a-num" style={{ color: a.position.dividends_total > 0 ? 'var(--gold)' : undefined }}>
                   {fmt(a.position.dividends_total, a.currency)}
+                </div>
+                <div className="a-num" style={{ color: profit >= 0 ? 'var(--teal)' : 'var(--brick)' }}>
+                  {profit >= 0 ? '+' : ''}
+                  {fmt(profit, a.currency)}
                 </div>
                 <div className={`a-rent ${a.rent == null ? '' : a.rent >= 0 ? 'up' : 'down'}`}>
                   {a.rent == null ? '—' : `${a.rent >= 0 ? '+' : ''}${a.rent.toFixed(1)}%`}
@@ -442,8 +428,9 @@ export default function Portfolio() {
             const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
             const isAutoFixed = isAutoFixedIncome(a);
             const isAutoPrice = isAutoFixed || a.price_auto_updated;
+            const profit = profitAmount(a);
             return (
-              <div className="asset-card" key={a.id}>
+              <div className="asset-card clickable" key={a.id} onClick={() => setDetailAsset(a)}>
                 <div className="asset-card-head">
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -451,7 +438,10 @@ export default function Portfolio() {
                       <button
                         type="button"
                         title="Editar ativo"
-                        onClick={() => setEditingAsset(a)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingAsset(a);
+                        }}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -467,26 +457,6 @@ export default function Portfolio() {
                         }}
                       >
                         <IconPencil style={{ width: 11, height: 11 }} />
-                      </button>
-                      <button
-                        type="button"
-                        title="Ver detalhes"
-                        onClick={() => setDetailAsset(a)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 22,
-                          height: 22,
-                          borderRadius: 6,
-                          border: 'none',
-                          background: 'transparent',
-                          color: 'var(--ink-faint)',
-                          cursor: 'pointer',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <IconChevronDown style={{ width: 11, height: 11, transform: 'rotate(-90deg)' }} />
                       </button>
                       {a.fixed_income_type === 'ipca' && <IpcaInfoIcon />}
                     </div>
@@ -507,14 +477,6 @@ export default function Portfolio() {
                   <div>
                     <div className="asset-card-label">Qtd.</div>
                     <div className="a-num">{a.position.quantity}</div>
-                  </div>
-                  <div>
-                    <div className="asset-card-label">Preço médio</div>
-                    <div className="a-num">{fmt(a.position.avg_unit_price, a.currency)}</div>
-                  </div>
-                  <div>
-                    <div className="asset-card-label">Preço atual</div>
-                    <div className="a-num">{a.current_unit_price != null ? fmt(a.current_unit_price, a.currency) : '—'}</div>
                   </div>
                   <div>
                     <div className="asset-card-label">Investido</div>
@@ -549,7 +511,10 @@ export default function Portfolio() {
                         className="a-num"
                         title="Clique para editar"
                         style={{ cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
-                        onClick={() => startEditTotal(a)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEditTotal(a);
+                        }}
                       >
                         {fmt(currentAmount, a.currency)}
                       </div>
@@ -559,6 +524,13 @@ export default function Portfolio() {
                     <div className="asset-card-label">Dividendos</div>
                     <div className="a-num" style={{ color: a.position.dividends_total > 0 ? 'var(--gold)' : undefined }}>
                       {fmt(a.position.dividends_total, a.currency)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="asset-card-label">Lucro</div>
+                    <div className="a-num" style={{ color: profit >= 0 ? 'var(--teal)' : 'var(--brick)' }}>
+                      {profit >= 0 ? '+' : ''}
+                      {fmt(profit, a.currency)}
                     </div>
                   </div>
                 </div>

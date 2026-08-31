@@ -19,15 +19,21 @@
 }
 .asset-row {
   display: grid;
-  grid-template-columns: 1.8fr 1fr 1fr 0.7fr 1fr 1fr 1fr 1fr 1fr 0.8fr;
+  grid-template-columns: 1.8fr 1fr 1fr 0.7fr 1fr 1fr 1fr 1fr 0.8fr;
   gap: 10px;
   align-items: center;
   padding: 12px 4px;
   border-bottom: 1px solid var(--line);
-  min-width: 840px;
+  min-width: 780px;
 }
 .asset-row:last-child {
   border-bottom: none;
+}
+.asset-row.clickable {
+  cursor: pointer;
+}
+.asset-row.clickable:hover {
+  background: var(--surface-hover, rgba(15, 92, 92, 0.04));
 }
 .asset-head {
   font-size: 10.5px;
@@ -105,6 +111,9 @@
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: 0 2px 8px rgba(28, 43, 41, 0.06);
+}
+.asset-card.clickable {
+  cursor: pointer;
 }
 .asset-card-head {
   display: flex;
