@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useState } from 'react';
-import { accountsApi, banksApi, categoriesApi, friendsApi } from '../api/resources';
+import { accountsApi, banksApi, categoriesApi, friendsApi, investmentsApi } from '../api/resources';
 
 const DataContext = createContext(null);
 
@@ -22,6 +22,13 @@ export function DataProvider({ children }) {
     setCategories(categoriesRes.categories);
     setFriends(friendsRes.friends);
     setLoaded(true);
+
+    // Dispara em background a atualizacao do cache de cotacoes/precos
+    // externos (cripto, CDI/Selic, cambio) assim que o app carrega, mesmo
+    // antes do usuario abrir a Carteira - quando ele chegar la, os
+    // endpoints de investimentos ja encontram o cache quente e respondem na
+    // hora. Fire-and-forget: nao bloqueia o carregamento do app nem trata erro.
+    investmentsApi.refreshMarketData().catch(() => {});
   }, []);
 
   const value = {

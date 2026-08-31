@@ -18,6 +18,7 @@ from app.services.crypto_service import (
 )
 from app.services.economic_index_service import get_daily_rates
 from app.services.fixed_income_service import pos_fixado_current_value, pre_fixado_current_value
+from app.services.market_data_service import trigger_refresh_for_current_user
 from app.services.quotes_service import convert_to_brl, get_brl_rates
 
 investments_bp = Blueprint("investments", __name__)
@@ -111,7 +112,7 @@ def _pos_fixado_projected_value(asset: Asset, as_of: dt.date, daily_rates=None):
     _pre_fixado_projected_value para vendas parciais.
     `daily_rates` pode ser passado pronto (ja buscado por quem chama, ex: o
     grafico de evolucao reaproveitando uma unica busca pra varios meses) -
-    por padrao busca do zero via get_daily_rates."""
+    por padrao le do cache via get_daily_rates (nunca bate no BCB)."""
     if asset.fixed_income_indexer is None:
         return None
     if not asset.asset_transactions:
@@ -322,25 +323,17 @@ def _settle_all_matured_fixed_income(user_id):
         db.session.commit()
 
 
-def _refresh_crypto_prices(user_id):
-    """Atualiza current_unit_price dos ativos cripto com o preco atual da
-    CoinGecko (no par simbolo+moeda da conta que o guarda) e aproveita pra
-    preencher na tabela crypto_prices os dias recentes que ainda faltarem
-    (backfill incremental - o historico profundo vem do script local de
-    backfill via Binance). Best-effort: simbolo/moeda nao suportados ou API
-    fora do ar mantem o preco existente, sem quebrar a listagem."""
-    inv_accounts = _owned_investment_accounts()
-    if not inv_accounts:
-        return
-    account_ids = [ia.account_id for ia in inv_accounts]
-    accounts_by_id = {a.id: a for a in Account.query.filter(Account.id.in_(account_ids)).all()}
-    currency_by_ia_id = {ia.id: accounts_by_id[ia.account_id].currency for ia in inv_accounts}
-
-    assets = Asset.query.filter(
-        Asset.investment_account_id.in_(currency_by_ia_id.keys()), Asset.type == "cripto"
-    ).all()
+def _apply_cached_crypto_prices(assets, currency_by_ia_id):
+    """Aplica em memoria (sem commit) o preco atual cacheado em
+    `crypto_prices` aos ativos cripto informados. So' le o cache - nunca bate
+    na CoinGecko (isso e' feito pela rotina de warm-up em background, ver
+    market_data_service.refresh_market_data_async). Best-effort: simbolo/
+    moeda nao suportados ou cache ainda vazio mantem o preco existente, sem
+    quebrar a listagem."""
     assets_by_key = {}
     for asset in assets:
+        if asset.type != "cripto":
+            continue
         currency = currency_by_ia_id.get(asset.investment_account_id)
         symbol = resolve_symbol(asset.code)
         if symbol and currency:
@@ -349,33 +342,21 @@ def _refresh_crypto_prices(user_id):
         return
 
     prices = get_current_prices(assets_by_key.keys())
-    changed = False
-    today = dt.date.today()
     for (symbol, currency), price in prices.items():
         for asset in assets_by_key[(symbol, currency)]:
             asset.current_unit_price = price
-            changed = True
-        _upsert_crypto_price(symbol, currency, today, price)
-        changed = True
-    if changed:
-        db.session.commit()
-
-
-def _upsert_crypto_price(symbol, currency, date, price):
-    row = CryptoPrice.query.get((symbol, currency, date))
-    if row is None:
-        db.session.add(CryptoPrice(symbol=symbol, currency=currency, date=date, price=price))
-    else:
-        row.price = price
 
 
 @investments_bp.get("/assets")
 @login_required
 def list_assets():
     _settle_all_matured_fixed_income(g.current_user.id)
-    _refresh_crypto_prices(g.current_user.id)
 
-    inv_account_ids = [ia.id for ia in _owned_investment_accounts()]
+    inv_accounts = _owned_investment_accounts()
+    inv_account_ids = [ia.id for ia in inv_accounts]
+    account_ids = [ia.account_id for ia in inv_accounts]
+    accounts_by_id = {a.id: a for a in Account.query.filter(Account.id.in_(account_ids)).all()}
+    currency_by_ia_id = {ia.id: accounts_by_id[ia.account_id].currency for ia in inv_accounts}
     all_assets = (
         Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids))
         .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
@@ -383,12 +364,28 @@ def list_assets():
         if inv_account_ids
         else []
     )
+    _apply_cached_crypto_prices(all_assets, currency_by_ia_id)
 
     active, archived = [], []
     for asset in all_assets:
         data = _asset_to_dict(asset)
         (archived if data["position"]["quantity"] <= 0 else active).append(data)
     return {"assets": active, "archived_assets": archived}
+
+
+@investments_bp.post("/refresh-market-data")
+@login_required
+def refresh_market_data():
+    """Dispara em background a atualizacao do cache de precos/taxas externas
+    (cripto via CoinGecko, CDI/Selic e cambio via Banco Central) usado pelos
+    ativos do usuario. Unico lugar que dispara esse warm-up - chamado pelo
+    frontend uma vez por carregamento do app (ver DataContext.reloadAll),
+    mesmo antes do usuario abrir a pagina de investimentos. GET /assets e
+    GET /summary so' leem o cache ja existente (nunca disparam refresh
+    sozinhos), entao respondem na hora mesmo que o warm-up ainda esteja
+    rodando. Responde imediatamente, sem esperar a atualizacao terminar."""
+    trigger_refresh_for_current_user()
+    return {"ok": True}
 
 
 @investments_bp.get("/crypto-symbols")
@@ -540,8 +537,8 @@ def _compute_asset_evolution(assets, months, today, current_amount_by_asset_id, 
     )
     # Indexadores CDI/Selic buscados uma unica vez por ativo pos-fixado
     # (cobrindo toda a janela do grafico), em vez de uma vez por mes -
-    # get_daily_rates() bate no banco (e possivelmente no BCB) a cada
-    # chamada, entao chamar dentro do loop de meses seria bem mais lento.
+    # get_daily_rates() bate no banco a cada chamada (nunca no BCB - so' le o
+    # cache), entao chamar dentro do loop de meses seria mais lento a toa.
     daily_rates_by_asset_id = {}
     for asset in assets:
         if (
@@ -713,6 +710,7 @@ def investments_summary():
         .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
         .all()
     )
+    _apply_cached_crypto_prices(all_assets, {ia.id: accounts_by_ia_id[ia.id].currency for ia in inv_accounts})
     assets_result = []
     earliest_date = None
     for asset in all_assets:

@@ -1,9 +1,11 @@
 import datetime as dt
 import json
 import logging
-import time
 import urllib.request
 from decimal import Decimal
+
+from app.extensions import db
+from app.models import FxRate
 
 logger = logging.getLogger(__name__)
 
@@ -14,12 +16,6 @@ BCB_SGS_BASE_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{code}/dados/u
 # mas dispensa o script local que antes precisava rodar pra popular a tabela
 # `quotes` (ver git history / scripts/update_quotes.py, removido).
 QUOTE_SGS_CODES = {"USD": 1, "EUR": 21619, "GBP": 21623}
-
-# Cache em memoria por processo: evita bater no BCB a cada requisicao que
-# precisa converter moeda. Best-effort - se a API falhar, cai no ultimo valor
-# cacheado (mesmo vencido); so' fica None se nunca buscou com sucesso.
-_rates_cache = {}
-CACHE_TTL_SECONDS = 600
 
 
 def _fetch_bcb_latest(sgs_code):
@@ -32,37 +28,41 @@ def _fetch_bcb_latest(sgs_code):
     return Decimal(entry["valor"]), date
 
 
-def get_brl_rates():
-    """Cotacao PTAX mais recente de USD/EUR/GBP em BRL (quantos reais vale 1
-    unidade da moeda), buscada do Banco Central sob demanda com cache de
-    processo de CACHE_TTL_SECONDS. Retorna (rates, fetched_at) - rates e'
-    {codigo: float}, fetched_at e' a data de referencia mais antiga entre as
-    moedas retornadas (ou None se nenhuma cotacao estiver disponivel)."""
-    now = time.time()
-    rates = {}
-    fetched_dates = []
-
+def refresh_brl_rates():
+    """Busca do Banco Central a cotacao PTAX mais recente de USD/EUR/GBP e
+    persiste em `fx_rates` (upsert). Bate em rede - so' deve ser chamado pela
+    rotina de warm-up em background, nunca no caminho sincrono de uma
+    requisicao que o usuario esta esperando (ver market_data_service)."""
+    changed = False
     for code, sgs_code in QUOTE_SGS_CODES.items():
-        cached = _rates_cache.get(code)
-        if cached and now - cached[2] < CACHE_TTL_SECONDS:
-            rate, ref_date, _ = cached
+        try:
+            rate, ref_date = _fetch_bcb_latest(sgs_code)
+        except Exception:
+            logger.warning("Falha ao buscar cotacao PTAX do BCB para %s", code, exc_info=True)
+            continue
+        row = FxRate.query.get(code)
+        if row is None:
+            db.session.add(FxRate(currency=code, rate=rate, ref_date=ref_date))
         else:
-            try:
-                rate, ref_date = _fetch_bcb_latest(sgs_code)
-            except Exception:
-                logger.warning("Falha ao buscar cotacao PTAX do BCB para %s", code, exc_info=True)
-                if cached:
-                    rate, ref_date, _ = cached
-                else:
-                    continue
-            _rates_cache[code] = (rate, ref_date, now)
+            row.rate = rate
+            row.ref_date = ref_date
+        changed = True
+    if changed:
+        db.session.commit()
 
-        rates[code] = float(rate)
-        fetched_dates.append(ref_date)
 
-    if not rates:
+def get_brl_rates():
+    """Ultima cotacao PTAX de USD/EUR/GBP em BRL (quantos reais vale 1
+    unidade da moeda), lida do cache em `fx_rates` (nunca bate em rede aqui -
+    quem mantem o cache atualizado e' refresh_brl_rates, chamado pela rotina
+    de warm-up). Retorna (rates, fetched_at) - rates e' {codigo: float},
+    fetched_at e' a data de referencia mais antiga entre as moedas
+    retornadas (ou None se o cache ainda estiver vazio)."""
+    rows = FxRate.query.all()
+    if not rows:
         return None, None
-    fetched_at = dt.datetime.combine(min(fetched_dates), dt.time.min, tzinfo=dt.timezone.utc)
+    rates = {row.currency: float(row.rate) for row in rows}
+    fetched_at = dt.datetime.combine(min(row.ref_date for row in rows), dt.time.min, tzinfo=dt.timezone.utc)
     return rates, fetched_at
 
 

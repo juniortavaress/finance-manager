@@ -84,17 +84,28 @@ def _ensure_rates_cached(indexer, start_date, end_date):
             db.session.commit()
 
 
+def refresh_daily_rates(indexer, start_date, end_date):
+    """Garante que economic_index_rates tem a serie de `indexer` cobrindo
+    (start_date, end_date] em cache, buscando do BCB o que faltar. Bate em
+    rede - so' deve ser chamado pela rotina de warm-up em background, nunca
+    no caminho sincrono de uma requisicao que o usuario esta esperando (ver
+    market_data_service)."""
+    indexer = _normalize_indexer(indexer)
+    if not indexer or end_date <= start_date:
+        return
+    _ensure_rates_cached(indexer, start_date + dt.timedelta(days=1), end_date)
+
+
 def get_daily_rates(indexer, start_date, end_date):
     """Serie diaria de taxa (percentual ao dia, Decimal) de `indexer` (CDI ou
-    Selic) entre start_date (exclusive) e end_date (inclusive), buscando do
-    BCB o que faltar em cache. Retorna {date: Decimal} apenas com os dias que
-    tem taxa publicada (dias uteis; findes de semana/feriados nao tem
-    publicacao propria no SGS)."""
+    Selic) entre start_date (exclusive) e end_date (inclusive), lida do cache
+    em `economic_index_rates`. Nunca bate no BCB aqui - quem mantem o cache
+    atualizado e' refresh_daily_rates, chamado pela rotina de warm-up.
+    Retorna {date: Decimal} apenas com os dias que tem taxa publicada (dias
+    uteis; findes de semana/feriados nao tem publicacao propria no SGS)."""
     indexer = _normalize_indexer(indexer)
     if not indexer or end_date <= start_date:
         return {}
-
-    _ensure_rates_cached(indexer, start_date + dt.timedelta(days=1), end_date)
 
     rows = EconomicIndexRate.query.filter(
         EconomicIndexRate.indexer == indexer,

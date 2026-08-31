@@ -1,9 +1,11 @@
 import datetime as dt
 import json
 import logging
-import time
 import urllib.request
 from decimal import Decimal
+
+from app.extensions import db
+from app.models import CryptoPrice
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +36,6 @@ KLINES_LIMIT = 1000
 # suficiente aqui pois so' e' usado pra preencher dias recentes faltantes
 # (o passado profundo vem do backfill via Binance).
 MAX_HISTORY_DAYS = 365
-
-# Cache em memoria por processo: evita bater na CoinGecko a cada carregamento
-# de pagina. Best-effort - current_unit_price continua editavel manualmente
-# se a API falhar ou o simbolo/moeda nao forem suportados.
-_price_cache = {}
-CACHE_TTL_SECONDS = 300
 
 
 def resolve_symbol(code):
@@ -75,26 +71,19 @@ def _fetch_current_price_coingecko(coingecko_id, vs_currency):
     return Decimal(str(payload[coingecko_id][vs_currency.lower()]))
 
 
-def get_current_prices(symbol_currency_pairs):
-    """Preco atual via CoinGecko para um conjunto de (symbol, currency) (ex:
-    [('BTC', 'BRL')]), com cache de processo de CACHE_TTL_SECONDS. Retorna
-    {(symbol, currency): Decimal} so' para os pares que tiveram sucesso -
-    quem chama deve manter o current_unit_price existente nos que faltarem."""
+def refresh_current_prices(symbol_currency_pairs):
+    """Busca na CoinGecko o preco atual dos pares (symbol, currency)
+    informados e persiste em `crypto_prices` (upsert, na data de hoje). Bate
+    em rede - so' deve ser chamado pela rotina de warm-up em background,
+    nunca no caminho sincrono de uma requisicao que o usuario esta
+    esperando (ver market_data_service)."""
     pairs = set(symbol_currency_pairs)
     if not pairs:
-        return {}
+        return
 
-    now = time.time()
-    result = {}
-    to_fetch = []
-    for pair in pairs:
-        cached = _price_cache.get(pair)
-        if cached and now - cached[1] < CACHE_TTL_SECONDS:
-            result[pair] = cached[0]
-        else:
-            to_fetch.append(pair)
-
-    for symbol, currency in to_fetch:
+    today = dt.date.today()
+    changed = False
+    for symbol, currency in pairs:
         info = SUPPORTED_CRYPTOCURRENCIES.get(symbol)
         if not info or currency not in COINGECKO_VS_CURRENCIES:
             continue
@@ -102,12 +91,43 @@ def get_current_prices(symbol_currency_pairs):
             price = _fetch_current_price_coingecko(info["coingecko_id"], currency)
         except Exception:
             logger.warning("Falha ao buscar preco atual da CoinGecko para %s/%s", symbol, currency, exc_info=True)
-            cached = _price_cache.get((symbol, currency))
-            if cached:
-                result[(symbol, currency)] = cached[0]
             continue
-        _price_cache[(symbol, currency)] = (price, now)
-        result[(symbol, currency)] = price
+        row = CryptoPrice.query.get((symbol, currency, today))
+        if row is None:
+            db.session.add(CryptoPrice(symbol=symbol, currency=currency, date=today, price=price))
+        else:
+            row.price = price
+        changed = True
+    if changed:
+        db.session.commit()
+
+
+def get_current_prices(symbol_currency_pairs):
+    """Preco atual (ultimo preco cacheado em `crypto_prices`, olhando ate
+    MAX_HISTORY_DAYS dias pra tras) para um conjunto de (symbol, currency)
+    (ex: [('BTC', 'BRL')]). Nunca bate em rede - quem mantem o cache
+    atualizado e' refresh_current_prices, chamado pela rotina de warm-up.
+    Retorna {(symbol, currency): Decimal} so' para os pares com preco
+    cacheado - quem chama deve manter o current_unit_price existente nos que
+    faltarem."""
+    pairs = set(symbol_currency_pairs)
+    if not pairs:
+        return {}
+
+    earliest = dt.date.today() - dt.timedelta(days=MAX_HISTORY_DAYS)
+    result = {}
+    for symbol, currency in pairs:
+        row = (
+            CryptoPrice.query.filter(
+                CryptoPrice.symbol == symbol,
+                CryptoPrice.currency == currency,
+                CryptoPrice.date >= earliest,
+            )
+            .order_by(CryptoPrice.date.desc())
+            .first()
+        )
+        if row is not None:
+            result[(symbol, currency)] = row.price
 
     return result
 

@@ -73,6 +73,7 @@ export const investmentsApi = {
   updateAssetTransaction: (id, data) => api.patch(`/investments/asset-transactions/${id}`, data),
   removeAssetTransaction: (id) => api.delete(`/investments/asset-transactions/${id}`),
   assetEvolution: (assetId, signal) => api.get(`/investments/assets/${assetId}/evolution`, {}, signal),
+  refreshMarketData: () => api.post('/investments/refresh-market-data', {}),
 };
 
 export const dividendsApi = {
