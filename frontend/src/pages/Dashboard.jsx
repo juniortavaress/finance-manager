@@ -261,18 +261,22 @@ export default function Dashboard() {
             <div className="empty-state">Nenhum banco cadastrado.</div>
           )}
           {!banksLoading &&
-            (bankData?.banks || []).map(({ bank, balance }) => (
-              <div className="bank-row" key={bank.id}>
-                <div className="bank-id">
-                  <span className="bank-chip" style={{ background: bank.color_hex }} />
-                  <div>
-                    <div className="bank-name">{bank.name}</div>
-                    <div className="bank-sub">Conta corrente</div>
+            (bankData?.banks || []).flatMap(({ bank, balances }) =>
+              (balances || []).map((b) => (
+                <div className="bank-row" key={`${bank.id}-${b.currency}`}>
+                  <div className="bank-id">
+                    <span className="bank-chip" style={{ background: bank.color_hex }} />
+                    <div>
+                      <div className="bank-name">{bank.name}</div>
+                      <div className="bank-sub">
+                        Conta corrente{b.currency !== 'BRL' ? ` · ${b.currency}` : ''}
+                      </div>
+                    </div>
                   </div>
+                  <div className="bank-val num">{fmt(b.balance, b.currency)}</div>
                 </div>
-                <div className="bank-val num">{fmt(balance)}</div>
-              </div>
-            ))}
+              ))
+            )}
         </div>
       </div>
 

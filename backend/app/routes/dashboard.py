@@ -8,6 +8,7 @@ from app.extensions import db
 from app.auth_decorator import login_required
 from app.models import Account, Bank, Category, CreditCard, CreditCardInvoice, RecurringTransaction, Transaction
 from app.services.finance_service import add_months
+from app.services.quotes_service import convert_to_brl, get_brl_rates
 
 INVESTMENT_ACCOUNT_TYPE = "investment"
 
@@ -48,7 +49,11 @@ def summary():
     prev_start, prev_end = _month_bounds(prev_year, prev_month0 + 1)
 
     accounts = Account.query.filter_by(user_id=g.current_user.id, archived=False).all()
-    saldo_total = sum((a.balance for a in accounts if a.type == "checking"), Decimal("0"))
+    fx_rates, _ = get_brl_rates()
+    saldo_total = sum(
+        (convert_to_brl(a.balance, a.currency, fx_rates) for a in accounts if a.type == "checking"),
+        Decimal("0"),
+    )
 
     def period_totals(d_start, d_end):
         rows = (
@@ -244,12 +249,28 @@ def expense_breakdown():
 @login_required
 def balance_by_bank():
     banks = Bank.query.filter_by(user_id=g.current_user.id, archived=False).all()
+    fx_rates, _ = get_brl_rates()
     result = []
     for bank in banks:
         checking_accounts = [a for a in bank.accounts if a.type == "checking" and not a.archived]
-        total = sum((a.balance for a in checking_accounts), Decimal("0"))
-        if checking_accounts:
-            result.append({"bank": bank.to_dict(), "balance": float(total)})
+        if not checking_accounts:
+            continue
+        by_currency = {}
+        for a in checking_accounts:
+            by_currency[a.currency] = by_currency.get(a.currency, Decimal("0")) + a.balance
+        balance_brl = sum(
+            (convert_to_brl(total, currency, fx_rates) for currency, total in by_currency.items()),
+            Decimal("0"),
+        )
+        result.append(
+            {
+                "bank": bank.to_dict(),
+                "balance_brl": float(balance_brl),
+                "balances": [
+                    {"currency": currency, "balance": float(total)} for currency, total in by_currency.items()
+                ],
+            }
+        )
     return {"banks": result}
 
 
