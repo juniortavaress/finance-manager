@@ -37,6 +37,12 @@ const FIXED_INCOME_TYPE_LABELS = {
 // API do Banco Central) - ver economic_index_service.py.
 const AUTO_POS_FIXADO_INDEXERS = ['CDI', 'SELIC'];
 
+function autoPriceTooltip(asset, isAutoFixed) {
+  if (isAutoFixed) return 'Calculado automaticamente pela taxa de renda fixa';
+  if (asset.type === 'acoes' || asset.type === 'fii') return 'Atualizado automaticamente pela cotação do Yahoo Finance';
+  return 'Atualizado automaticamente pela cotação da Binance';
+}
+
 function isAutoFixedIncome(asset) {
   if (asset.type !== 'renda_fixa') return false;
   if (asset.fixed_income_type === 'pre_fixado') return true;
@@ -370,7 +376,7 @@ export default function Portfolio() {
                 {isAutoPrice ? (
                   <div
                     className="a-num"
-                    title={isAutoFixed ? 'Calculado automaticamente pela taxa de renda fixa' : 'Atualizado automaticamente pela cotação da Binance'}
+                    title={autoPriceTooltip(a, isAutoFixed)}
                   >
                     {currentAmount != null ? fmt(currentAmount, a.currency) : '—'}
                   </div>
@@ -487,7 +493,7 @@ export default function Portfolio() {
                     {isAutoPrice ? (
                       <div
                         className="a-num"
-                        title={isAutoFixed ? 'Calculado automaticamente pela taxa de renda fixa' : 'Atualizado automaticamente pela cotação da Binance'}
+                        title={autoPriceTooltip(a, isAutoFixed)}
                       >
                         {currentAmount != null ? fmt(currentAmount, a.currency) : '—'}
                       </div>

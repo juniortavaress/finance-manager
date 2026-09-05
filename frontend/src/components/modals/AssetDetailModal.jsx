@@ -84,6 +84,14 @@ export default function AssetDetailModal({ open, onClose, asset }) {
           </button>
         </div>
         <div className="modal-body modal-body-scroll">
+          <h3 style={{ fontSize: 13, marginBottom: 10 }}>Evolução</h3>
+          {evoLoading && <Skeleton width="100%" height={180} radius={8} />}
+          {!evoLoading && evolution.length < 2 && (
+            <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Histórico insuficiente para exibir o gráfico.</p>
+          )}
+          {!evoLoading && evolution.length >= 2 && <InvestmentEvolutionChart periods={evolution} />}
+
+          <h3 style={{ fontSize: 13, marginTop: 36, marginBottom: 10 }}>Dados</h3>
           <div
             style={{
               display: 'grid',
@@ -105,14 +113,7 @@ export default function AssetDetailModal({ open, onClose, asset }) {
             ))}
           </div>
 
-          <h3 style={{ fontSize: 13, marginBottom: 10 }}>Evolução</h3>
-          {evoLoading && <Skeleton width="100%" height={180} radius={8} />}
-          {!evoLoading && evolution.length < 2 && (
-            <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Histórico insuficiente para exibir o gráfico.</p>
-          )}
-          {!evoLoading && evolution.length >= 2 && <InvestmentEvolutionChart periods={evolution} />}
-
-          <h3 style={{ fontSize: 13, marginTop: 22, marginBottom: 10 }}>Histórico de transações</h3>
+          <h3 style={{ fontSize: 13, marginTop: 36, marginBottom: 10 }}>Histórico de transações</h3>
           {txLoading &&
             [0, 1, 2].map((i) => (
               <div className="tx-row" key={i}>

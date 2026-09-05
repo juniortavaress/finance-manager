@@ -9,6 +9,7 @@ from app.models import Account, Asset, InvestmentAccount
 from app.services.crypto_service import COINGECKO_VS_CURRENCIES, refresh_current_prices, resolve_symbol
 from app.services.economic_index_service import INDEXER_SGS_CODES, refresh_daily_rates
 from app.services.quotes_service import refresh_brl_rates
+from app.services.stock_service import YAHOO_CURRENCY_SUFFIX, refresh_prices as refresh_stock_prices
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +21,14 @@ _refresh_in_progress = False
 
 
 def _refresh_market_data_for_user(user_id):
-    """Atualiza em `crypto_prices`, `economic_index_rates` e `fx_rates` (via
-    upsert) tudo que os ativos de renda variavel/fixa do usuario usam, alem
-    das cotacoes de cambio. Bate nas APIs externas (CoinGecko, Banco
-    Central) - roda em background (ver refresh_market_data_async), nunca no
-    caminho sincrono de uma requisicao que o usuario esta esperando (essa e'
-    a causa raiz da lentidao de GET /assets e GET /summary antes desta
-    rotina existir: eles bloqueavam esperando essas mesmas chamadas)."""
+    """Atualiza em `crypto_prices`, `stock_prices`, `economic_index_rates` e
+    `fx_rates` (via upsert) tudo que os ativos de renda variavel/fixa do
+    usuario usam, alem das cotacoes de cambio. Bate nas APIs externas
+    (CoinGecko, Yahoo Finance, Banco Central) - roda em background (ver
+    refresh_market_data_async), nunca no caminho sincrono de uma requisicao
+    que o usuario esta esperando (essa e' a causa raiz da lentidao de GET
+    /assets e GET /summary antes desta rotina existir: eles bloqueavam
+    esperando essas mesmas chamadas)."""
     inv_account_ids = [
         ia.id
         for ia in InvestmentAccount.query.join(Account, Account.id == InvestmentAccount.account_id)
@@ -42,6 +44,7 @@ def _refresh_market_data_for_user(user_id):
     }
 
     crypto_pairs = set()
+    stock_earliest = {}
     indexers = set()
     for asset in assets:
         currency = accounts_by_ia_id[asset.investment_account_id].currency
@@ -49,6 +52,14 @@ def _refresh_market_data_for_user(user_id):
             symbol = resolve_symbol(asset.code)
             if symbol and currency in COINGECKO_VS_CURRENCIES:
                 crypto_pairs.add((symbol, currency))
+        elif asset.type in ("acoes", "fii") and asset.code and currency in YAHOO_CURRENCY_SUFFIX:
+            key = (asset.code.strip().upper(), currency)
+            if asset.asset_transactions:
+                earliest = min(tx.date for tx in asset.asset_transactions)
+                if key not in stock_earliest or earliest < stock_earliest[key]:
+                    stock_earliest[key] = earliest
+            else:
+                stock_earliest.setdefault(key, None)
         elif asset.type == "renda_fixa" and asset.fixed_income_type == "pos_fixado" and asset.fixed_income_indexer:
             indexer = asset.fixed_income_indexer.strip().upper()
             if indexer in INDEXER_SGS_CODES:
@@ -56,6 +67,9 @@ def _refresh_market_data_for_user(user_id):
 
     if crypto_pairs:
         refresh_current_prices(crypto_pairs)
+
+    if stock_earliest:
+        refresh_stock_prices((symbol, currency, earliest) for (symbol, currency), earliest in stock_earliest.items())
 
     if indexers:
         today = dt.date.today()

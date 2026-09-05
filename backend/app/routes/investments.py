@@ -20,6 +20,9 @@ from app.services.economic_index_service import get_daily_rates
 from app.services.fixed_income_service import pos_fixado_current_value, pre_fixado_current_value
 from app.services.market_data_service import trigger_refresh_for_current_user
 from app.services.quotes_service import convert_to_brl, get_brl_rates
+from app.services.stock_service import YAHOO_CURRENCY_SUFFIX
+from app.services.stock_service import get_current_prices as get_current_stock_prices
+from app.services.stock_service import get_monthly_prices as get_stock_monthly_prices
 
 investments_bp = Blueprint("investments", __name__)
 
@@ -216,7 +219,7 @@ def _asset_to_dict(asset: Asset):
     data["currency"] = currency
     data["price_auto_updated"] = (
         asset.type == "cripto" and resolve_symbol(asset.code) is not None and currency in COINGECKO_VS_CURRENCIES
-    )
+    ) or (asset.type in ("acoes", "fii") and bool(asset.code) and currency in YAHOO_CURRENCY_SUFFIX)
     last_buy = next(
         (tx for tx in reversed(asset.asset_transactions) if tx.type == "buy" and tx.fixed_income_rate_pct is not None),
         None,
@@ -347,6 +350,29 @@ def _apply_cached_crypto_prices(assets, currency_by_ia_id):
             asset.current_unit_price = price
 
 
+def _apply_cached_stock_prices(assets, currency_by_ia_id):
+    """Aplica em memoria (sem commit) o preco atual cacheado em
+    `stock_prices` aos ativos de acoes/FII informados. So' le o cache -
+    nunca bate no Yahoo Finance (isso e' feito pela rotina de warm-up em
+    background, ver market_data_service.refresh_market_data_async).
+    Best-effort: moeda nao suportada ou cache ainda vazio mantem o preco
+    existente, sem quebrar a listagem."""
+    assets_by_key = {}
+    for asset in assets:
+        if asset.type not in ("acoes", "fii"):
+            continue
+        currency = currency_by_ia_id.get(asset.investment_account_id)
+        if asset.code and currency in YAHOO_CURRENCY_SUFFIX:
+            assets_by_key.setdefault((asset.code.strip().upper(), currency), []).append(asset)
+    if not assets_by_key:
+        return
+
+    prices = get_current_stock_prices(assets_by_key.keys())
+    for (symbol, currency), price in prices.items():
+        for asset in assets_by_key[(symbol, currency)]:
+            asset.current_unit_price = price
+
+
 @investments_bp.get("/assets")
 @login_required
 def list_assets():
@@ -365,6 +391,7 @@ def list_assets():
         else []
     )
     _apply_cached_crypto_prices(all_assets, currency_by_ia_id)
+    _apply_cached_stock_prices(all_assets, currency_by_ia_id)
 
     active, archived = [], []
     for asset in all_assets:
@@ -377,8 +404,9 @@ def list_assets():
 @login_required
 def refresh_market_data():
     """Dispara em background a atualizacao do cache de precos/taxas externas
-    (cripto via CoinGecko, CDI/Selic e cambio via Banco Central) usado pelos
-    ativos do usuario. Unico lugar que dispara esse warm-up - chamado pelo
+    (cripto via CoinGecko, acoes/FII via Yahoo Finance, CDI/Selic e cambio
+    via Banco Central) usado pelos ativos do usuario. Unico lugar que
+    dispara esse warm-up - chamado pelo
     frontend uma vez por carregamento do app (ver DataContext.reloadAll),
     mesmo antes do usuario abrir a pagina de investimentos. GET /assets e
     GET /summary so' leem o cache ja existente (nunca disparam refresh
@@ -522,6 +550,36 @@ def _crypto_monthly_prices(assets, months, earliest_date, currency_by_ia_id):
     return result
 
 
+def _stock_monthly_prices(assets, months, earliest_date, currency_by_ia_id):
+    """Equivalente a _crypto_monthly_prices, para ativos do tipo 'acoes'/
+    'fii', lendo o historico diario cacheado em `stock_prices` (populado via
+    Yahoo Finance pela rotina de warm-up). Ativos sem codigo/moeda suportada
+    ou sem historico cacheado simplesmente nao entram no dict retornado -
+    quem chama cai de volta no current_unit_price."""
+    if not months or earliest_date is None:
+        return {}
+
+    assets_by_key = {}
+    for asset in assets:
+        if asset.type not in ("acoes", "fii"):
+            continue
+        currency = currency_by_ia_id.get(asset.investment_account_id)
+        if asset.code and currency in YAHOO_CURRENCY_SUFFIX:
+            assets_by_key.setdefault((asset.code.strip().upper(), currency), []).append(asset)
+    if not assets_by_key:
+        return {}
+
+    result = {}
+    for (symbol, currency), assets_for_id in assets_by_key.items():
+        monthly = get_stock_monthly_prices(symbol, currency, months, earliest_date)
+        if not monthly:
+            continue
+        for asset in assets_for_id:
+            result[asset.id] = monthly
+
+    return result
+
+
 def _compute_asset_evolution(assets, months, today, current_amount_by_asset_id, fx_rates, bank_filter, accounts_by_ia_id):
     """Serie mensal {year, month, invested, current} para o conjunto de
     `assets` informado (pode ser um unico ativo ou o portfolio inteiro).
@@ -532,9 +590,9 @@ def _compute_asset_evolution(assets, months, today, current_amount_by_asset_id, 
     last = _month_start(today)
     earliest = months[0] if months else today
 
-    monthly_price_by_asset_id = _crypto_monthly_prices(
-        assets, months, earliest, {k: v.currency for k, v in accounts_by_ia_id.items()}
-    )
+    currency_by_ia_id = {k: v.currency for k, v in accounts_by_ia_id.items()}
+    monthly_price_by_asset_id = _crypto_monthly_prices(assets, months, earliest, currency_by_ia_id)
+    monthly_price_by_asset_id.update(_stock_monthly_prices(assets, months, earliest, currency_by_ia_id))
     # Indexadores CDI/Selic buscados uma unica vez por ativo pos-fixado
     # (cobrindo toda a janela do grafico), em vez de uma vez por mes -
     # get_daily_rates() bate no banco a cada chamada (nunca no BCB - so' le o
@@ -710,7 +768,9 @@ def investments_summary():
         .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
         .all()
     )
-    _apply_cached_crypto_prices(all_assets, {ia.id: accounts_by_ia_id[ia.id].currency for ia in inv_accounts})
+    currency_by_ia_id_all = {ia.id: accounts_by_ia_id[ia.id].currency for ia in inv_accounts}
+    _apply_cached_crypto_prices(all_assets, currency_by_ia_id_all)
+    _apply_cached_stock_prices(all_assets, currency_by_ia_id_all)
     assets_result = []
     earliest_date = None
     for asset in all_assets:
