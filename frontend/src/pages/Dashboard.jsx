@@ -235,7 +235,7 @@ export default function Dashboard() {
                   )}
                   <div
                     className="hbar-fill"
-                    style={{ width: `${(c.total / catMax) * 100}%`, background: overBudget ? 'var(--brick)' : c.color_hex }}
+                    style={{ width: `${(c.total / catMax) * 100}%`, background: c.color_hex }}
                   />
                 </div>
               </div>
