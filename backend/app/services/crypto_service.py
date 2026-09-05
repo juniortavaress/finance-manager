@@ -132,6 +132,23 @@ def get_current_prices(symbol_currency_pairs):
     return result
 
 
+def get_price_on_or_before(symbol, currency, date):
+    """Preco de fechamento mais recente em `crypto_prices` na data exata ou
+    antes dela (ex: preco do dia da compra, se cacheado, senao o ultimo
+    disponivel antes). Nunca bate em rede - so' le o cache. Retorna None se
+    nao houver nenhum preco cacheado ate essa data."""
+    row = (
+        CryptoPrice.query.filter(
+            CryptoPrice.symbol == symbol,
+            CryptoPrice.currency == currency,
+            CryptoPrice.date <= date,
+        )
+        .order_by(CryptoPrice.date.desc())
+        .first()
+    )
+    return row.price if row is not None else None
+
+
 def get_recent_historical_prices(symbol, currency, days):
     """Serie historica diaria (CoinGecko) dos ultimos `days` dias (max
     MAX_HISTORY_DAYS) para `symbol`/`currency`. Retorna lista de (date,

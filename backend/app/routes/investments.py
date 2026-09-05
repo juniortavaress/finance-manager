@@ -14,6 +14,7 @@ from app.services.crypto_service import (
     COINGECKO_VS_CURRENCIES,
     SUPPORTED_CRYPTOCURRENCIES,
     get_current_prices,
+    get_price_on_or_before as get_crypto_price_on_or_before,
     resolve_symbol,
 )
 from app.services.economic_index_service import get_daily_rates
@@ -23,6 +24,7 @@ from app.services.quotes_service import convert_to_brl, get_brl_rates
 from app.services.stock_service import YAHOO_CURRENCY_SUFFIX
 from app.services.stock_service import get_current_prices as get_current_stock_prices
 from app.services.stock_service import get_monthly_prices as get_stock_monthly_prices
+from app.services.stock_service import get_price_on_or_before as get_stock_price_on_or_before
 
 investments_bp = Blueprint("investments", __name__)
 
@@ -580,15 +582,39 @@ def _stock_monthly_prices(assets, months, earliest_date, currency_by_ia_id):
     return result
 
 
-def _compute_asset_evolution(assets, months, today, current_amount_by_asset_id, fx_rates, bank_filter, accounts_by_ia_id):
+def _price_on_or_before(asset, currency, date):
+    """Preco cacheado (cripto ou acoes/FII) na data exata ou antes dela,
+    usado so' pelo primeiro ponto do grafico de um ativo individual (ver
+    exact_first_day em _compute_asset_evolution). Retorna None se o tipo nao
+    tiver preco historico cacheado (renda fixa/fundos/outro) ou o cache
+    ainda nao cobrir essa data."""
+    if asset.type == "cripto":
+        symbol = resolve_symbol(asset.code)
+        if symbol and currency in COINGECKO_VS_CURRENCIES:
+            return get_crypto_price_on_or_before(symbol, currency, date)
+    elif asset.type in ("acoes", "fii") and asset.code and currency in YAHOO_CURRENCY_SUFFIX:
+        return get_stock_price_on_or_before(asset.code.strip().upper(), currency, date)
+    return None
+
+
+def _compute_asset_evolution(
+    assets, months, today, current_amount_by_asset_id, fx_rates, bank_filter, accounts_by_ia_id, exact_first_day=False
+):
     """Serie mensal {year, month, invested, current} para o conjunto de
     `assets` informado (pode ser um unico ativo ou o portfolio inteiro).
     Nao inclui net_flow - isso e' um conceito de conta/portfolio (aporte
     externo via transferencia), sem correspondente por ativo individual.
     Fatorado de investments_summary para ser reutilizado pelo endpoint de
-    evolucao de um ativo individual (GET /investments/assets/<id>/evolution)."""
+    evolucao de um ativo individual (GET /investments/assets/<id>/evolution).
+
+    exact_first_day: quando True (so' usado pelo grafico de um ativo
+    individual, nunca pelo portfolio), o primeiro ponto da serie usa o preco
+    cacheado no dia exato da primeira compra daquele ativo em vez do
+    fechamento de fim de mes - evita "atual" aparecer abaixo de "investido"
+    logo no primeiro ponto so' por causa da variacao do resto do mes."""
     last = _month_start(today)
     earliest = months[0] if months else today
+    first_month = months[0] if months else None
 
     currency_by_ia_id = {k: v.currency for k, v in accounts_by_ia_id.items()}
     monthly_price_by_asset_id = _crypto_monthly_prices(assets, months, earliest, currency_by_ia_id)
@@ -667,7 +693,10 @@ def _compute_asset_evolution(assets, months, today, current_amount_by_asset_id, 
             else:
                 month_end_cutoff = min(month_end - dt.timedelta(days=1), today)
                 projected = _fixed_income_month_value(asset, month_end_cutoff, daily_rates_by_asset_id.get(asset.id))
-                month_price = monthly_price_by_asset_id.get(asset.id, {}).get(month_start)
+                exact_day_price = None
+                if exact_first_day and month_start == first_month and txs:
+                    exact_day_price = _price_on_or_before(asset, currency_by_ia_id.get(asset.investment_account_id), txs[0].date)
+                month_price = exact_day_price if exact_day_price is not None else monthly_price_by_asset_id.get(asset.id, {}).get(month_start)
                 if projected is not None:
                     current_total += projected * fx_factor
                 elif month_price is not None:
@@ -715,7 +744,14 @@ def asset_evolution(asset_id):
     # ativo (sem conversao BRL) - consistente com a mesma convencao usada em
     # investments_summary quando um bank_id especifico e' filtrado.
     evolution = _compute_asset_evolution(
-        [asset], months, today, current_amount_by_asset_id, fx_rates=None, bank_filter=None, accounts_by_ia_id=accounts_by_ia_id
+        [asset],
+        months,
+        today,
+        current_amount_by_asset_id,
+        fx_rates=None,
+        bank_filter=None,
+        accounts_by_ia_id=accounts_by_ia_id,
+        exact_first_day=True,
     )
     return {"evolution": evolution}
 

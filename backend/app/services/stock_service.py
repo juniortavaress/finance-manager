@@ -153,6 +153,23 @@ def get_current_prices(symbol_currency_pairs):
     return result
 
 
+def get_price_on_or_before(symbol, currency, date):
+    """Preco de fechamento mais recente em `stock_prices` na data exata ou
+    antes dela (ex: preco do dia da compra, se cacheado, senao o ultimo
+    disponivel antes). Nunca bate em rede - so' le o cache. Retorna None se
+    nao houver nenhum preco cacheado ate essa data."""
+    row = (
+        StockPrice.query.filter(
+            StockPrice.symbol == symbol,
+            StockPrice.currency == currency,
+            StockPrice.date <= date,
+        )
+        .order_by(StockPrice.date.desc())
+        .first()
+    )
+    return row.price if row is not None else None
+
+
 def get_historical_prices(symbol, currency, start_date=None):
     """Serie historica cacheada em `stock_prices` para `symbol`/`currency`,
     do mais antigo pro mais recente (opcionalmente a partir de start_date).
