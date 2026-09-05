@@ -7,6 +7,7 @@ import { hexToRgba } from '../utils/color';
 import TransactionModal from '../components/modals/TransactionModal';
 import TransactionsDrilldownModal from '../components/modals/TransactionsDrilldownModal';
 import InvoicesDrilldownModal from '../components/modals/InvoicesDrilldownModal';
+import BalanceByBankModal from '../components/modals/BalanceByBankModal';
 import IncomeExpenseChart from '../components/charts/IncomeExpenseChart';
 import BalanceEvolutionChart from '../components/charts/BalanceEvolutionChart';
 import PeriodGranularitySelect from '../components/PeriodGranularitySelect';
@@ -114,6 +115,14 @@ export default function Dashboard() {
               <div className="delta">contas correntes</div>
             </>
           )}
+          <button
+            type="button"
+            className="stat-card-expand"
+            title="Ver saldo por banco"
+            onClick={() => setDrilldown({ kind: 'balance' })}
+          >
+            <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+          </button>
         </div>
         <div className="card stat-card" style={{ '--stripe': 'var(--gold)' }}>
           <div className="label">Receitas do mês</div>
@@ -411,6 +420,9 @@ export default function Dashboard() {
         }}
       />
 
+      {drilldown?.kind === 'balance' && (
+        <BalanceByBankModal open onClose={() => setDrilldown(null)} />
+      )}
       {drilldown?.kind === 'income' && (
         <TransactionsDrilldownModal
           open
