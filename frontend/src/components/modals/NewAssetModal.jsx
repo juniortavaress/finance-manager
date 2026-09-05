@@ -30,7 +30,19 @@ const INDEXER_OPTIONS = ['CDI', 'Selic'];
  * `asset`, cria um ativo novo. Arquivamento e automatico: um ativo some da
  * carteira ativa e cai em "arquivados" quando sua quantidade zera.
  */
-export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks, investmentAccounts, asset }) {
+export default function NewAssetModal({
+  open,
+  onClose,
+  onCreated,
+  onSaved,
+  onDraftReady,
+  deferCreate = false,
+  banks,
+  investmentAccounts,
+  asset,
+  presetInvestmentAccountId,
+  presetName = '',
+}) {
   const isEditing = !!asset;
   const { showSuccess, showError } = useToast();
   const [name, setName] = useState('');
@@ -67,17 +79,17 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
       setFixedIncomeRatePct(asset.fixed_income_rate_pct != null ? String(asset.fixed_income_rate_pct) : '');
       setMaturityDate(asset.maturity_date || '');
     } else {
-      setName('');
+      setName(presetName || '');
       setCode('');
       setType('acoes');
-      setInvestmentAccountId(investmentAccounts[0]?.investment_account?.id || '');
+      setInvestmentAccountId(presetInvestmentAccountId || investmentAccounts[0]?.investment_account?.id || '');
       setFixedIncomeType('');
       setFixedIncomeIndexer(INDEXER_OPTIONS[0]);
       setFixedIncomeRatePct('');
       setMaturityDate('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isEditing, asset]);
+  }, [open, isEditing, asset, presetInvestmentAccountId, presetName]);
 
   if (!open) return null;
 
@@ -118,6 +130,17 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
       : {};
 
     const codeValue = isRendaFixa ? null : code.trim() || null;
+
+    if (!isEditing && deferCreate) {
+      onDraftReady?.({
+        investment_account_id: investmentAccountId,
+        type,
+        code: codeValue || undefined,
+        name: name.trim(),
+        ...fixedIncomePayload,
+      });
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -318,7 +341,13 @@ export default function NewAssetModal({ open, onClose, onCreated, onSaved, banks
               Cancelar
             </div>
             <button className="btn btn-primary" type="submit" disabled={submitting}>
-              {submitting ? 'Salvando...' : isEditing ? 'Salvar alterações' : 'Salvar ativo'}
+              {submitting
+                ? 'Salvando...'
+                : isEditing
+                ? 'Salvar alterações'
+                : deferCreate
+                ? 'Próximo'
+                : 'Salvar ativo'}
             </button>
           </div>
         </form>

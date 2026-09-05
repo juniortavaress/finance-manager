@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { investmentsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
-import { maskToNumber, numberToMasked } from '../../utils/currency';
+import { maskToNumber, numberToMasked, currencySymbol } from '../../utils/currency';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
 import { IconTrash } from '../icons';
@@ -14,8 +14,10 @@ function todayIso() {
 export default function TradeAssetModal({
   open,
   onClose,
+  onBack,
   onSaved,
   asset,
+  assetDraft,
   kind,
   accountBalance,
   accountCurrency,
@@ -24,6 +26,8 @@ export default function TradeAssetModal({
 }) {
   const { showSuccess, showError } = useToast();
   const isEdit = !!trade;
+  const isNewAsset = !asset && !!assetDraft;
+  const effectiveAsset = asset || assetDraft;
   const isSell = isEdit ? trade.type === 'sell' : kind === 'sell';
   const availableQuantity = isSell
     ? isEdit
@@ -42,7 +46,9 @@ export default function TradeAssetModal({
   const [submitting, setSubmitting] = useState(false);
 
   const isFixedIncomeBuy =
-    !isSell && asset?.type === 'renda_fixa' && ['pre_fixado', 'pos_fixado', 'ipca'].includes(asset?.fixed_income_type);
+    !isSell &&
+    effectiveAsset?.type === 'renda_fixa' &&
+    ['pre_fixado', 'pos_fixado', 'ipca'].includes(effectiveAsset?.fixed_income_type);
 
   useEffect(() => {
     if (!open) return;
@@ -61,14 +67,16 @@ export default function TradeAssetModal({
       setFeeAmount('');
       setTotalAmount('');
       setNoteId('');
-      const suggestedRate = asset?.fixed_income_last_rate_pct ?? asset?.fixed_income_rate_pct;
+      const suggestedRate = effectiveAsset?.fixed_income_last_rate_pct ?? effectiveAsset?.fixed_income_rate_pct;
       setFixedIncomeRatePct(suggestedRate != null ? String(suggestedRate) : '');
     }
     setError('');
-  }, [open, trade, asset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, trade, effectiveAsset]);
 
-  if (!open || !asset) return null;
+  if (!open || !effectiveAsset) return null;
 
+  const symbol = currencySymbol(accountCurrency);
   const numericQuantity = Number(String(quantity).replace(',', '.')) || 0;
   const numericUnitPrice = maskToNumber(unitPrice);
   const numericFee = maskToNumber(feeAmount);
@@ -135,7 +143,8 @@ export default function TradeAssetModal({
       } else if (isSell) {
         await investmentsApi.sell(asset.id, payload);
       } else {
-        await investmentsApi.buy(asset.id, payload);
+        const assetId = isNewAsset ? (await investmentsApi.createAsset(assetDraft)).asset.id : asset.id;
+        await investmentsApi.buy(assetId, payload);
       }
       showSuccess(isEdit ? 'Operação atualizada com sucesso.' : isSell ? 'Venda registrada com sucesso.' : 'Compra registrada com sucesso.');
       onSaved?.();
@@ -153,7 +162,7 @@ export default function TradeAssetModal({
       <div className="modal">
         <div className="modal-head">
           <h2>
-            {isEdit ? 'Editar' : isSell ? 'Vender' : 'Comprar'} {asset.code || asset.name}
+            {isEdit ? 'Editar' : isSell ? 'Vender' : 'Comprar'} {effectiveAsset.code || effectiveAsset.name}
           </h2>
           <div className="modal-head-actions">
             {isEdit && onDelete && (
@@ -202,24 +211,24 @@ export default function TradeAssetModal({
               )}
             </div>
             <div className="field">
-              <label>Preço unitário</label>
-              <CurrencyInput value={unitPrice} onChange={handleUnitPriceChange} />
+              <label>Preço unitário ({symbol})</label>
+              <CurrencyInput value={unitPrice} onChange={handleUnitPriceChange} placeholder={`${symbol} 0,00`} />
             </div>
           </div>
 
           {isFixedIncomeBuy && (
             <div className="field">
               <label>
-                {asset.fixed_income_type === 'pos_fixado'
-                  ? `% do ${asset.fixed_income_indexer || 'indexador'} contratado nesta compra`
-                  : asset.fixed_income_type === 'ipca'
+                {effectiveAsset.fixed_income_type === 'pos_fixado'
+                  ? `% do ${effectiveAsset.fixed_income_indexer || 'indexador'} contratado nesta compra`
+                  : effectiveAsset.fixed_income_type === 'ipca'
                   ? 'Taxa adicional ao IPCA contratada nesta compra (%)'
                   : 'Taxa fixa ao ano contratada nesta compra (%)'}
               </label>
               <input
                 type="text"
                 inputMode="decimal"
-                placeholder={asset.fixed_income_type === 'pos_fixado' ? 'Ex.: 110' : 'Ex.: 14,5'}
+                placeholder={effectiveAsset.fixed_income_type === 'pos_fixado' ? 'Ex.: 110' : 'Ex.: 14,5'}
                 value={fixedIncomeRatePct}
                 onChange={(e) => setFixedIncomeRatePct(e.target.value.replace(/[^\d,.]/g, ''))}
               />
@@ -228,18 +237,18 @@ export default function TradeAssetModal({
 
           <div className="field-row">
             <div className="field">
-              <label>Taxa de corretagem</label>
-              <CurrencyInput value={feeAmount} onChange={handleFeeChange} />
+              <label>Taxa de corretagem ({symbol})</label>
+              <CurrencyInput value={feeAmount} onChange={handleFeeChange} placeholder={`${symbol} 0,00`} />
             </div>
             <div className="field">
-              <label>Valor final</label>
-              <CurrencyInput value={totalAmount} onChange={handleTotalChange} />
+              <label>Valor final ({symbol})</label>
+              <CurrencyInput value={totalAmount} onChange={handleTotalChange} placeholder={`${symbol} 0,00`} />
             </div>
           </div>
 
           <div className="modal-actions">
-            <div className="btn btn-ghost" onClick={onClose}>
-              Cancelar
+            <div className="btn btn-ghost" onClick={onBack || onClose}>
+              {onBack ? 'Voltar' : 'Cancelar'}
             </div>
             <button
               className="btn btn-primary"

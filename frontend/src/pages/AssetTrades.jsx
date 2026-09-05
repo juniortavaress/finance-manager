@@ -114,6 +114,8 @@ export default function AssetTrades() {
   const [pickModalOpen, setPickModalOpen] = useState(false);
   const [pickKind, setPickKind] = useState('buy');
   const [newAssetModalOpen, setNewAssetModalOpen] = useState(false);
+  const [newAssetPreset, setNewAssetPreset] = useState({ investmentAccountId: '', name: '' });
+  const [lastInvestmentAccountId, setLastInvestmentAccountId] = useState('');
   const [tradeState, setTradeState] = useState(null);
   const [editTrade, setEditTrade] = useState(null);
   const [deletingTrade, setDeletingTrade] = useState(null);
@@ -291,39 +293,58 @@ export default function AssetTrades() {
         assets={assets}
         investmentAccounts={investmentAccounts}
         bankById={bankById}
+        initialInvestmentAccountId={lastInvestmentAccountId}
         onClose={() => setPickModalOpen(false)}
-        onPick={(asset) => {
+        onPick={(asset, investmentAccountId) => {
           setPickModalOpen(false);
+          setLastInvestmentAccountId(investmentAccountId);
           setTradeState({ asset, kind: pickKind });
         }}
-        onNewAsset={() => {
+        onNewAsset={(investmentAccountId, name) => {
           setPickModalOpen(false);
+          setLastInvestmentAccountId(investmentAccountId);
+          setNewAssetPreset({ investmentAccountId, name });
           setNewAssetModalOpen(true);
         }}
       />
 
       <NewAssetModal
         open={newAssetModalOpen}
+        deferCreate
         banks={banks}
         investmentAccounts={investmentAccounts}
+        presetInvestmentAccountId={newAssetPreset.investmentAccountId}
+        presetName={newAssetPreset.name}
         onClose={() => setNewAssetModalOpen(false)}
-        onCreated={(asset) => {
+        onDraftReady={(draft) => {
           setNewAssetModalOpen(false);
-          reloadAssets();
-          setTradeState({
-            asset: { ...asset, position: { quantity: 0, avg_unit_price: 0, invested_amount: 0, current_amount: null } },
-            kind: 'buy',
-          });
+          setTradeState({ assetDraft: draft, kind: 'buy' });
         }}
       />
 
       <TradeAssetModal
         open={!!tradeState}
         asset={tradeState?.asset}
+        assetDraft={tradeState?.assetDraft}
         kind={tradeState?.kind}
-        accountBalance={tradeState?.asset ? accountBalanceFor(tradeState.asset) : null}
-        accountCurrency={tradeState?.asset ? currencyFor(tradeState.asset) : undefined}
+        accountBalance={
+          tradeState?.asset || tradeState?.assetDraft ? accountBalanceFor(tradeState.asset || tradeState.assetDraft) : null
+        }
+        accountCurrency={
+          tradeState?.asset || tradeState?.assetDraft ? currencyFor(tradeState.asset || tradeState.assetDraft) : undefined
+        }
         onClose={() => setTradeState(null)}
+        onBack={() => {
+          setPickKind(tradeState.kind);
+          if (tradeState.assetDraft) {
+            setNewAssetPreset({ investmentAccountId: tradeState.assetDraft.investment_account_id, name: tradeState.assetDraft.name });
+            setTradeState(null);
+            setNewAssetModalOpen(true);
+          } else {
+            setTradeState(null);
+            setPickModalOpen(true);
+          }
+        }}
         onSaved={() => {
           setTradeState(null);
           reload();
