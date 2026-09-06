@@ -16,7 +16,8 @@ export default function MarketCorporateEventModal({ open, onClose, onSaved }) {
   const [targetCode, setTargetCode] = useState('');
   const [sourceCode, setSourceCode] = useState('');
   const [date, setDate] = useState('');
-  const [ratio, setRatio] = useState('');
+  const [qtyBefore, setQtyBefore] = useState('');
+  const [qtyAfter, setQtyAfter] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -30,7 +31,8 @@ export default function MarketCorporateEventModal({ open, onClose, onSaved }) {
     setTargetCode('');
     setSourceCode('');
     setDate('');
-    setRatio('');
+    setQtyBefore('');
+    setQtyAfter('');
     setNote('');
   }, [open]);
 
@@ -43,7 +45,18 @@ export default function MarketCorporateEventModal({ open, onClose, onSaved }) {
     if (!targetCode.trim()) return setError('Informe o código do ativo.');
     if (isMerger && !sourceCode.trim()) return setError('Informe o código de origem da incorporação.');
     if (!date) return setError('Informe a data do evento.');
-    if (!ratio.trim()) return setError('Informe a proporção.');
+    if (!qtyBefore.trim() || !qtyAfter.trim()) return setError('Informe as quantidades antes e depois.');
+
+    const before = Number(qtyBefore.replace(',', '.'));
+    const after = Number(qtyAfter.replace(',', '.'));
+    if (!(before > 0) || !(after > 0)) return setError('As quantidades devem ser maiores que zero.');
+
+    // Calcula o ratio com bastante casas decimais - a divisao exata de
+    // quantidades inteiras raramente e' um numero exato (ex: 363/17), mas o
+    // backend recalcula a posicao final a partir das quantidades reais do
+    // usuario, entao a precisao aqui so' precisa ser boa o suficiente para
+    // nao introduzir erro perceptivel.
+    const ratio = after / before;
 
     setSubmitting(true);
     try {
@@ -52,7 +65,7 @@ export default function MarketCorporateEventModal({ open, onClose, onSaved }) {
         target_code: targetCode.trim().toUpperCase(),
         source_code: isMerger ? sourceCode.trim().toUpperCase() : null,
         date,
-        ratio: Number(ratio.replace(',', '.')),
+        ratio,
         note: note.trim() || null,
       });
       showSuccess('Evento societário registrado com sucesso.');
@@ -114,18 +127,31 @@ export default function MarketCorporateEventModal({ open, onClose, onSaved }) {
           </div>
 
           <div className="field">
-            <label>
-              {isMerger
-                ? 'Cada 1 cota da origem vira quantas da atual? (inclui bônus, se houver)'
-                : 'Cada 1 cota antiga vira quantas novas?'}
-            </label>
+            <label>{isMerger ? 'Quantidade de cotas na origem' : 'Quantidade de cotas antes'}</label>
             <input
               type="text"
               inputMode="decimal"
-              placeholder={isMerger ? 'Ex.: 1,3' : 'Ex.: 10 (ou 0,1 para grupamento)'}
-              value={ratio}
-              onChange={(e) => setRatio(e.target.value.replace(/[^\d,.]/g, ''))}
+              placeholder="Ex.: 17"
+              value={qtyBefore}
+              onChange={(e) => setQtyBefore(e.target.value.replace(/[^\d,.]/g, ''))}
             />
+          </div>
+
+          <div className="field">
+            <label>{isMerger ? 'Quantidade de cotas que isso virou no destino' : 'Quantidade de cotas depois'}</label>
+            <input
+              type="text"
+              inputMode="decimal"
+              placeholder="Ex.: 363"
+              value={qtyAfter}
+              onChange={(e) => setQtyAfter(e.target.value.replace(/[^\d,.]/g, ''))}
+            />
+          </div>
+
+          <div className="field-hint" style={{ marginBottom: 12 }}>
+            Use as suas próprias quantidades como referência (ex.: você tinha {qtyBefore || 'X'} e virou{' '}
+            {qtyAfter || 'Y'}) — a proporção calculada é aplicada à posição real de cada usuário afetado, não a
+            esses números exatos.
           </div>
 
           {isMerger && (

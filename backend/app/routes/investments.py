@@ -207,31 +207,82 @@ def _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id
         source_effective = _effective_transactions(
             source_asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids, _visited
         )
-        ratio = event.ratio
-        raw.extend(_rescale_tx(tx, ratio) for tx in source_effective)
+        merged_tx = _merge_into_single_lot(source_effective, event.ratio, event.date)
+        if merged_tx is not None:
+            raw.append(merged_tx)
 
     raw.sort(key=lambda tx: tx.date)
 
     own_splits = sorted(splits_by_asset_id.get(asset.id, []), key=lambda e: e.date)
     for event in own_splits:
-        raw = [_rescale_tx(tx, event.ratio) if tx.date < event.date else tx for tx in raw]
+        to_scale = [tx for tx in raw if tx.date < event.date]
+        unscaled = [tx for tx in raw if tx.date >= event.date]
+        raw = _rescale_txs(to_scale, event.ratio) + unscaled
+        raw.sort(key=lambda tx: tx.date)
 
     return raw
 
 
-def _rescale_tx(tx, ratio):
-    """Aplica um ratio de split/fusao a uma transacao, mantendo o capital
-    total (quantity * unit_price) exato: arredonda a quantidade pro inteiro
-    mais proximo (cotas de acoes/FII no Brasil sao sempre inteiras) e
-    recalcula unit_price a partir do total original, em vez de dividir
-    unit_price pelo ratio diretamente - evita tanto quantidades fracionarias
-    quanto dizimas propagadas por um ratio nao-exato."""
-    new_quantity = _round_quantity(tx.quantity * ratio)
-    original_total = tx.quantity * tx.unit_price
-    new_unit_price = (
-        (original_total / new_quantity).quantize(UNIT_PRICE_PLACES) if new_quantity > 0 else Decimal("0")
-    )
-    return EffectiveTx(tx.type, tx.date, new_quantity, new_unit_price, tx.fee_amount, tx.fixed_income_rate_pct, tx.source_tx_id)
+def _rescale_txs(txs, ratio):
+    """Aplica um ratio de split/fusao a uma SEQUENCIA de transacoes, mantendo
+    a soma total de quantidade exata (metodo dos maiores restos aplicado em
+    sequencia: cada transacao recebe a diferenca entre o acumulado
+    arredondado ate ela e o acumulado arredondado ate a anterior) - evita o
+    erro que arredondar cada transacao isoladamente acumula (ex: 17 lotes de
+    1 cota cada, ratio 363/17, arredondando 1-a-1 da 361 em vez de 363).
+    unit_price de cada lote e' recalculado a partir do capital original
+    daquele lote (quantity * unit_price), preservando o valor investido, em
+    vez de dividir unit_price pelo ratio diretamente (o que propagaria
+    dizimas de um ratio nao-exato)."""
+    cumulative_before = Decimal("0")
+    cumulative_after_rounded = Decimal("0")
+    result = []
+    for tx in txs:
+        cumulative_before += tx.quantity
+        new_cumulative_after_rounded = _round_quantity(cumulative_before * ratio)
+        new_quantity = new_cumulative_after_rounded - cumulative_after_rounded
+        cumulative_after_rounded = new_cumulative_after_rounded
+
+        original_total = tx.quantity * tx.unit_price
+        new_unit_price = (
+            (original_total / new_quantity).quantize(UNIT_PRICE_PLACES) if new_quantity > 0 else Decimal("0")
+        )
+        result.append(
+            EffectiveTx(tx.type, tx.date, new_quantity, new_unit_price, tx.fee_amount, tx.fixed_income_rate_pct, tx.source_tx_id)
+        )
+    return result
+
+
+def _merge_into_single_lot(source_effective_txs, ratio, event_date):
+    """Colapsa o historico inteiro (ja liquido de compras/vendas) de um
+    ativo de origem de fusao em UM UNICO lote sintetico de compra, na data
+    do evento, com a quantidade/preco medio convertidos pelo ratio. Manter
+    varios lotes reescalados individualmente (um por transacao original da
+    origem) acumula erro de arredondamento quando ha muitas transacoes
+    pequenas (ex: 11 compras de 1-2 cotas cada convertidas por um ratio
+    fracionario resultavam em 361 cotas em vez de 363) - agregando primeiro
+    e convertendo uma unica vez, o resultado bate exatamente com a
+    quantidade/valor investido que a fusao realmente representa. Retorna
+    None se a origem nao tem posicao (tudo vendido antes da fusao)."""
+    quantity = Decimal("0")
+    cost_basis = Decimal("0")
+    for tx in source_effective_txs:
+        if tx.type == "buy":
+            quantity += tx.quantity
+            cost_basis += tx.quantity * tx.unit_price + tx.fee_amount
+        else:
+            avg_price = (cost_basis / quantity) if quantity > 0 else Decimal("0")
+            cost_basis -= tx.quantity * avg_price
+            quantity -= tx.quantity
+
+    if quantity <= 0:
+        return None
+
+    new_quantity = _round_quantity(quantity * ratio)
+    if new_quantity <= 0:
+        return None
+    new_unit_price = (cost_basis / new_quantity).quantize(UNIT_PRICE_PLACES)
+    return EffectiveTx("buy", event_date, new_quantity, new_unit_price, Decimal("0"), None, None)
 
 
 def _lot_rate_pct(asset: Asset, tx):
@@ -376,7 +427,7 @@ def _asset_position(
         if tx.type == "buy":
             cost_basis += tx.quantity * tx.unit_price + tx.fee_amount
             quantity += tx.quantity
-            avg_price = (cost_basis / quantity) if quantity > 0 else Decimal("0")
+            avg_price = (cost_basis / quantity).quantize(UNIT_PRICE_PLACES) if quantity > 0 else Decimal("0")
         else:
             cost_basis -= tx.quantity * avg_price
             quantity -= tx.quantity
@@ -399,7 +450,7 @@ def _asset_position(
     return {
         "quantity": float(quantity),
         "avg_unit_price": float(avg_price),
-        "invested_amount": float(cost_basis),
+        "invested_amount": float(cost_basis.quantize(Decimal("0.01"))),
         "current_amount": float(current_value) if current_value is not None else None,
         "dividends_total": float(dividends_total),
         "total_return_pct": total_return_pct,
@@ -677,28 +728,34 @@ def list_asset_transactions():
                 .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
                 .all()
             )
-            _, merges_by_target_asset_id, _ = _resolve_market_events_for_assets(all_account_assets)
+            splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_assets(
+                all_account_assets
+            )
             db.session.commit()
             for event, source_asset in merges_by_target_asset_id.get(target_asset.id, []):
-                ratio = event.ratio
-                for tx in source_asset.asset_transactions:
-                    inherited_rows.append(
-                        {
-                            "id": None,
-                            "asset_id": str(target_asset.id),
-                            "transaction_id": None,
-                            "type": tx.type,
-                            "date": tx.date.isoformat(),
-                            "quantity": float(tx.quantity * ratio),
-                            "unit_price": float(tx.unit_price / ratio),
-                            "total_amount": float(tx.total_amount),
-                            "fee_amount": float(tx.fee_amount),
-                            "note_id": tx.note_id,
-                            "fixed_income_rate_pct": None,
-                            "asset": target_asset.to_dict(),
-                            "inherited_from": source_asset.code or source_asset.name,
-                        }
-                    )
+                source_effective = _effective_transactions(
+                    source_asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+                )
+                merged_tx = _merge_into_single_lot(source_effective, event.ratio, event.date)
+                if merged_tx is None:
+                    continue
+                inherited_rows.append(
+                    {
+                        "id": None,
+                        "asset_id": str(target_asset.id),
+                        "transaction_id": None,
+                        "type": merged_tx.type,
+                        "date": merged_tx.date.isoformat(),
+                        "quantity": float(merged_tx.quantity),
+                        "unit_price": float(merged_tx.unit_price),
+                        "total_amount": float(merged_tx.quantity * merged_tx.unit_price),
+                        "fee_amount": 0.0,
+                        "note_id": None,
+                        "fixed_income_rate_pct": None,
+                        "asset": target_asset.to_dict(),
+                        "inherited_from": source_asset.code or source_asset.name,
+                    }
+                )
 
     query = AssetTransaction.query.filter(AssetTransaction.asset_id.in_(asset_ids))
 
