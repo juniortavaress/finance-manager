@@ -4,8 +4,10 @@ import jwt
 from flask import g, request
 
 from app.errors import ApiError
+from app.extensions import db
 from app.models import User
 from app.services.auth_service import decode_token
+from app.services.finance_service import sync_due_installments
 
 
 def login_required(fn):
@@ -28,6 +30,8 @@ def login_required(fn):
             raise ApiError("Usuário não encontrado", 401)
 
         g.current_user = user
+        sync_due_installments(user.id)
+        db.session.commit()
         return fn(*args, **kwargs)
 
     return wrapper

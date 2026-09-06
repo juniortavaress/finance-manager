@@ -8,6 +8,7 @@ from app.errors import ApiError
 from app.extensions import db
 from app.models import CreditCardInvoice, InstallmentPlan, Transaction
 from app.services.finance_service import (
+    mark_installment_plan_completed_if_done,
     recalc_credit_card_used_amount,
     recalc_installment_plan_total,
     recalc_invoice_total,
@@ -38,12 +39,6 @@ def get_installment(plan_id):
 
 def _get_owned_plan(plan_id):
     return InstallmentPlan.query.filter_by(id=plan_id, user_id=g.current_user.id).first()
-
-
-def _mark_completed_if_done(plan):
-    remaining = Transaction.query.filter_by(installment_plan_id=plan.id, status="scheduled").count()
-    if remaining == 0:
-        plan.status = "completed"
 
 
 @installments_bp.post("/<uuid:plan_id>/advance")
@@ -102,7 +97,7 @@ def advance_installments(plan_id):
     for invoice in touched_invoices.values():
         recalc_invoice_total(invoice)
 
-    _mark_completed_if_done(plan)
+    mark_installment_plan_completed_if_done(plan)
     recalc_installment_plan_total(plan)
     db.session.flush()
     recalc_credit_card_used_amount(plan.credit_card)
@@ -136,7 +131,7 @@ def cancel_installments_from(plan_id, installment_number):
         if invoice:
             recalc_invoice_total(invoice)
 
-    _mark_completed_if_done(plan)
+    mark_installment_plan_completed_if_done(plan)
     recalc_installment_plan_total(plan)
     db.session.flush()
     recalc_credit_card_used_amount(plan.credit_card)

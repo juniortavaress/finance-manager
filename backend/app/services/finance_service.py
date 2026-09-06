@@ -26,6 +26,12 @@ def day_after_closing(credit_card, reference_month: dt.date) -> dt.date:
     return closing_date + dt.timedelta(days=1)
 
 
+def mark_installment_plan_completed_if_done(plan: InstallmentPlan):
+    remaining = Transaction.query.filter_by(installment_plan_id=plan.id, status="scheduled").count()
+    if remaining == 0:
+        plan.status = "completed"
+
+
 def recalc_installment_plan_total(plan: InstallmentPlan):
     total = (
         db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
@@ -152,6 +158,46 @@ def recalc_credit_card_used_amount(credit_card):
         future_installments_total += plan.installment_amount * remaining
 
     credit_card.used_amount = open_invoices_total + future_installments_total
+
+
+def sync_due_installments(user_id):
+    """Confirma parcelas agendadas cuja data ja chegou e recalcula as faturas/limite afetados.
+
+    Parcelas nascem "scheduled" (exceto a 1a) porque sao criadas todas de uma vez no momento
+    da compra. Sem isso elas ficariam "scheduled" para sempre, mesmo depois de vencidas.
+    """
+    due = Transaction.query.filter(
+        Transaction.user_id == user_id,
+        Transaction.status == "scheduled",
+        Transaction.installment_plan_id.isnot(None),
+        Transaction.date <= dt.date.today(),
+    ).all()
+    if not due:
+        return
+
+    touched_invoices = {}
+    touched_plans = {}
+    touched_cards = {}
+    for tx in due:
+        tx.status = "confirmed"
+        if tx.credit_card_invoice_id:
+            touched_invoices[tx.credit_card_invoice_id] = tx.credit_card_invoice
+        if tx.installment_plan_id:
+            touched_plans[tx.installment_plan_id] = tx.installment_plan
+
+    db.session.flush()
+    for invoice in touched_invoices.values():
+        if invoice:
+            recalc_invoice_total(invoice)
+    for plan in touched_plans.values():
+        if plan:
+            mark_installment_plan_completed_if_done(plan)
+            touched_cards[plan.credit_card_id] = plan.credit_card
+
+    db.session.flush()
+    for card in touched_cards.values():
+        if card:
+            recalc_credit_card_used_amount(card)
 
 
 def apply_transaction_side_effects(transaction: Transaction, account: Account):
