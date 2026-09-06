@@ -736,9 +736,17 @@ def asset_evolution(asset_id):
         months.append(cursor)
         cursor = add_months(cursor, 1)
 
+    accounts_by_ia_id = {asset.investment_account_id: asset.investment_account.account}
+    currency_by_ia_id = {k: v.currency for k, v in accounts_by_ia_id.items()}
+    # list_assets aplica o preco cacheado antes de montar a resposta - sem
+    # isso aqui, current_unit_price fica None em memoria para ativos sem
+    # preco salvo persistentemente, e o fallback em _compute_asset_evolution
+    # cai no cost_basis (investido), fazendo "atual" bater com "investido".
+    _apply_cached_crypto_prices([asset], currency_by_ia_id)
+    _apply_cached_stock_prices([asset], currency_by_ia_id)
+
     position = _asset_position(asset)
     current_amount_by_asset_id = {str(asset.id): position["current_amount"]}
-    accounts_by_ia_id = {asset.investment_account_id: asset.investment_account.account}
 
     # fx_rates=None e bank_filter=None mantem o valor na moeda nativa do
     # ativo (sem conversao BRL) - consistente com a mesma convencao usada em
