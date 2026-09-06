@@ -5,6 +5,7 @@ from app.models.transaction import Transaction, RecurringTransaction
 from app.models.credit_card_invoice import CreditCardInvoice
 from app.models.installment import InstallmentPlan
 from app.models.investment import Asset, AssetTransaction, DividendSchedule, Dividend
+from app.models.market_corporate_event import MarketCorporateEvent
 from app.models.budget import Budget
 from app.models.friends import Friendship, Group, GroupMember, SharedExpense, ExpenseParticipant, Settlement
 from app.models.crypto_price import CryptoPrice
@@ -29,6 +30,7 @@ __all__ = [
     "AssetTransaction",
     "DividendSchedule",
     "Dividend",
+    "MarketCorporateEvent",
     "Budget",
     "Friendship",
     "Group",

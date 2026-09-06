@@ -35,3 +35,14 @@ def login_required(fn):
         return fn(*args, **kwargs)
 
     return wrapper
+
+
+def admin_required(fn):
+    @wraps(fn)
+    @login_required
+    def wrapper(*args, **kwargs):
+        if not g.current_user.is_admin:
+            raise ApiError("Acesso restrito a administradores", 403)
+        return fn(*args, **kwargs)
+
+    return wrapper

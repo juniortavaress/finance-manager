@@ -13,6 +13,7 @@ class User(BaseModel):
     avatar_url = db.Column(db.Text, nullable=True)
     currency_default = db.Column(db.Text, nullable=False, default="BRL")
     deleted_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
 
     def to_dict(self):
         return {
@@ -21,6 +22,7 @@ class User(BaseModel):
             "email": self.email,
             "avatar_url": self.avatar_url,
             "currency_default": self.currency_default,
+            "is_admin": self.is_admin,
         }
 
 

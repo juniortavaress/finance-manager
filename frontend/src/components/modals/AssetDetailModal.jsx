@@ -131,12 +131,27 @@ export default function AssetDetailModal({ open, onClose, asset }) {
             <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Nenhuma transação registrada.</p>
           )}
           {!txLoading &&
-            transactions.map((tx) => (
-              <div className="tx-row" key={tx.id}>
+            transactions.map((tx, i) => (
+              <div className="tx-row" key={tx.id || `inherited-${i}`}>
                 <div className="tx-left">
                   <div>
                     <div className="tx-desc">
                       {tx.type === 'buy' ? 'Compra' : 'Venda'} · {tx.quantity} un.
+                      {tx.inherited_from && (
+                        <span
+                          style={{
+                            marginLeft: 8,
+                            fontSize: 11,
+                            fontWeight: 500,
+                            color: 'var(--ink-faint)',
+                            border: '1px solid var(--border)',
+                            borderRadius: 6,
+                            padding: '1px 6px',
+                          }}
+                        >
+                          via fusão com {tx.inherited_from}
+                        </span>
+                      )}
                     </div>
                     <div className="tx-meta">
                       {fmtDateFull(tx.date)} · preço unit. {fmt(tx.unit_price, currency)}

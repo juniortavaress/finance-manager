@@ -1,15 +1,42 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { IconPencil } from '../components/icons';
+import { useFetch } from '../hooks/useFetch';
+import { useToast } from '../context/ToastContext';
+import { marketDataApi } from '../api/resources';
+import { IconPencil, IconTrash } from '../components/icons';
 import EditProfileModal from '../components/modals/EditProfileModal';
+import MarketCorporateEventModal from '../components/modals/MarketCorporateEventModal';
+
+const EVENT_TYPE_LABELS = {
+  split: 'Desdobramento/Grupamento',
+  merger: 'Incorporação',
+};
 
 export default function Settings() {
   const { user } = useAuth();
   const { banks, accounts } = useData();
+  const { showSuccess, showError } = useToast();
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [eventModalOpen, setEventModalOpen] = useState(false);
 
   const cardAccounts = accounts.filter((a) => a.type === 'credit_card');
+
+  const {
+    data: eventsData,
+    reload: reloadEvents,
+  } = useFetch((signal) => (user?.is_admin ? marketDataApi.listCorporateEvents(signal) : Promise.resolve(null)), [user?.is_admin]);
+  const events = eventsData?.market_corporate_events || [];
+
+  async function handleRemoveEvent(id) {
+    try {
+      await marketDataApi.removeCorporateEvent(id);
+      showSuccess('Evento removido com sucesso.');
+      reloadEvents();
+    } catch (err) {
+      showError(err.message || 'Não foi possível remover o evento.');
+    }
+  }
 
   return (
     <div className="screen active">
@@ -72,7 +99,72 @@ export default function Settings() {
         </div>
       </div>
 
+      {user?.is_admin && (
+        <div className="grid grid-2" style={{ marginTop: 20 }}>
+          <div className="card">
+            <h3>
+              Eventos societários (mercado)
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ marginLeft: 12, padding: '4px 12px', fontSize: 12 }}
+                onClick={() => setEventModalOpen(true)}
+              >
+                Novo evento
+              </button>
+            </h3>
+          
+            {events.length === 0 && (
+              <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Nenhum evento registrado ainda.</p>
+            )}
+            {events.map((ev) => (
+              <div className="bank-row" key={ev.id}>
+                <div className="bank-id">
+                  <div className="bank-name">
+                    {EVENT_TYPE_LABELS[ev.type]} — {ev.target_code}
+                    {ev.source_code ? ` (origem: ${ev.source_code})` : ''}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>
+                    {ev.date} · proporção {ev.ratio}
+                    {ev.note ? ` · ${ev.note}` : ''}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  title="Remover"
+                  onClick={() => handleRemoveEvent(ev.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 26,
+                    height: 26,
+                    borderRadius: 7,
+                    border: 'none',
+                    background: 'transparent',
+                    color: 'var(--ink-faint)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <IconTrash style={{ width: 13, height: 13 }} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <EditProfileModal open={editModalOpen} onClose={() => setEditModalOpen(false)} />
+      {user?.is_admin && (
+        <MarketCorporateEventModal
+          open={eventModalOpen}
+          onClose={() => setEventModalOpen(false)}
+          onSaved={() => {
+            setEventModalOpen(false);
+            reloadEvents();
+          }}
+        />
+      )}
     </div>
   );
 }

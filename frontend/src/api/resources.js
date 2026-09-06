@@ -76,6 +76,12 @@ export const investmentsApi = {
   refreshMarketData: () => api.post('/investments/refresh-market-data', {}),
 };
 
+export const marketDataApi = {
+  listCorporateEvents: (signal) => api.get('/market-corporate-events', {}, signal),
+  createCorporateEvent: (data) => api.post('/market-corporate-events', data),
+  removeCorporateEvent: (id) => api.delete(`/market-corporate-events/${id}`),
+};
+
 export const dividendsApi = {
   list: (limit) => api.get('/dividends/', { limit }),
   create: (data) => api.post('/dividends/', data),

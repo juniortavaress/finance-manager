@@ -1,4 +1,5 @@
 import datetime as dt
+from collections import namedtuple
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, g, request
@@ -7,7 +8,17 @@ from sqlalchemy.orm import selectinload
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import Account, Asset, AssetTransaction, Bank, Category, CryptoPrice, InvestmentAccount, Transaction
+from app.models import (
+    Account,
+    Asset,
+    AssetTransaction,
+    Bank,
+    Category,
+    CryptoPrice,
+    InvestmentAccount,
+    MarketCorporateEvent,
+    Transaction,
+)
 from app.models.investment import ASSET_TYPES, FIXED_INCOME_TYPES
 from app.services.finance_service import add_months, recalc_account_balance
 from app.services.crypto_service import (
@@ -62,6 +73,147 @@ def _owned_asset(asset_id):
         .filter(Asset.id == asset_id, Account.user_id == g.current_user.id)
         .first()
     )
+
+
+CORPORATE_EVENT_ELIGIBLE_TYPES = ("acoes", "fii")
+
+EffectiveTx = namedtuple(
+    "EffectiveTx", ["type", "date", "quantity", "unit_price", "fee_amount", "fixed_income_rate_pct", "source_tx_id"]
+)
+
+
+def _resolve_market_events_for_account(investment_account_id):
+    """Atalho de _resolve_market_events_for_assets para quando so' se precisa
+    resolver eventos no escopo de UMA conta de investimento (ex: validar
+    saldo/posicao ao comprar/vender um ativo especifico) - evita repetir a
+    mesma query/selectinload em cada call site."""
+    account_assets = (
+        Asset.query.filter(Asset.investment_account_id == investment_account_id)
+        .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
+        .all()
+    )
+    result = _resolve_market_events_for_assets(account_assets)
+    db.session.commit()
+    return result
+
+
+def _resolve_market_events_for_assets(assets):
+    """Resolve os market_corporate_events (globais, por codigo) contra os
+    Assets concretos do usuario atual, agrupando por conta de investimento -
+    um mesmo codigo em duas corretoras diferentes e' resolvido de forma
+    independente em cada uma. Retorna:
+    - splits_by_asset_id: dict[asset_id -> list[MarketCorporateEvent]] (tipo split)
+    - merges_by_target_asset_id: dict[asset_id -> list[(event, source_asset)]]
+    - merged_away_asset_ids: set[asset_id] (sempre posicao zero - foram incorporados)
+    Pode criar (e persistir via flush, sem commit) o Asset de destino de uma
+    fusao quando o usuario ainda nao o possui na conta da origem."""
+    splits_by_asset_id = {}
+    merges_by_target_asset_id = {}
+    merged_away_asset_ids = set()
+
+    eligible = [a for a in assets if a.type in CORPORATE_EVENT_ELIGIBLE_TYPES]
+    if not eligible:
+        return splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+
+    codes = {a.code.strip().upper() for a in eligible if a.code}
+    if not codes:
+        return splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+
+    events = (
+        MarketCorporateEvent.query.filter(
+            db.or_(
+                db.func.upper(MarketCorporateEvent.target_code).in_(codes),
+                db.func.upper(MarketCorporateEvent.source_code).in_(codes),
+            )
+        )
+        .order_by(MarketCorporateEvent.date)
+        .all()
+    )
+    if not events:
+        return splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+
+    by_account = {}
+    for a in eligible:
+        if a.code:
+            by_account.setdefault(a.investment_account_id, {}).setdefault(a.code.strip().upper(), []).append(a)
+
+    for event in events:
+        if event.type == "split":
+            for account_assets in by_account.values():
+                for asset in account_assets.get(event.target_code.strip().upper(), []):
+                    splits_by_asset_id.setdefault(asset.id, []).append(event)
+        else:
+            for investment_account_id, account_assets in by_account.items():
+                for source_asset in account_assets.get(event.source_code.strip().upper(), []):
+                    target_asset = _get_or_create_target_asset(investment_account_id, event.target_code)
+                    merges_by_target_asset_id.setdefault(target_asset.id, []).append((event, source_asset))
+                    merged_away_asset_ids.add(source_asset.id)
+
+    return splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+
+
+def _get_or_create_target_asset(investment_account_id, code):
+    code = code.strip().upper()
+    existing = Asset.query.filter(
+        Asset.investment_account_id == investment_account_id,
+        db.func.upper(Asset.code) == code,
+    ).first()
+    if existing:
+        return existing
+    asset = Asset(investment_account_id=investment_account_id, type="acoes", code=code, name=code)
+    db.session.add(asset)
+    db.session.flush()
+    return asset
+
+
+def _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids, _visited=None):
+    """Historico 'efetivo' de um ativo, apos aplicar desdobramentos/
+    grupamentos proprios e incorporar (recursivamente) o historico de
+    ativos de origem de fusoes cujo destino e' este ativo. NAO muta
+    AssetTransaction - so' gera uma lista sintetica, ordenada por data, usada
+    no lugar de asset.asset_transactions por qualquer calculo de
+    posicao/evolucao."""
+    if _visited is None:
+        _visited = set()
+    if asset.id in _visited:
+        return []
+    _visited = _visited | {asset.id}
+
+    raw = [
+        EffectiveTx(tx.type, tx.date, tx.quantity, tx.unit_price, tx.fee_amount, tx.fixed_income_rate_pct, tx.id)
+        for tx in asset.asset_transactions
+    ]
+
+    for event, source_asset in merges_by_target_asset_id.get(asset.id, []):
+        source_effective = _effective_transactions(
+            source_asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids, _visited
+        )
+        ratio = event.ratio
+        raw.extend(
+            EffectiveTx(
+                tx.type, tx.date, tx.quantity * ratio, tx.unit_price / ratio, tx.fee_amount,
+                tx.fixed_income_rate_pct, tx.source_tx_id,
+            )
+            for tx in source_effective
+        )
+
+    raw.sort(key=lambda tx: tx.date)
+
+    own_splits = sorted(splits_by_asset_id.get(asset.id, []), key=lambda e: e.date)
+    for event in own_splits:
+        raw = [
+            (
+                EffectiveTx(
+                    tx.type, tx.date, tx.quantity * event.ratio, tx.unit_price / event.ratio,
+                    tx.fee_amount, tx.fixed_income_rate_pct, tx.source_tx_id,
+                )
+                if tx.date < event.date
+                else tx
+            )
+            for tx in raw
+        ]
+
+    return raw
 
 
 def _lot_rate_pct(asset: Asset, tx):
@@ -170,16 +322,39 @@ def _fixed_income_month_value(asset: Asset, as_of: dt.date, daily_rates):
     return None
 
 
-def _asset_position(asset: Asset):
+def _asset_position(
+    asset: Asset, splits_by_asset_id=None, merges_by_target_asset_id=None, merged_away_asset_ids=None
+):
     """Quantidade, custo total e preco medio a partir do historico de compras/vendas.
     Vendas reduzem a quantidade mas nao alteram o preco medio das compras restantes
     (metodo de custo medio, sem FIFO/LIFO). Rentabilidade e "total return":
-    considera valorizacao do ativo + dividendos recebidos sobre o valor investido."""
+    considera valorizacao do ativo + dividendos recebidos sobre o valor investido.
+
+    splits_by_asset_id/merges_by_target_asset_id/merged_away_asset_ids (ver
+    _resolve_market_events_for_assets) ajustam o historico por eventos
+    societarios de mercado (desdobramento/incorporacao) antes do calculo -
+    todos default vazio, comportamento identico ao de antes da feature para
+    quem nao chama com esses mapas."""
+    splits_by_asset_id = splits_by_asset_id or {}
+    merges_by_target_asset_id = merges_by_target_asset_id or {}
+    merged_away_asset_ids = merged_away_asset_ids or set()
+
+    if asset.id in merged_away_asset_ids:
+        return {
+            "quantity": 0.0,
+            "avg_unit_price": 0.0,
+            "invested_amount": 0.0,
+            "current_amount": 0.0,
+            "dividends_total": float(sum((d.amount for d in asset.dividends), Decimal("0"))),
+            "total_return_pct": None,
+        }
+
     quantity = Decimal("0")
     cost_basis = Decimal("0")
     avg_price = Decimal("0")
 
-    for tx in asset.asset_transactions:
+    txs = _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
+    for tx in txs:
         if tx.type == "buy":
             cost_basis += tx.quantity * tx.unit_price + tx.fee_amount
             quantity += tx.quantity
@@ -213,9 +388,11 @@ def _asset_position(asset: Asset):
     }
 
 
-def _asset_to_dict(asset: Asset):
+def _asset_to_dict(
+    asset: Asset, splits_by_asset_id=None, merges_by_target_asset_id=None, merged_away_asset_ids=None
+):
     data = asset.to_dict()
-    data["position"] = _asset_position(asset)
+    data["position"] = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
     data["archived"] = data["position"]["quantity"] <= 0
     currency = asset.investment_account.account.currency
     data["currency"] = currency
@@ -392,12 +569,31 @@ def list_assets():
         if inv_account_ids
         else []
     )
+    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_assets(
+        all_assets
+    )
+    # _resolve_market_events_for_assets pode ter criado (via flush) um Asset
+    # de destino que ainda nao estava em all_assets - garante que ele entra
+    # na resposta tambem.
+    known_ids = {a.id for a in all_assets}
+    missing_target_ids = [tid for tid in merges_by_target_asset_id if tid not in known_ids]
+    if missing_target_ids:
+        new_targets = (
+            Asset.query.filter(Asset.id.in_(missing_target_ids))
+            .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
+            .all()
+        )
+        all_assets.extend(new_targets)
+        db.session.commit()
+    else:
+        db.session.flush()
+
     _apply_cached_crypto_prices(all_assets, currency_by_ia_id)
     _apply_cached_stock_prices(all_assets, currency_by_ia_id)
 
     active, archived = [], []
     for asset in all_assets:
-        data = _asset_to_dict(asset)
+        data = _asset_to_dict(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
         (archived if data["position"]["quantity"] <= 0 else active).append(data)
     return {"assets": active, "archived_assets": archived}
 
@@ -454,6 +650,38 @@ def list_asset_transactions():
     if not asset_ids:
         return {"asset_transactions": [], "total": 0, "page": 1, "page_size": 15}
 
+    inherited_rows = []
+    if asset_id:
+        target_asset = assets_by_id.get(next((a for a in asset_ids), None))
+        if target_asset is not None:
+            all_account_assets = (
+                Asset.query.filter(Asset.investment_account_id == target_asset.investment_account_id)
+                .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
+                .all()
+            )
+            _, merges_by_target_asset_id, _ = _resolve_market_events_for_assets(all_account_assets)
+            db.session.commit()
+            for event, source_asset in merges_by_target_asset_id.get(target_asset.id, []):
+                ratio = event.ratio
+                for tx in source_asset.asset_transactions:
+                    inherited_rows.append(
+                        {
+                            "id": None,
+                            "asset_id": str(target_asset.id),
+                            "transaction_id": None,
+                            "type": tx.type,
+                            "date": tx.date.isoformat(),
+                            "quantity": float(tx.quantity * ratio),
+                            "unit_price": float(tx.unit_price / ratio),
+                            "total_amount": float(tx.total_amount),
+                            "fee_amount": float(tx.fee_amount),
+                            "note_id": tx.note_id,
+                            "fixed_income_rate_pct": None,
+                            "asset": target_asset.to_dict(),
+                            "inherited_from": source_asset.code or source_asset.name,
+                        }
+                    )
+
     query = AssetTransaction.query.filter(AssetTransaction.asset_id.in_(asset_ids))
 
     tx_type = request.args.get("type")
@@ -464,12 +692,21 @@ def list_asset_transactions():
     date_to = request.args.get("date_to")
     if date_from:
         query = query.filter(AssetTransaction.date >= dt.date.fromisoformat(date_from))
+        inherited_rows = [r for r in inherited_rows if r["date"] >= date_from]
     if date_to:
         query = query.filter(AssetTransaction.date <= dt.date.fromisoformat(date_to))
+        inherited_rows = [r for r in inherited_rows if r["date"] <= date_to]
+    if tx_type in ("buy", "sell"):
+        inherited_rows = [r for r in inherited_rows if r["type"] == tx_type]
 
     query = query.order_by(
         AssetTransaction.date.desc(), AssetTransaction.created_at.desc(), AssetTransaction.id.desc()
     )
+
+    def _merge_sorted(real_rows):
+        combined = real_rows + inherited_rows
+        combined.sort(key=lambda r: r["date"], reverse=True)
+        return combined
 
     legacy_limit = request.args.get("limit")
     if legacy_limit and "page" not in request.args:
@@ -478,19 +715,27 @@ def list_asset_transactions():
         for tx in query.all():
             data = tx.to_dict()
             data["asset"] = assets_by_id[tx.asset_id].to_dict()
+            data["inherited_from"] = None
             result.append(data)
+        result = _merge_sorted(result)
         return {"asset_transactions": result, "total": len(result), "page": 1, "page_size": len(result) or 15}
 
     page = int(request.args.get("page", 1))
     page_size = min(int(request.args.get("page_size", 15)), 100)
-    total = query.count()
+    total = query.count() + len(inherited_rows)
     items = query.offset((page - 1) * page_size).limit(page_size).all()
 
     result = []
     for tx in items:
         data = tx.to_dict()
         data["asset"] = assets_by_id[tx.asset_id].to_dict()
+        data["inherited_from"] = None
         result.append(data)
+    # inherited_rows so' e' populado quando asset_id e' um unico ativo (merge
+    # target) - volume tipicamente pequeno, mesclado direto na pagina atual
+    # em vez de paginar separadamente.
+    if page == 1:
+        result = _merge_sorted(result)
     return {"asset_transactions": result, "total": total, "page": page, "page_size": page_size}
 
 
@@ -598,7 +843,17 @@ def _price_on_or_before(asset, currency, date):
 
 
 def _compute_asset_evolution(
-    assets, months, today, current_amount_by_asset_id, fx_rates, bank_filter, accounts_by_ia_id, exact_first_day=False
+    assets,
+    months,
+    today,
+    current_amount_by_asset_id,
+    fx_rates,
+    bank_filter,
+    accounts_by_ia_id,
+    exact_first_day=False,
+    splits_by_asset_id=None,
+    merges_by_target_asset_id=None,
+    merged_away_asset_ids=None,
 ):
     """Serie mensal {year, month, invested, current} para o conjunto de
     `assets` informado (pode ser um unico ativo ou o portfolio inteiro).
@@ -611,7 +866,18 @@ def _compute_asset_evolution(
     individual, nunca pelo portfolio), o primeiro ponto da serie usa o preco
     cacheado no dia exato da primeira compra daquele ativo em vez do
     fechamento de fim de mes - evita "atual" aparecer abaixo de "investido"
-    logo no primeiro ponto so' por causa da variacao do resto do mes."""
+    logo no primeiro ponto so' por causa da variacao do resto do mes.
+
+    splits_by_asset_id/merges_by_target_asset_id/merged_away_asset_ids (ver
+    _resolve_market_events_for_assets): ativos em merged_away_asset_ids sao
+    pulados por completo (contribuem 0 em todos os meses) para nao contar o
+    historico duas vezes quando `assets` inclui tanto a origem quanto o
+    destino de uma fusao (ex: investments_summary) - o historico da origem
+    ja esta incorporado ao destino via _effective_transactions."""
+    splits_by_asset_id = splits_by_asset_id or {}
+    merges_by_target_asset_id = merges_by_target_asset_id or {}
+    merged_away_asset_ids = merged_away_asset_ids or set()
+
     last = _month_start(today)
     earliest = months[0] if months else today
     first_month = months[0] if months else None
@@ -635,13 +901,19 @@ def _compute_asset_evolution(
             daily_rates_by_asset_id[asset.id] = get_daily_rates(asset.fixed_income_indexer, earliest_purchase, today)
 
     # Estado incremental por asset (quantidade/custo/preco medio acumulados
-    # ate o cursor atual). Como asset_transactions ja vem ordenado por data,
-    # cada asset avanca pelas suas transacoes uma unica vez ao longo dos
-    # meses, em vez de reprocessar o historico inteiro em cada iteracao
-    # (O(ativos x transacoes) no total, em vez de O(meses x ativos x transacoes)).
+    # ate o cursor atual). Como effective_txs ja vem ordenado por data, cada
+    # asset avanca pelas suas transacoes uma unica vez ao longo dos meses, em
+    # vez de reprocessar o historico inteiro em cada iteracao (O(ativos x
+    # transacoes) no total, em vez de O(meses x ativos x transacoes)).
+    effective_txs_by_asset_id = {
+        asset.id: _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
+        for asset in assets
+        if asset.id not in merged_away_asset_ids
+    }
     asset_state = {
         asset.id: {"quantity": Decimal("0"), "cost_basis": Decimal("0"), "avg_price": Decimal("0"), "tx_idx": 0}
         for asset in assets
+        if asset.id not in merged_away_asset_ids
     }
 
     evolution = []
@@ -651,8 +923,10 @@ def _compute_asset_evolution(
         invested_total = Decimal("0")
         current_total = Decimal("0")
         for asset in assets:
+            if asset.id in merged_away_asset_ids:
+                continue
             state = asset_state[asset.id]
-            txs = asset.asset_transactions
+            txs = effective_txs_by_asset_id[asset.id]
             idx = state["tx_idx"]
             quantity = state["quantity"]
             cost_basis = state["cost_basis"]
@@ -724,11 +998,31 @@ def asset_evolution(asset_id):
     if asset is None:
         raise ApiError("Ativo não encontrado", 404)
 
-    if not asset.asset_transactions:
+    # Resolve eventos de mercado usando TODOS os ativos do usuario (nao so'
+    # este), ja que o historico efetivo deste ativo pode depender de um
+    # ativo de origem de fusao que e' um Asset diferente.
+    inv_accounts = _owned_investment_accounts()
+    inv_account_ids = [ia.id for ia in inv_accounts]
+    all_assets = (
+        Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids))
+        .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
+        .all()
+        if inv_account_ids
+        else [asset]
+    )
+    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_assets(
+        all_assets
+    )
+    db.session.commit()
+
+    effective_txs = _effective_transactions(
+        asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+    )
+    if not effective_txs:
         return {"evolution": []}
 
     today = dt.date.today()
-    earliest_date = min(tx.date for tx in asset.asset_transactions)
+    earliest_date = min(tx.date for tx in effective_txs)
     cursor = _month_start(earliest_date)
     last = _month_start(today)
     months = []
@@ -745,7 +1039,7 @@ def asset_evolution(asset_id):
     _apply_cached_crypto_prices([asset], currency_by_ia_id)
     _apply_cached_stock_prices([asset], currency_by_ia_id)
 
-    position = _asset_position(asset)
+    position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
     current_amount_by_asset_id = {str(asset.id): position["current_amount"]}
 
     # fx_rates=None e bank_filter=None mantem o valor na moeda nativa do
@@ -760,6 +1054,9 @@ def asset_evolution(asset_id):
         bank_filter=None,
         accounts_by_ia_id=accounts_by_ia_id,
         exact_first_day=True,
+        splits_by_asset_id=splits_by_asset_id,
+        merges_by_target_asset_id=merges_by_target_asset_id,
+        merged_away_asset_ids=merged_away_asset_ids,
     )
     return {"evolution": evolution}
 
@@ -812,6 +1109,22 @@ def investments_summary():
         .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
         .all()
     )
+    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_assets(
+        all_assets
+    )
+    known_ids = {a.id for a in all_assets}
+    missing_target_ids = [tid for tid in merges_by_target_asset_id if tid not in known_ids]
+    if missing_target_ids:
+        new_targets = (
+            Asset.query.filter(Asset.id.in_(missing_target_ids))
+            .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
+            .all()
+        )
+        all_assets.extend(new_targets)
+        db.session.commit()
+    else:
+        db.session.flush()
+
     currency_by_ia_id_all = {ia.id: accounts_by_ia_id[ia.id].currency for ia in inv_accounts}
     _apply_cached_crypto_prices(all_assets, currency_by_ia_id_all)
     _apply_cached_stock_prices(all_assets, currency_by_ia_id_all)
@@ -823,7 +1136,7 @@ def investments_summary():
             continue
         bank = banks_by_id.get(account.bank_id)
         data = asset.to_dict()
-        position = _asset_position(asset)
+        position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
         data["position"] = position
         data["bank_id"] = str(account.bank_id)
         data["bank_name"] = bank.name if bank else None
@@ -839,7 +1152,10 @@ def investments_summary():
             converted_dividends = _to_brl(position["dividends_total"], account.currency)
             position["dividends_total"] = converted_dividends if converted_dividends is not None else position["dividends_total"]
         assets_result.append(data)
-        for tx in asset.asset_transactions:
+        effective_txs_for_dates = _effective_transactions(
+            asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+        )
+        for tx in effective_txs_for_dates:
             if earliest_date is None or tx.date < earliest_date:
                 earliest_date = tx.date
 
@@ -971,7 +1287,16 @@ def investments_summary():
                 net_flow_events.append((tx.date, signed_amount))
 
         evolution = _compute_asset_evolution(
-            relevant_assets, months, today, current_amount_by_asset_id, fx_rates, bank_filter, accounts_by_ia_id
+            relevant_assets,
+            months,
+            today,
+            current_amount_by_asset_id,
+            fx_rates,
+            bank_filter,
+            accounts_by_ia_id,
+            splits_by_asset_id=splits_by_asset_id,
+            merges_by_target_asset_id=merges_by_target_asset_id,
+            merged_away_asset_ids=merged_away_asset_ids,
         )
         for point, month_start in zip(evolution, months):
             month_end = add_months(month_start, 1)
@@ -1187,6 +1512,12 @@ def _create_asset_transaction(asset, kind, data):
     account = asset.investment_account.account
     category = _get_or_create_transfer_category(g.current_user.id)
 
+    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_account(
+        asset.investment_account_id
+    )
+    if asset.id in merged_away_asset_ids:
+        raise ApiError("Este ativo foi incorporado por outro e não aceita novas operações", 400)
+
     if kind == "buy":
         total_amount = (base_amount + fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         if total_amount > account.balance:
@@ -1197,7 +1528,7 @@ def _create_asset_transaction(asset, kind, data):
         if fee_amount > base_amount:
             raise ApiError("Taxa não pode ser maior que o valor da venda", 400)
         total_amount = (base_amount - fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        position = _asset_position(asset)
+        position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
         if quantity > Decimal(str(position["quantity"])):
             raise ApiError("Quantidade insuficiente do ativo para vender", 400)
         tx_type = "income"
@@ -1319,8 +1650,14 @@ def update_asset_transaction(asset_transaction_id):
         if fee_amount > base_amount:
             raise ApiError("Taxa não pode ser maior que o valor da venda", 400)
         total_amount = (base_amount - fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_account(
+            asset.investment_account_id
+        )
+        effective_txs = _effective_transactions(
+            asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+        )
         other_quantity = sum(
-            (t.quantity if t.type == "buy" else -t.quantity for t in asset.asset_transactions if t.id != asset_tx.id),
+            (t.quantity if t.type == "buy" else -t.quantity for t in effective_txs if t.source_tx_id != asset_tx.id),
             Decimal("0"),
         )
         if quantity > other_quantity:

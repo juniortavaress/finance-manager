@@ -10,7 +10,7 @@ from app.models import Account, Asset, Category, Dividend, DividendSchedule, Inv
 from app.models.investment import DIVIDEND_CALC_MODES, DIVIDEND_FREQUENCIES, DIVIDEND_KINDS
 from app.services.finance_service import add_months, recalc_account_balance, safe_day
 from app.services.quotes_service import convert_to_brl, get_brl_rates
-from app.routes.investments import _asset_position
+from app.routes.investments import _asset_position, _resolve_market_events_for_account
 
 dividends_bp = Blueprint("dividends", __name__)
 
@@ -93,10 +93,16 @@ def _materialize_schedule(schedule: DividendSchedule):
     category = _get_or_create_dividend_category(g.current_user.id)
     months_step = FREQUENCY_MONTHS[schedule.frequency]
 
+    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_account(
+        asset.investment_account_id
+    )
+
     created_any = False
     while schedule.next_due_date <= today:
         due_date = schedule.next_due_date
-        quantity = Decimal(str(_asset_position(asset)["quantity"]))
+        quantity = Decimal(
+            str(_asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)["quantity"])
+        )
         amount = _amount_for_schedule(schedule, quantity)
 
         if amount > 0:
@@ -359,7 +365,12 @@ def create_dividend():
     db.session.add(tx)
     db.session.flush()
 
-    quantity = Decimal(str(_asset_position(asset)["quantity"]))
+    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_account(
+        asset.investment_account_id
+    )
+    quantity = Decimal(
+        str(_asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)["quantity"])
+    )
     dividend = Dividend(
         asset_id=asset.id,
         schedule_id=None,
