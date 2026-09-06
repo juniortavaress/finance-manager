@@ -3,7 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from app.extensions import db
 from app.models.base import BaseModel
 
-ASSET_TYPES = ("renda_fixa", "acoes", "fii", "fundos", "cripto", "outro")
+ASSET_TYPES = ("renda_fixa", "acoes", "fii", "fundos", "etf", "cripto", "outro")
 FIXED_INCOME_TYPES = ("pos_fixado", "pre_fixado", "ipca")
 ASSET_TRANSACTION_TYPES = ("buy", "sell")
 DIVIDEND_KINDS = ("dividendo", "rendimento", "jcp", "cupom", "bonificacao", "outro")

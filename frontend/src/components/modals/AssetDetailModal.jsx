@@ -10,6 +10,7 @@ const TYPE_LABELS = {
   acoes: 'Ações',
   fii: 'FII',
   fundos: 'Fundos',
+  etf: 'ETF',
   cripto: 'Cripto',
   outro: 'Outro',
 };

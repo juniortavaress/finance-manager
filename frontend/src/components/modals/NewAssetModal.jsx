@@ -11,6 +11,7 @@ const TYPE_OPTIONS = [
   { value: 'acoes', label: 'Ações' },
   { value: 'fii', label: 'FII' },
   { value: 'fundos', label: 'Fundos' },
+  { value: 'etf', label: 'ETF' },
   { value: 'cripto', label: 'Cripto' },
   { value: 'outro', label: 'Outro' },
 ];

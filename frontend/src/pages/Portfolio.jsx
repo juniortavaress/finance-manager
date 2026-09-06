@@ -15,6 +15,7 @@ const TYPE_LABELS = {
   acoes: 'Ações',
   fii: 'FII',
   fundos: 'Fundos',
+  etf: 'ETF',
   cripto: 'Cripto',
   outro: 'Outro',
 };
@@ -23,6 +24,7 @@ const TYPE_COLORS = {
   acoes: '#C0912F',
   fii: '#3D7A8C',
   fundos: '#7A4FE0',
+  etf: '#2E7D5B',
   cripto: '#A6432C',
   outro: '#8B9A97',
 };
