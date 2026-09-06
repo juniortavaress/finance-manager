@@ -166,13 +166,32 @@ def _get_or_create_target_asset(investment_account_id, code):
     return asset
 
 
+UNIT_PRICE_PLACES = Decimal("0.000001")  # Numeric(14, 6), mesma precisao da coluna asset_transactions.unit_price
+
+
+def _round_quantity(value):
+    """Acoes/FIIs no Brasil so' existem em cotas inteiras (mercado
+    fracionario inclusive - o sufixo F e' so' uma classe de negociacao
+    diferente, a quantidade continua inteira). Um ratio de split/fusao
+    nao-exato (ex: 363/17 cotas = 21.35294118...) pode deixar o produto
+    ligeiramente fora de um inteiro (363.00000006) - arredonda pro inteiro
+    mais proximo em vez de manter casas decimais espurias."""
+    return value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
 def _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids, _visited=None):
     """Historico 'efetivo' de um ativo, apos aplicar desdobramentos/
     grupamentos proprios e incorporar (recursivamente) o historico de
     ativos de origem de fusoes cujo destino e' este ativo. NAO muta
     AssetTransaction - so' gera uma lista sintetica, ordenada por data, usada
     no lugar de asset.asset_transactions por qualquer calculo de
-    posicao/evolucao."""
+    posicao/evolucao.
+
+    Cada quantity/unit_price escalado por um ratio e' arredondado na mesma
+    precisao da coluna no banco (Numeric(18,8)/Numeric(14,6)) - sem isso, um
+    ratio nao-exato (ex: 363/17 cotas = 21.35294118...) propaga uma dizima
+    por todo o historico convertido, mesmo em campos sem relacao direta com
+    a fusao/split."""
     if _visited is None:
         _visited = set()
     if asset.id in _visited:
@@ -189,31 +208,30 @@ def _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id
             source_asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids, _visited
         )
         ratio = event.ratio
-        raw.extend(
-            EffectiveTx(
-                tx.type, tx.date, tx.quantity * ratio, tx.unit_price / ratio, tx.fee_amount,
-                tx.fixed_income_rate_pct, tx.source_tx_id,
-            )
-            for tx in source_effective
-        )
+        raw.extend(_rescale_tx(tx, ratio) for tx in source_effective)
 
     raw.sort(key=lambda tx: tx.date)
 
     own_splits = sorted(splits_by_asset_id.get(asset.id, []), key=lambda e: e.date)
     for event in own_splits:
-        raw = [
-            (
-                EffectiveTx(
-                    tx.type, tx.date, tx.quantity * event.ratio, tx.unit_price / event.ratio,
-                    tx.fee_amount, tx.fixed_income_rate_pct, tx.source_tx_id,
-                )
-                if tx.date < event.date
-                else tx
-            )
-            for tx in raw
-        ]
+        raw = [_rescale_tx(tx, event.ratio) if tx.date < event.date else tx for tx in raw]
 
     return raw
+
+
+def _rescale_tx(tx, ratio):
+    """Aplica um ratio de split/fusao a uma transacao, mantendo o capital
+    total (quantity * unit_price) exato: arredonda a quantidade pro inteiro
+    mais proximo (cotas de acoes/FII no Brasil sao sempre inteiras) e
+    recalcula unit_price a partir do total original, em vez de dividir
+    unit_price pelo ratio diretamente - evita tanto quantidades fracionarias
+    quanto dizimas propagadas por um ratio nao-exato."""
+    new_quantity = _round_quantity(tx.quantity * ratio)
+    original_total = tx.quantity * tx.unit_price
+    new_unit_price = (
+        (original_total / new_quantity).quantize(UNIT_PRICE_PLACES) if new_quantity > 0 else Decimal("0")
+    )
+    return EffectiveTx(tx.type, tx.date, new_quantity, new_unit_price, tx.fee_amount, tx.fixed_income_rate_pct, tx.source_tx_id)
 
 
 def _lot_rate_pct(asset: Asset, tx):
