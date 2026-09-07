@@ -1,20 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, fmtDateShort } from '../utils/format';
-import { IconPencil, IconTrash } from '../components/icons';
+import { IconSearch, IconPencil, IconTrash } from '../components/icons';
 import PickAssetModal from '../components/modals/PickAssetModal';
 import NewAssetModal from '../components/modals/NewAssetModal';
 import TradeAssetModal from '../components/modals/TradeAssetModal';
 import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal';
 import LoadMoreButton from '../components/LoadMoreButton';
+import Skeleton from '../components/Skeleton';
 
 const PAGE_SIZE = 15;
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function fmtDateShortYear(isoDate) {
   const d = new Date(`${isoDate}T00:00:00`);
@@ -66,6 +63,8 @@ function RowActionButton({ title, onClick, color, children }) {
 export default function AssetTrades() {
   const { banks, investmentAccounts, bankById, reloadAll } = useData();
   const [bankFilter, setBankFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [buyPage, setBuyPage] = useState(1);
   const [sellPage, setSellPage] = useState(1);
 
@@ -74,21 +73,43 @@ export default function AssetTrades() {
   const [purchasesAccumulated, setPurchasesAccumulated] = useState([]);
   const [salesAccumulated, setSalesAccumulated] = useState([]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    setBuyPage(1);
+    setSellPage(1);
+  }, [debouncedSearch, bankFilter]);
+
   const { data: buyData, reload: reloadBuys, loading: buyLoading } = useFetch(
     (signal) =>
       investmentsApi.listAssetTransactions(
-        { type: 'buy', page: buyPage, page_size: PAGE_SIZE, bank_id: bankFilter || undefined },
+        {
+          type: 'buy',
+          page: buyPage,
+          page_size: PAGE_SIZE,
+          bank_id: bankFilter || undefined,
+          search: debouncedSearch || undefined,
+        },
         signal
       ),
-    [buyPage, bankFilter]
+    [buyPage, bankFilter, debouncedSearch]
   );
   const { data: sellData, reload: reloadSells, loading: sellLoading } = useFetch(
     (signal) =>
       investmentsApi.listAssetTransactions(
-        { type: 'sell', page: sellPage, page_size: PAGE_SIZE, bank_id: bankFilter || undefined },
+        {
+          type: 'sell',
+          page: sellPage,
+          page_size: PAGE_SIZE,
+          bank_id: bankFilter || undefined,
+          search: debouncedSearch || undefined,
+        },
         signal
       ),
-    [sellPage, bankFilter]
+    [sellPage, bankFilter, debouncedSearch]
   );
 
   useEffect(() => {
@@ -100,16 +121,6 @@ export default function AssetTrades() {
     if (!sellData) return;
     setSalesAccumulated((prev) => mergeById(sellPage === 1 ? [] : prev, sellData.asset_transactions));
   }, [sellData, sellPage]);
-
-  const currentMonth = todayIso().slice(0, 7);
-  const { data: monthBuysData } = useFetch(
-    (signal) =>
-      investmentsApi.listAssetTransactions(
-        { type: 'buy', date_from: `${currentMonth}-01`, page_size: 100, bank_id: bankFilter || undefined },
-        signal
-      ),
-    [currentMonth, bankFilter]
-  );
 
   const [pickModalOpen, setPickModalOpen] = useState(false);
   const [pickKind, setPickKind] = useState('buy');
@@ -132,11 +143,6 @@ export default function AssetTrades() {
     if (sellPage === 1) reloadSells();
     else setSellPage(1);
   }
-
-  const totalThisMonth = useMemo(
-    () => (monthBuysData?.asset_transactions || []).reduce((s, t) => s + t.total_amount, 0),
-    [monthBuysData]
-  );
 
   function openPick(kind) {
     setPickKind(kind);
@@ -179,16 +185,6 @@ export default function AssetTrades() {
       <div className="topbar">
         <h1>Compras e vendas</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div className="filter-select">
-            <select value={bankFilter} onChange={(e) => handleBankFilterChange(e.target.value)}>
-              <option value="">Todas as corretoras</option>
-              {banks.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </div>
           <div className="period" onClick={() => openPick('sell')}>
             + nova venda
           </div>
@@ -202,14 +198,50 @@ export default function AssetTrades() {
         </div>
       </div>
 
-      <div className="card stat-card" style={{ '--stripe': '#0F5C5C', marginBottom: 20 }}>
-        <div className="label">Total aportado este mês</div>
-        <div className="value num">{fmt(totalThisMonth)}</div>
+      <div className="card" style={{ marginBottom: 16, padding: 6 }}>
+        <div className="filter-bar">
+          <div className="filter-search">
+            <IconSearch />
+            <input
+              type="text"
+              placeholder="Buscar ativo ou ticker..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="filter-select">
+            <select value={bankFilter} onChange={(e) => handleBankFilterChange(e.target.value)}>
+              <option value="">Todas as corretoras</option>
+              {banks.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
 
       <div className="card">
         <h3>Histórico de compras</h3>
-        {purchases.length === 0 && <div className="empty-state">Nenhuma compra registrada ainda.</div>}
+        {buyLoading &&
+          purchases.length === 0 &&
+          [0, 1, 2, 3].map((i) => (
+            <div className="compra-row" key={i}>
+              <div className="compra-left">
+                <Skeleton width={34} height={34} radius={9} />
+                <div>
+                  <Skeleton width={90} height={13} style={{ marginBottom: 5 }} />
+                  <Skeleton width={140} height={11} />
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <Skeleton width={80} height={14} style={{ marginBottom: 5 }} />
+                <Skeleton width={100} height={11} />
+              </div>
+            </div>
+          ))}
+        {!buyLoading && purchases.length === 0 && <div className="empty-state">Nenhuma compra registrada ainda.</div>}
         {purchases.map((t) => (
           <div className="compra-row" key={t.id}>
             <div className="compra-left">
@@ -249,7 +281,24 @@ export default function AssetTrades() {
 
       <div className="card" style={{ marginTop: 20 }}>
         <h3>Histórico de vendas</h3>
-        {sales.length === 0 && <div className="empty-state">Nenhuma venda registrada ainda.</div>}
+        {sellLoading &&
+          sales.length === 0 &&
+          [0, 1, 2, 3].map((i) => (
+            <div className="compra-row" key={i}>
+              <div className="compra-left">
+                <Skeleton width={34} height={34} radius={9} />
+                <div>
+                  <Skeleton width={90} height={13} style={{ marginBottom: 5 }} />
+                  <Skeleton width={140} height={11} />
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <Skeleton width={80} height={14} style={{ marginBottom: 5 }} />
+                <Skeleton width={100} height={11} />
+              </div>
+            </div>
+          ))}
+        {!sellLoading && sales.length === 0 && <div className="empty-state">Nenhuma venda registrada ainda.</div>}
         {sales.map((t) => (
           <div className="compra-row" key={t.id}>
             <div className="compra-left">

@@ -734,6 +734,14 @@ def list_asset_transactions():
     if asset_id:
         asset_ids = [aid for aid in asset_ids if str(aid) == asset_id]
 
+    search = (request.args.get("search") or "").strip().lower()
+    if search:
+        asset_ids = [
+            aid
+            for aid in asset_ids
+            if search in (assets_by_id[aid].code or "").lower() or search in (assets_by_id[aid].name or "").lower()
+        ]
+
     if not asset_ids:
         return {"asset_transactions": [], "total": 0, "page": 1, "page_size": 15}
 
