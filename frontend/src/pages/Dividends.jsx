@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { dividendsApi, investmentsApi, quotesApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
-import { fmt, fmtDateShort } from '../utils/format';
+import { fmt, fmtDateShort, monthLabel, monthLabelFull } from '../utils/format';
 import DividendScheduleModal from '../components/modals/DividendScheduleModal';
 import DividendModal from '../components/modals/DividendModal';
+import DividendPeriodDetailModal from '../components/modals/DividendPeriodDetailModal';
+import DividendsHistoryChart from '../components/charts/DividendsHistoryChart';
 import Skeleton from '../components/Skeleton';
 import LoadMoreButton from '../components/LoadMoreButton';
 
@@ -60,6 +62,50 @@ export default function Dividends() {
     if (!dividendsData) return;
     setDividendsAccumulated((prev) => mergeById(dividendsPage === 1 ? [] : prev, dividendsData.dividends));
   }, [dividendsData, dividendsPage]);
+
+  // Busca TODO o historico (sem paginacao) so' para alimentar o grafico -
+  // separado da lista paginada acima (dividendsAccumulated), que existe pra
+  // nao carregar tudo de uma vez na lista textual "Historico de recebimentos".
+  const { data: allDividendsData, loading: allDividendsLoading } = useFetch(
+    () => dividendsApi.list({ limit: 100000 }),
+    []
+  );
+
+  const [chartGranularity, setChartGranularity] = useState('month');
+  const [periodDetail, setPeriodDetail] = useState(null);
+
+  const chartPeriods = useMemo(() => {
+    const rows = allDividendsData?.dividends || [];
+    const map = new Map();
+    rows.forEach((d) => {
+      const [year, month] = d.date.split('-').map(Number);
+      const key = chartGranularity === 'month' ? `${year}-${month}` : `${year}`;
+      const label = chartGranularity === 'month' ? monthLabel(month) : String(year);
+      const fullLabel = chartGranularity === 'month' ? `${monthLabelFull(month)} ${year}` : String(year);
+      const amount = d.amount_brl ?? d.amount;
+
+      let period = map.get(key);
+      if (!period) {
+        period = { key, label, fullLabel, total: 0, byAsset: new Map() };
+        map.set(key, period);
+      }
+      period.total += amount;
+
+      const assetKey = d.asset_id;
+      const assetEntry = period.byAsset.get(assetKey) || {
+        assetId: assetKey,
+        code: d.asset?.code,
+        name: d.asset?.name,
+        total: 0,
+      };
+      assetEntry.total += amount;
+      period.byAsset.set(assetKey, assetEntry);
+    });
+
+    return [...map.values()]
+      .map((p) => ({ ...p, byAsset: [...p.byAsset.values()] }))
+      .sort((a, b) => (a.key < b.key ? -1 : 1));
+  }, [allDividendsData, chartGranularity]);
 
   const quotesByCurrency = useMemo(() => {
     const map = {};
@@ -167,6 +213,35 @@ export default function Dividends() {
           <div className="label">A cair ainda este mês</div>
           {schedulesLoading ? <Skeleton width={110} height={24} /> : <div className="value num">{fmt(aCairMes)}</div>}
         </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 20 }}>
+        <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Histórico de dividendos</span>
+          <div className="seg" style={{ maxWidth: 148, padding: 2 }}>
+            <div
+              className={`seg-opt${chartGranularity === 'month' ? ' active' : ''}`}
+              onClick={() => setChartGranularity('month')}
+              style={{ padding: '4px 8px', fontSize: 11.5, fontWeight: 500 }}
+            >
+              Mensal
+            </div>
+            <div
+              className={`seg-opt${chartGranularity === 'year' ? ' active' : ''}`}
+              onClick={() => setChartGranularity('year')}
+              style={{ padding: '4px 8px', fontSize: 11.5, fontWeight: 500 }}
+            >
+              Anual
+            </div>
+          </div>
+        </h3>
+        {allDividendsLoading ? (
+          <Skeleton width="100%" height={180} radius={8} />
+        ) : chartPeriods.length === 0 ? (
+          <div className="empty-state">Nenhum recebimento registrado ainda.</div>
+        ) : (
+          <DividendsHistoryChart periods={chartPeriods} onBarClick={setPeriodDetail} />
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
@@ -311,6 +386,12 @@ export default function Dividends() {
           setDividendModalOpen(false);
           reload();
         }}
+      />
+
+      <DividendPeriodDetailModal
+        open={!!periodDetail}
+        period={periodDetail}
+        onClose={() => setPeriodDetail(null)}
       />
     </div>
   );

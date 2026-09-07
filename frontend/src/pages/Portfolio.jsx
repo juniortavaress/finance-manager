@@ -191,12 +191,6 @@ export default function Portfolio() {
     setSort((prev) => (prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }));
   }
 
-  function clearFilters() {
-    setSearch('');
-    setBankFilter('');
-    setTypeFilter('');
-  }
-
   const bankOptions = useMemo(() => [...new Set(enriched.map((a) => a.bankName).filter(Boolean))], [enriched]);
   const typeOptions = useMemo(() => [...new Set(enriched.map((a) => a.type))], [enriched]);
 
@@ -233,8 +227,6 @@ export default function Portfolio() {
     }
   }
 
-  const hasActiveFilters = !!(search || bankFilter || typeFilter);
-
   return (
     <div className="screen active">
       <div className="topbar">
@@ -249,11 +241,6 @@ export default function Portfolio() {
             </div>
           </div>
         )}
-      </div>
-
-      <div className="fatura-note show" style={{ marginBottom: 16 }}>
-        Clique no valor atual de um ativo para atualizá-lo manualmente — em breve integração automática via API de
-        cotações.
       </div>
 
       <div className="card" style={{ marginBottom: 16, padding: 6 }}>
@@ -287,15 +274,6 @@ export default function Portfolio() {
               ))}
             </select>
           </div>
-          <button
-            type="button"
-            className="filter-clear"
-            onClick={clearFilters}
-            disabled={!hasActiveFilters}
-            style={{ opacity: hasActiveFilters ? 1 : 0.4, cursor: hasActiveFilters ? 'pointer' : 'default' }}
-          >
-            Limpar filtros
-          </button>
         </div>
       </div>
 
