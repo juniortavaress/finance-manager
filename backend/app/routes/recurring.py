@@ -2,6 +2,7 @@ import datetime as dt
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, g, request
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.auth_decorator import login_required
 from app.errors import ApiError
@@ -60,18 +61,23 @@ def _generate_occurrences(recurring: RecurringTransaction) -> list[dt.date]:
     return dates
 
 
-def _materialize_transactions(recurring: RecurringTransaction):
+def _materialize_transactions(recurring: RecurringTransaction, existing_dates=None):
     """Cria as transacoes que ainda nao existem para as ocorrencias ate hoje do recorrente.
     Idempotente: pode ser chamada de novo sem duplicar o que ja foi gerado.
-    Se for cobranca no cartao, resolve/cria a fatura de cada ocorrencia e recalcula os totais."""
+    Se for cobranca no cartao, resolve/cria a fatura de cada ocorrencia e recalcula os totais.
+
+    existing_dates: quando informado (ver _sync_all_active), evita uma query
+    por recorrente - o caller ja buscou as datas existentes de TODOS os
+    recorrentes ativos de uma vez so'."""
     occurrences = _generate_occurrences(recurring)
 
-    existing_dates = {
-        row[0]
-        for row in db.session.query(Transaction.date)
-        .filter(Transaction.recurring_transaction_id == recurring.id)
-        .all()
-    }
+    if existing_dates is None:
+        existing_dates = {
+            row[0]
+            for row in db.session.query(Transaction.date)
+            .filter(Transaction.recurring_transaction_id == recurring.id)
+            .all()
+        }
 
     is_credit = recurring.payment_method == "credit"
     credit_card = recurring.account.credit_card if is_credit else None
@@ -118,10 +124,30 @@ def _materialize_transactions(recurring: RecurringTransaction):
 
 
 def _sync_all_active(user_id):
-    active = RecurringTransaction.query.filter_by(user_id=user_id, active=True).all()
+    # UMA UNICA query com eager load de account/credit_card (usados dentro
+    # de _materialize_transactions), em vez de deixar recurring.account.credit_card
+    # disparar 1 query por recorrente ativo dentro do loop abaixo.
+    active = (
+        RecurringTransaction.query.filter_by(user_id=user_id, active=True)
+        .options(joinedload(RecurringTransaction.account).joinedload(Account.credit_card))
+        .all()
+    )
+
+    auto_debit_ids = [r.id for r in active if r.auto_debit]
+    # UMA UNICA query com recurring_transaction_id IN (...) para as datas ja
+    # materializadas de TODOS os recorrentes ativos, em vez de uma query por
+    # recorrente dentro de _materialize_transactions (era o maior N+1 desta
+    # rota - roda em toda requisicao GET, sem cache/paginacao).
+    existing_dates_by_recurring_id = {}
+    if auto_debit_ids:
+        for recurring_id, date in db.session.query(
+            Transaction.recurring_transaction_id, Transaction.date
+        ).filter(Transaction.recurring_transaction_id.in_(auto_debit_ids)):
+            existing_dates_by_recurring_id.setdefault(recurring_id, set()).add(date)
+
     for recurring in active:
         if recurring.auto_debit:
-            _materialize_transactions(recurring)
+            _materialize_transactions(recurring, existing_dates_by_recurring_id.get(recurring.id, set()))
         else:
             _advance_if_needed(recurring)
 
@@ -134,7 +160,9 @@ def list_recurring():
     _sync_all_active(g.current_user.id)
     db.session.commit()
 
-    query = RecurringTransaction.query.filter_by(user_id=g.current_user.id)
+    query = RecurringTransaction.query.filter_by(user_id=g.current_user.id).options(
+        selectinload(RecurringTransaction.category), selectinload(RecurringTransaction.account)
+    )
     if active_only:
         query = query.filter_by(active=True)
     items = query.order_by(RecurringTransaction.created_at.desc()).all()

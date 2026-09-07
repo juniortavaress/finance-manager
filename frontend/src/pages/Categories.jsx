@@ -5,8 +5,9 @@ import { useFetch } from '../hooks/useFetch';
 import { fmt } from '../utils/format';
 import { IconPencil } from '../components/icons';
 import CategoryConfigModal from '../components/modals/CategoryConfigModal';
+import Skeleton from '../components/Skeleton';
 
-function CategoryGrid({ title, items, totalsById, onEdit }) {
+function CategoryGrid({ title, items, totalsById, totalsLoading, onEdit }) {
   return (
     <div style={{ marginBottom: 28 }}>
       <h3 style={{ marginBottom: 12 }}>{title}</h3>
@@ -19,8 +20,14 @@ function CategoryGrid({ title, items, totalsById, onEdit }) {
             <div className="cat-tile-info">
               <div className="name">{c.name}</div>
               <div className="amt num">
-                <span className="amt-value">{fmt(totalsById[c.id] || 0)}</span>{' '}
-                <span className="amt-period">este mês</span>
+                {totalsLoading ? (
+                  <Skeleton width={60} height={14} />
+                ) : (
+                  <>
+                    <span className="amt-value">{fmt(totalsById[c.id] || 0)}</span>{' '}
+                    <span className="amt-period">este mês</span>
+                  </>
+                )}
               </div>
             </div>
             <button
@@ -66,7 +73,10 @@ export default function Categories() {
   const [newCategoryKind, setNewCategoryKind] = useState('expense');
 
   const now = new Date();
-  const { data: catData } = useFetch(() => dashboardApi.spendingByCategory(now.getFullYear(), now.getMonth() + 1), []);
+  const { data: catData, loading: catLoading } = useFetch(
+    () => dashboardApi.spendingByCategory(now.getFullYear(), now.getMonth() + 1),
+    []
+  );
 
   const totalsById = useMemo(() => {
     const map = {};
@@ -104,6 +114,7 @@ export default function Categories() {
         title="Despesas"
         items={expenseCategories}
         totalsById={totalsById}
+        totalsLoading={catLoading}
         onEdit={openEditCategory}
       />
 
@@ -111,6 +122,7 @@ export default function Categories() {
         title="Receitas"
         items={incomeCategories}
         totalsById={totalsById}
+        totalsLoading={catLoading}
         onEdit={openEditCategory}
       />
 

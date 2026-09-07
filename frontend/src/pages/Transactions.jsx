@@ -6,6 +6,7 @@ import { fmt, fmtDateShort } from '../utils/format';
 import { IconSearch, IconPencil, IconChevronDown } from '../components/icons';
 import TransactionModal from '../components/modals/TransactionModal';
 import LoadMoreButton from '../components/LoadMoreButton';
+import Skeleton from '../components/Skeleton';
 
 const PAGE_SIZE = 50;
 
@@ -259,11 +260,29 @@ export default function Transactions() {
         )}
       </div>
       <div className="card">
-        <h3>
-          {total} transações · <span style={{ color: 'var(--teal)' }}>entradas {fmt(entradas)}</span>{' '}
-          · <span style={{ color: 'var(--brick)' }}>saídas {fmt(saidas)}</span>
-        </h3>
-        {transactions.length === 0 && <div className="empty-state">Nenhuma transação encontrada.</div>}
+        {txLoading && transactions.length === 0 ? (
+          <Skeleton width={260} height={16} style={{ marginBottom: 8 }} />
+        ) : (
+          <h3>
+            {total} transações · <span style={{ color: 'var(--teal)' }}>entradas {fmt(entradas)}</span>{' '}
+            · <span style={{ color: 'var(--brick)' }}>saídas {fmt(saidas)}</span>
+          </h3>
+        )}
+        {txLoading &&
+          transactions.length === 0 &&
+          [0, 1, 2, 3, 4].map((i) => (
+            <div className="tx-row" key={i}>
+              <div className="tx-left">
+                <Skeleton width={34} height={34} radius={9} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <Skeleton width={140} height={13} style={{ marginBottom: 5 }} />
+                  <Skeleton width={110} height={11} />
+                </div>
+              </div>
+              <Skeleton width={70} height={14} />
+            </div>
+          ))}
+        {!txLoading && transactions.length === 0 && <div className="empty-state">Nenhuma transação encontrada.</div>}
         {transactions.map((t) => {
           const pos = t.type === 'income';
           const category = categoryById(t.category_id) || t.category;

@@ -7,6 +7,7 @@ import { IconPencil, IconChevronDown } from '../components/icons';
 import AdvanceInstallmentModal from '../components/modals/AdvanceInstallmentModal';
 import CancelInstallmentModal from '../components/modals/CancelInstallmentModal';
 import TransactionModal from '../components/modals/TransactionModal';
+import Skeleton from '../components/Skeleton';
 
 export default function Installments() {
   const { data, loading, reload } = useFetch(() => installmentsApi.list({ status: 'active' }), []);
@@ -49,21 +50,40 @@ export default function Installments() {
       <div className="grid grid-3" style={{ marginBottom: 20 }}>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
           <div className="label">Comprometido este mês</div>
-          <div className="value num">{fmt(totalMes)}</div>
+          {loading ? <Skeleton width={110} height={24} /> : <div className="value num">{fmt(totalMes)}</div>}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
           <div className="label">Saldo total a parcelar</div>
-          <div className="value num">{fmt(totalRestante)}</div>
+          {loading ? <Skeleton width={110} height={24} /> : <div className="value num">{fmt(totalRestante)}</div>}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
           <div className="label">Parcelamentos ativos</div>
-          <div className="value num">{plans.length}</div>
+          {loading ? <Skeleton width={40} height={24} /> : <div className="value num">{plans.length}</div>}
         </div>
       </div>
       <div className="card">
         <h3>Todas as compras parceladas</h3>
+        {loading &&
+          [0, 1, 2].map((i) => (
+            <div className="parc-item" key={i}>
+              <div className="parc-top">
+                <div className="parc-left">
+                  <Skeleton width={36} height={36} radius={9} />
+                  <div>
+                    <Skeleton width={130} height={13} style={{ marginBottom: 5 }} />
+                    <Skeleton width={90} height={11} />
+                  </div>
+                </div>
+                <div className="parc-vals">
+                  <Skeleton width={70} height={14} style={{ marginBottom: 5 }} />
+                  <Skeleton width={90} height={11} />
+                </div>
+              </div>
+              <Skeleton width="100%" height={6} radius={4} style={{ marginTop: 10 }} />
+            </div>
+          ))}
         {!loading && plans.length === 0 && <div className="empty-state">Nenhum parcelamento ativo.</div>}
-        {plans.map((p) => {
+        {!loading && plans.map((p) => {
           const category = categoryById(p.category_id) || p.category;
           const confirmedCount = p.transactions.filter((t) => t.status === 'confirmed').length;
           const currentInstallment = Math.max(confirmedCount, 1);

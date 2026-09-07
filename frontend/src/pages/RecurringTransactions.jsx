@@ -7,6 +7,7 @@ import { fmt, fmtDateShort } from '../utils/format';
 import { IconPencil, IconBell, IconCheck } from '../components/icons';
 import RecurringModal from '../components/modals/RecurringModal';
 import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal';
+import Skeleton from '../components/Skeleton';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -20,7 +21,7 @@ export default function RecurringTransactions() {
   const [payingId, setPayingId] = useState(null);
   const [payingRecurring, setPayingRecurring] = useState(null);
 
-  const { data: recurringData, reload: reloadRecurring } = useFetch(() => recurringApi.list(), []);
+  const { data: recurringData, reload: reloadRecurring, loading: recurringLoading } = useFetch(() => recurringApi.list(), []);
   const recurringList = recurringData?.recurring_transactions || [];
   const activeRecurring = recurringList.filter((r) => r.active);
   const totalCommitted = activeRecurring.reduce((s, r) => s + r.amount, 0);
@@ -69,23 +70,47 @@ export default function RecurringTransactions() {
       <div className="grid grid-3" style={{ marginBottom: 20 }}>
         <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
           <div className="label">Total comprometido por mês</div>
-          <div className="value num">{fmt(totalCommitted)}</div>
-          <div className="delta">{activeRecurring.length} recorrentes ativos</div>
+          {recurringLoading ? (
+            <>
+              <Skeleton width={110} height={24} style={{ marginBottom: 6 }} />
+              <Skeleton width={140} height={12} />
+            </>
+          ) : (
+            <>
+              <div className="value num">{fmt(totalCommitted)}</div>
+              <div className="delta">{activeRecurring.length} recorrentes ativos</div>
+            </>
+          )}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
           <div className="label">Vencendo hoje</div>
-          <div className="value num">{dueToday.length}</div>
+          {recurringLoading ? <Skeleton width={40} height={24} /> : <div className="value num">{dueToday.length}</div>}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
           <div className="label">Atrasados</div>
-          <div className="value num">{overdue.length}</div>
+          {recurringLoading ? <Skeleton width={40} height={24} /> : <div className="value num">{overdue.length}</div>}
         </div>
       </div>
 
       <div className="card">
         <h3>Recorrentes cadastrados</h3>
-        {recurringList.length === 0 && <div className="empty-state">Nenhum recorrente cadastrado.</div>}
-        {recurringList.map((r) => {
+        {recurringLoading &&
+          [0, 1, 2].map((i) => (
+            <div className="auto-row" key={i}>
+              <div className="auto-left">
+                <Skeleton width={36} height={36} radius={9} />
+                <div>
+                  <Skeleton width={120} height={13} style={{ marginBottom: 5 }} />
+                  <Skeleton width={180} height={11} />
+                </div>
+              </div>
+              <Skeleton width={70} height={14} />
+            </div>
+          ))}
+        {!recurringLoading && recurringList.length === 0 && (
+          <div className="empty-state">Nenhum recorrente cadastrado.</div>
+        )}
+        {!recurringLoading && recurringList.map((r) => {
           const category = categoryById(r.category_id) || r.category;
           const account = accountById(r.account_id) || r.account;
           const isCredit = r.payment_method === 'credit';

@@ -2,6 +2,7 @@ import datetime as dt
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, g, request
+from sqlalchemy.orm import selectinload
 
 from app.auth_decorator import login_required
 from app.errors import ApiError
@@ -21,7 +22,11 @@ installments_bp = Blueprint("installments", __name__)
 @login_required
 def list_installments():
     status = request.args.get("status")
-    query = InstallmentPlan.query.filter_by(user_id=g.current_user.id)
+    query = InstallmentPlan.query.filter_by(user_id=g.current_user.id).options(
+        selectinload(InstallmentPlan.category),
+        selectinload(InstallmentPlan.transactions).selectinload(Transaction.category),
+        selectinload(InstallmentPlan.transactions).selectinload(Transaction.account),
+    )
     if status in ("active", "completed"):
         query = query.filter_by(status=status)
     plans = query.order_by(InstallmentPlan.created_at.desc()).all()

@@ -2,6 +2,7 @@ import datetime as dt
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, g, request
+from sqlalchemy.orm import selectinload
 
 from app.auth_decorator import login_required
 from app.errors import ApiError
@@ -79,7 +80,11 @@ def _parse_filters():
 @login_required
 def list_transactions():
     filters = _parse_filters()
-    query = Transaction.query.filter(Transaction.user_id == g.current_user.id, *filters)
+    query = Transaction.query.filter(Transaction.user_id == g.current_user.id, *filters).options(
+        selectinload(Transaction.category),
+        selectinload(Transaction.account),
+        selectinload(Transaction.transfer_pair),
+    )
 
     bank_id = request.args.get("bank_id")
     account_type = request.args.get("account_type")
@@ -133,6 +138,7 @@ def _transactions_with_group(items):
 
     expenses = (
         SharedExpense.query.filter(SharedExpense.transaction_id.in_(tx_ids), SharedExpense.group_id.isnot(None))
+        .options(selectinload(SharedExpense.group))
         .all()
     )
     for e in expenses:
@@ -147,6 +153,7 @@ def _transactions_with_group(items):
             ),
             Settlement.group_id.isnot(None),
         )
+        .options(selectinload(Settlement.group))
         .all()
     )
     for s in settlements:
