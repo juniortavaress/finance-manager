@@ -2,6 +2,7 @@ import datetime as dt
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, g, request
+from sqlalchemy.orm import contains_eager
 
 from app.auth_decorator import login_required
 from app.errors import ApiError
@@ -300,28 +301,67 @@ def list_dividends():
     _sync_all_schedules(g.current_user.id)
     db.session.commit()
 
-    limit = request.args.get("limit")
-    query = (
+    base_query = (
         Dividend.query.join(Asset, Asset.id == Dividend.asset_id)
         .join(InvestmentAccount, InvestmentAccount.id == Asset.investment_account_id)
         .join(Account, Account.id == InvestmentAccount.account_id)
         .filter(Account.user_id == g.current_user.id)
-        .order_by(Dividend.date.desc(), Dividend.created_at.desc())
+        .options(contains_eager(Dividend.asset).contains_eager(Asset.investment_account).contains_eager(InvestmentAccount.account))
     )
-    if limit:
-        query = query.limit(int(limit))
 
     fx_rates, _ = get_brl_rates()
 
+    # Totais (mes/ano correntes) somados sobre TODOS os dividendos do
+    # usuario, independente da paginacao do historico abaixo - senao o
+    # "recebido este mes/ano" no topo da pagina ficaria errado ao paginar
+    # (so' contaria os itens da pagina atual carregada no frontend).
+    # contains_eager acima faz o join carregar asset/investment_account/
+    # account de uma vez (mesma query), evitando lazy-load por dividendo -
+    # sem isso, ler d.asset.investment_account.account no loop abaixo seria
+    # 1 query extra por dividendo (N+1), o mesmo padrao ja corrigido em
+    # investments.py.
+    today = dt.date.today()
+    month_start = today.replace(day=1)
+    year_start = today.replace(month=1, day=1)
+    recebido_mes = Decimal("0")
+    recebido_ano = Decimal("0")
+    for d in base_query.filter(Dividend.date >= year_start).all():
+        currency = d.asset.investment_account.account.currency
+        amount_brl = convert_to_brl(d.amount, currency, fx_rates)
+        recebido_ano += amount_brl
+        if d.date >= month_start:
+            recebido_mes += amount_brl
+
+    limit = request.args.get("limit")
+    query = base_query.order_by(Dividend.date.desc(), Dividend.created_at.desc())
+
+    if limit:
+        query = query.limit(int(limit))
+        items = query.all()
+        total = len(items)
+        page, page_size = 1, total or 15
+    else:
+        page = int(request.args.get("page", 1))
+        page_size = min(int(request.args.get("page_size", 15)), 100)
+        total = base_query.order_by(None).count()
+        items = query.offset((page - 1) * page_size).limit(page_size).all()
+
     result = []
-    for d in query.all():
+    for d in items:
         data = d.to_dict()
         data["asset"] = d.asset.to_dict()
         currency = d.asset.investment_account.account.currency
         data["currency"] = currency
         data["amount_brl"] = float(convert_to_brl(d.amount, currency, fx_rates))
         result.append(data)
-    return {"dividends": result}
+    return {
+        "dividends": result,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "recebido_mes": float(recebido_mes),
+        "recebido_ano": float(recebido_ano),
+    }
 
 
 @dividends_bp.post("/")

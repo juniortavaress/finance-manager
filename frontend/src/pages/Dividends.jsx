@@ -1,10 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { dividendsApi, investmentsApi, quotesApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, fmtDateShort } from '../utils/format';
 import DividendScheduleModal from '../components/modals/DividendScheduleModal';
 import DividendModal from '../components/modals/DividendModal';
+import Skeleton from '../components/Skeleton';
+import LoadMoreButton from '../components/LoadMoreButton';
+
+const PAGE_SIZE = 15;
+
+function mergeById(existing, incoming) {
+  const seen = new Set(existing.map((d) => d.id));
+  const deduped = incoming.filter((d) => !seen.has(d.id));
+  return [...existing, ...deduped];
+}
 
 const KIND_LABELS = {
   dividendo: 'Dividendo',
@@ -32,10 +42,24 @@ function initials(text) {
 
 export default function Dividends() {
   const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
-  const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
-  const { data: dividendsData, reload: reloadDividends } = useFetch(() => dividendsApi.list(), []);
+  const { data: schedulesData, loading: schedulesLoading, reload: reloadSchedules } = useFetch(
+    () => dividendsApi.listSchedules(),
+    []
+  );
   const { data: quotesData } = useFetch(() => quotesApi.list(), []);
   const { investmentAccounts, bankById, reloadAll } = useData();
+
+  const [dividendsPage, setDividendsPage] = useState(1);
+  const [dividendsAccumulated, setDividendsAccumulated] = useState([]);
+  const { data: dividendsData, reload: reloadDividends, loading: dividendsLoading } = useFetch(
+    (signal) => dividendsApi.list({ page: dividendsPage, page_size: PAGE_SIZE }, signal),
+    [dividendsPage]
+  );
+
+  useEffect(() => {
+    if (!dividendsData) return;
+    setDividendsAccumulated((prev) => mergeById(dividendsPage === 1 ? [] : prev, dividendsData.dividends));
+  }, [dividendsData, dividendsPage]);
 
   const quotesByCurrency = useMemo(() => {
     const map = {};
@@ -52,13 +76,14 @@ export default function Dividends() {
 
   const assets = assetsData?.assets || [];
   const schedules = schedulesData?.dividend_schedules || [];
-  const dividends = dividendsData?.dividends || [];
+  const dividends = dividendsAccumulated;
 
   function reload() {
     reloadAssets();
     reloadSchedules();
-    reloadDividends();
     reloadAll();
+    if (dividendsPage === 1) reloadDividends();
+    else setDividendsPage(1);
   }
 
   function bankNameFor(assetOrSnapshot) {
@@ -71,22 +96,9 @@ export default function Dividends() {
 
   const today = todayIso();
   const currentMonth = today.slice(0, 7);
-  const currentYear = today.slice(0, 4);
 
-  const recebidoMes = useMemo(
-    () =>
-      dividends
-        .filter((d) => d.date.slice(0, 7) === currentMonth)
-        .reduce((s, d) => s + (d.amount_brl ?? d.amount), 0),
-    [dividends, currentMonth]
-  );
-  const recebidoAno = useMemo(
-    () =>
-      dividends
-        .filter((d) => d.date.slice(0, 4) === currentYear)
-        .reduce((s, d) => s + (d.amount_brl ?? d.amount), 0),
-    [dividends, currentYear]
-  );
+  const recebidoMes = dividendsData?.recebido_mes || 0;
+  const recebidoAno = dividendsData?.recebido_ano || 0;
 
   const aCairMes = useMemo(() => {
     const todayDay = new Date().getDate();
@@ -137,22 +149,48 @@ export default function Dividends() {
       <div className="grid grid-3" style={{ marginBottom: 20 }}>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
           <div className="label">Recebido este mês</div>
-          <div className="value num">{fmt(recebidoMes)}</div>
+          {dividendsLoading && dividendsPage === 1 ? (
+            <Skeleton width={110} height={24} />
+          ) : (
+            <div className="value num">{fmt(recebidoMes)}</div>
+          )}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
           <div className="label">Recebido este ano</div>
-          <div className="value num">{fmt(recebidoAno)}</div>
+          {dividendsLoading && dividendsPage === 1 ? (
+            <Skeleton width={110} height={24} />
+          ) : (
+            <div className="value num">{fmt(recebidoAno)}</div>
+          )}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
           <div className="label">A cair ainda este mês</div>
-          <div className="value num">{fmt(aCairMes)}</div>
+          {schedulesLoading ? <Skeleton width={110} height={24} /> : <div className="value num">{fmt(aCairMes)}</div>}
         </div>
       </div>
 
       <div className="card" style={{ marginBottom: 20 }}>
         <h3>Proventos recorrentes cadastrados</h3>
-        {schedules.length === 0 && <div className="empty-state">Nenhum provento recorrente cadastrado ainda.</div>}
-        {schedules.map((s) => {
+        {schedulesLoading &&
+          [0, 1, 2].map((i) => (
+            <div className="div-row" key={i}>
+              <div className="div-left">
+                <Skeleton width={34} height={34} radius={9} />
+                <div>
+                  <Skeleton width={90} height={13} style={{ marginBottom: 5 }} />
+                  <Skeleton width={160} height={11} />
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <Skeleton width={70} height={14} style={{ marginBottom: 5 }} />
+                <Skeleton width={80} height={11} />
+              </div>
+            </div>
+          ))}
+        {!schedulesLoading && schedules.length === 0 && (
+          <div className="empty-state">Nenhum provento recorrente cadastrado ainda.</div>
+        )}
+        {!schedulesLoading && schedules.map((s) => {
           const asset = assets.find((a) => a.id === s.asset_id) || s.asset;
           return (
             <div
@@ -187,7 +225,26 @@ export default function Dividends() {
 
       <div className="card">
         <h3>Histórico de recebimentos</h3>
-        {dividends.length === 0 && <div className="empty-state">Nenhum recebimento registrado ainda.</div>}
+        {dividendsLoading &&
+          dividends.length === 0 &&
+          [0, 1, 2, 3].map((i) => (
+            <div className="div-row" key={i}>
+              <div className="div-left">
+                <Skeleton width={34} height={34} radius={9} />
+                <div>
+                  <Skeleton width={90} height={13} style={{ marginBottom: 5 }} />
+                  <Skeleton width={150} height={11} />
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <Skeleton width={70} height={14} style={{ marginBottom: 5 }} />
+                <Skeleton width={60} height={11} />
+              </div>
+            </div>
+          ))}
+        {!dividendsLoading && dividends.length === 0 && (
+          <div className="empty-state">Nenhum recebimento registrado ainda.</div>
+        )}
         {dividends.map((d) => {
           const asset = assets.find((a) => a.id === d.asset_id) || d.asset;
           return (
@@ -220,6 +277,12 @@ export default function Dividends() {
             </div>
           );
         })}
+        <LoadMoreButton
+          shown={dividends.length}
+          total={dividendsData?.total || 0}
+          loading={dividendsLoading}
+          onClick={() => setDividendsPage((p) => p + 1)}
+        />
       </div>
 
       <DividendScheduleModal

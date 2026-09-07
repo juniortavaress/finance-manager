@@ -49,7 +49,10 @@ export default function Investments() {
     () => investmentsApi.summary(bankFilter || undefined),
     [bankFilter]
   );
-  const { data: dividendsData, loading: dividendsLoading, reload: reloadDividends } = useFetch(() => dividendsApi.list(), []);
+  const { data: dividendsData, loading: dividendsLoading, reload: reloadDividends } = useFetch(
+    () => dividendsApi.list({ limit: 100000 }),
+    []
+  );
   const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
   const [drilldown, setDrilldown] = useState(null);
 
