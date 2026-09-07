@@ -7,6 +7,7 @@ import { fmt, fmtDateFull } from '../utils/format';
 import { maskToNumber, numberToMasked } from '../utils/currency';
 import { IconSearch, IconPencil, IconInfo } from '../components/icons';
 import CurrencyInput from '../components/CurrencyInput';
+import Skeleton from '../components/Skeleton';
 import NewAssetModal from '../components/modals/NewAssetModal';
 import AssetDetailModal from '../components/modals/AssetDetailModal';
 
@@ -95,7 +96,7 @@ function profitAmount(a) {
 
 export default function Portfolio() {
   const [showArchived, setShowArchived] = useState(false);
-  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
+  const { data: assetsData, loading: assetsLoading, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
   const { banks, investmentAccounts, bankById, reloadAll } = useData();
   const { showSuccess, showError } = useToast();
 
@@ -313,13 +314,31 @@ export default function Portfolio() {
             ))}
           </div>
 
-          {sorted.length === 0 && (
+          {assetsLoading &&
+            [0, 1, 2, 3, 4].map((i) => (
+              <div className="asset-row" key={i}>
+                <div>
+                  <Skeleton width={80} height={13} style={{ marginBottom: 5 }} />
+                  <Skeleton width={120} height={11} />
+                </div>
+                <Skeleton width={60} height={18} radius={20} />
+                <Skeleton width={90} height={13} />
+                <Skeleton width={40} height={13} />
+                <Skeleton width={70} height={13} />
+                <Skeleton width={70} height={13} />
+                <Skeleton width={70} height={13} />
+                <Skeleton width={70} height={13} />
+                <Skeleton width={50} height={13} />
+              </div>
+            ))}
+
+          {!assetsLoading && sorted.length === 0 && (
             <div style={{ padding: '20px 4px', fontSize: 12.5, color: 'var(--ink-faint)' }}>
               {showArchived ? 'Nenhum ativo arquivado.' : 'Nenhum ativo encontrado com esses filtros.'}
             </div>
           )}
 
-          {sorted.map((a) => {
+          {!assetsLoading && sorted.map((a) => {
             const color = TYPE_COLORS[a.type] || '#8B9A97';
             const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
             const isAutoFixed = isAutoFixedIncome(a);
@@ -426,12 +445,33 @@ export default function Portfolio() {
         </div>
 
         <div className="asset-card-list">
-          {sorted.length === 0 && (
+          {assetsLoading &&
+            [0, 1, 2].map((i) => (
+              <div className="asset-card" key={i}>
+                <div className="asset-card-head">
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <Skeleton width={90} height={13} style={{ marginBottom: 5 }} />
+                    <Skeleton width={130} height={11} />
+                  </div>
+                  <Skeleton width={60} height={18} radius={20} />
+                </div>
+                <Skeleton width={100} height={12} style={{ marginBottom: 10 }} />
+                <div className="asset-card-grid">
+                  {[0, 1, 2, 3].map((j) => (
+                    <div key={j}>
+                      <Skeleton width={50} height={10} style={{ marginBottom: 5 }} />
+                      <Skeleton width={70} height={13} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          {!assetsLoading && sorted.length === 0 && (
             <div style={{ padding: '20px 4px', fontSize: 12.5, color: 'var(--ink-faint)' }}>
               {showArchived ? 'Nenhum ativo arquivado.' : 'Nenhum ativo encontrado com esses filtros.'}
             </div>
           )}
-          {sorted.map((a) => {
+          {!assetsLoading && sorted.map((a) => {
             const color = TYPE_COLORS[a.type] || '#8B9A97';
             const currentAmount = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
             const isAutoFixed = isAutoFixedIncome(a);
