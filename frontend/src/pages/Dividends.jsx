@@ -224,7 +224,7 @@ export default function Dividends() {
             </div>
           </div>
         </h3>
-        {allDividendsLoading ? (
+        {dividendsLoading ? (
           <Skeleton width="100%" height={180} radius={8} />
         ) : chartPeriods.length === 0 ? (
           <div className="empty-state">Nenhum recebimento registrado ainda.</div>
