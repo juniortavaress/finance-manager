@@ -13,6 +13,8 @@ def create_app():
     app.config["SQLALCHEMY_DATABASE_URI"] = os.environ["DATABASE_URL"]
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
         "pool_pre_ping": True,
+        "pool_size": 8,
+        "max_overflow": 8,
         "connect_args": {"prepare_threshold": None},
     }
     app.config["JWT_SECRET"] = os.environ.get("JWT_SECRET", "dev-secret")

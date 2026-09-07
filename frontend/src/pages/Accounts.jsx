@@ -7,6 +7,7 @@ import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
 import TransferModal from '../components/modals/TransferModal';
 import InvoiceHistoryChart from '../components/charts/InvoiceHistoryChart';
+import Skeleton from '../components/Skeleton';
 import { IconPencil, IconSwap } from '../components/icons';
 
 const FALLBACK_COLOR = '#0F5C5C';
@@ -16,7 +17,7 @@ function todayIso() {
 }
 
 export default function Accounts() {
-  const { banks, accounts, reloadAll } = useData();
+  const { banks, accounts, loaded, reloadAll } = useData();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState(null);
   const [payingCard, setPayingCard] = useState(null);
@@ -25,7 +26,10 @@ export default function Accounts() {
 
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
   const investmentAccounts = useMemo(() => accounts.filter((a) => !!a.investment_account), [accounts]);
-  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
+  const { data: assetsData, loading: assetsLoading, reload: reloadAssets } = useFetch(
+    (signal) => investmentsApi.listAssets(false, signal),
+    []
+  );
   const investedByAccountId = useMemo(() => {
     const map = {};
     (assetsData?.assets || []).forEach((asset) => {
@@ -48,13 +52,16 @@ export default function Accounts() {
   }
 
   const [invoicesByCard, setInvoicesByCard] = useState({});
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
   const [invoiceIndexByCard, setInvoiceIndexByCard] = useState({});
   useEffect(() => {
     if (creditCardAccounts.length === 0) {
       setInvoicesByCard({});
+      setInvoicesLoading(false);
       return;
     }
     let cancelled = false;
+    setInvoicesLoading(true);
     Promise.all(creditCardAccounts.map((a) => creditCardsApi.invoices(a.credit_card.id))).then((results) => {
       if (cancelled) return;
       const map = {};
@@ -62,6 +69,7 @@ export default function Accounts() {
         map[a.credit_card.id] = results[idx]?.invoices || [];
       });
       setInvoicesByCard(map);
+      setInvoicesLoading(false);
       setInvoiceIndexByCard((prev) => {
         const next = { ...prev };
         const currentMonthPrefix = todayIso().slice(0, 7);
@@ -130,6 +138,12 @@ export default function Accounts() {
     }));
   }, [creditCardAccounts, invoicesByCard]);
 
+  // Enquanto os dados globais ainda nao chegaram, nao da pra saber se existe
+  // algum cartao de credito (o card so' deve aparecer se houver fatura pra
+  // mostrar) - assume que pode haver, pra reservar o espaco com skeleton em
+  // vez do card aparecer do nada depois e empurrar o resto da tela pra baixo.
+  const showInvoiceHistoryCard = !loaded || invoicesLoading ? true : monthGroups.length > 0;
+
   return (
     <div className="screen active">
       <div className="topbar">
@@ -145,31 +159,58 @@ export default function Accounts() {
         </div>
       </div>
 
-      {monthGroups.length > 0 && (
+      {showInvoiceHistoryCard && (
         <div className="card" style={{ marginBottom: 20 }}>
           <h3>Histórico de faturas por mês</h3>
-          <InvoiceHistoryChart
-            monthGroups={monthGroups}
-            creditCardAccounts={creditCardAccounts}
-            colorForAccount={colorForAccount}
-            highlightedCardId={highlightedCardId}
-            onToggleHighlight={toggleHighlight}
-          />
+          {!loaded || invoicesLoading ? (
+            <Skeleton width="100%" height={180} radius={8} />
+          ) : (
+            <>
+              <InvoiceHistoryChart
+                monthGroups={monthGroups}
+                creditCardAccounts={creditCardAccounts}
+                colorForAccount={colorForAccount}
+                highlightedCardId={highlightedCardId}
+                onToggleHighlight={toggleHighlight}
+              />
 
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
-            {creditCardAccounts.map((account) => (
-              <div key={account.credit_card.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--ink-soft)' }}>
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: colorForAccount(account), display: 'inline-block' }} />
-                {account.name}
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
+                {creditCardAccounts.map((account) => (
+                  <div key={account.credit_card.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--ink-soft)' }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: colorForAccount(account), display: 'inline-block' }} />
+                    {account.name}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       )}
 
-      {banks.length === 0 && <div className="empty-state">Nenhum banco cadastrado ainda.</div>}
+      {!loaded &&
+        [0, 1].map((i) => (
+          <div className="acct-block" key={i}>
+            <div className="acct-bank-head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Skeleton width={16} height={16} radius={4} />
+                <Skeleton width={120} height={14} />
+              </div>
+            </div>
+            <div className="acct-types">
+              {[0, 1, 2].map((j) => (
+                <div className="acct-type-card" key={j}>
+                  <Skeleton width={90} height={11} style={{ marginBottom: 8 }} />
+                  <Skeleton width={110} height={18} style={{ marginBottom: 6 }} />
+                  <Skeleton width={70} height={11} />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
 
-      {banks.map((bank) => {
+      {loaded && banks.length === 0 && <div className="empty-state">Nenhum banco cadastrado ainda.</div>}
+
+      {loaded && banks.map((bank) => {
         const bankAccounts = accounts.filter((a) => a.bank_id === bank.id);
         const checking = bankAccounts.find((a) => a.type === 'checking');
         const creditCard = bankAccounts.find((a) => a.type === 'credit_card');
@@ -276,7 +317,12 @@ export default function Accounts() {
                     </button>
                   )}
                 </div>
-                {creditCard?.credit_card && cardInvoices.length > 0 ? (
+                {creditCard?.credit_card && invoicesLoading ? (
+                  <>
+                    <Skeleton width={90} height={17} style={{ marginBottom: 5 }} />
+                    <Skeleton width={110} height={11} />
+                  </>
+                ) : creditCard?.credit_card && cardInvoices.length > 0 ? (
                   <>
                     <div className="t-val num">{fmt(viewedInvoice?.total_amount || 0, creditCard.currency)}</div>
                     <div className="t-sub">
@@ -305,16 +351,25 @@ export default function Accounts() {
               </div>
               <div className="acct-type-card">
                 <div className="t-label">Investimento</div>
-                <div className="t-val num">
-                  {investment
-                    ? fmt(investment.balance + (investedByAccountId[investment.id] || 0), investment.currency)
-                    : '—'}
-                </div>
-                <div className="t-sub">
-                  {investment && investment.balance > 0
-                    ? `${fmt(investment.balance, investment.currency)} não alocado`
-                    : 'saldo aplicado'}
-                </div>
+                {investment && assetsLoading ? (
+                  <>
+                    <Skeleton width={90} height={17} style={{ marginBottom: 5 }} />
+                    <Skeleton width={110} height={11} />
+                  </>
+                ) : (
+                  <>
+                    <div className="t-val num">
+                      {investment
+                        ? fmt(investment.balance + (investedByAccountId[investment.id] || 0), investment.currency)
+                        : '—'}
+                    </div>
+                    <div className="t-sub">
+                      {investment && investment.balance > 0
+                        ? `${fmt(investment.balance, investment.currency)} não alocado`
+                        : 'saldo aplicado'}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

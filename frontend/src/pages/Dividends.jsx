@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { dividendsApi, investmentsApi, quotesApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
@@ -11,12 +11,6 @@ import Skeleton from '../components/Skeleton';
 import LoadMoreButton from '../components/LoadMoreButton';
 
 const PAGE_SIZE = 15;
-
-function mergeById(existing, incoming) {
-  const seen = new Set(existing.map((d) => d.id));
-  const deduped = incoming.filter((d) => !seen.has(d.id));
-  return [...existing, ...deduped];
-}
 
 const KIND_LABELS = {
   dividendo: 'Dividendo',
@@ -51,31 +45,26 @@ export default function Dividends() {
   const { data: quotesData } = useFetch(() => quotesApi.list(), []);
   const { investmentAccounts, bankById, reloadAll } = useData();
 
-  const [dividendsPage, setDividendsPage] = useState(1);
-  const [dividendsAccumulated, setDividendsAccumulated] = useState([]);
+  // Uma UNICA chamada busca todo o historico (sem paginacao no backend) -
+  // alimenta o grafico, os totais do mes/ano e a lista "Historico de
+  // recebimentos" (paginada so' no CLIENTE abaixo). Antes eram 2 chamadas
+  // paralelas quase identicas (uma paginada, uma com limit alto so' pro
+  // grafico) competindo pela mesma conexao de banco ao mesmo tempo que
+  // /dividends/schedules - foi isso que deixou a pagina lenta.
   const { data: dividendsData, reload: reloadDividends, loading: dividendsLoading } = useFetch(
-    (signal) => dividendsApi.list({ page: dividendsPage, page_size: PAGE_SIZE }, signal),
-    [dividendsPage]
-  );
-
-  useEffect(() => {
-    if (!dividendsData) return;
-    setDividendsAccumulated((prev) => mergeById(dividendsPage === 1 ? [] : prev, dividendsData.dividends));
-  }, [dividendsData, dividendsPage]);
-
-  // Busca TODO o historico (sem paginacao) so' para alimentar o grafico -
-  // separado da lista paginada acima (dividendsAccumulated), que existe pra
-  // nao carregar tudo de uma vez na lista textual "Historico de recebimentos".
-  const { data: allDividendsData, loading: allDividendsLoading } = useFetch(
     () => dividendsApi.list({ limit: 100000 }),
     []
   );
+  const allDividends = dividendsData?.dividends || [];
+
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const dividendsAccumulated = useMemo(() => allDividends.slice(0, visibleCount), [allDividends, visibleCount]);
 
   const [chartGranularity, setChartGranularity] = useState('month');
   const [periodDetail, setPeriodDetail] = useState(null);
 
   const chartPeriods = useMemo(() => {
-    const rows = allDividendsData?.dividends || [];
+    const rows = allDividends;
     const map = new Map();
     rows.forEach((d) => {
       const [year, month] = d.date.split('-').map(Number);
@@ -105,7 +94,7 @@ export default function Dividends() {
     return [...map.values()]
       .map((p) => ({ ...p, byAsset: [...p.byAsset.values()] }))
       .sort((a, b) => (a.key < b.key ? -1 : 1));
-  }, [allDividendsData, chartGranularity]);
+  }, [allDividends, chartGranularity]);
 
   const quotesByCurrency = useMemo(() => {
     const map = {};
@@ -128,8 +117,8 @@ export default function Dividends() {
     reloadAssets();
     reloadSchedules();
     reloadAll();
-    if (dividendsPage === 1) reloadDividends();
-    else setDividendsPage(1);
+    reloadDividends();
+    setVisibleCount(PAGE_SIZE);
   }
 
   function bankNameFor(assetOrSnapshot) {
@@ -195,7 +184,7 @@ export default function Dividends() {
       <div className="grid grid-3" style={{ marginBottom: 20 }}>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
           <div className="label">Recebido este mês</div>
-          {dividendsLoading && dividendsPage === 1 ? (
+          {dividendsLoading ? (
             <Skeleton width={110} height={24} />
           ) : (
             <div className="value num">{fmt(recebidoMes)}</div>
@@ -203,7 +192,7 @@ export default function Dividends() {
         </div>
         <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
           <div className="label">Recebido este ano</div>
-          {dividendsLoading && dividendsPage === 1 ? (
+          {dividendsLoading ? (
             <Skeleton width={110} height={24} />
           ) : (
             <div className="value num">{fmt(recebidoAno)}</div>
@@ -354,9 +343,9 @@ export default function Dividends() {
         })}
         <LoadMoreButton
           shown={dividends.length}
-          total={dividendsData?.total || 0}
-          loading={dividendsLoading}
-          onClick={() => setDividendsPage((p) => p + 1)}
+          total={allDividends.length}
+          loading={false}
+          onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
         />
       </div>
 
