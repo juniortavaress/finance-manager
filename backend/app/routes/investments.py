@@ -104,20 +104,26 @@ def _resolve_market_events_for_assets(assets):
     independente em cada uma. Retorna:
     - splits_by_asset_id: dict[asset_id -> list[MarketCorporateEvent]] (tipo split)
     - merges_by_target_asset_id: dict[asset_id -> list[(event, source_asset)]]
-    - merged_away_asset_ids: set[asset_id] (sempre posicao zero - foram incorporados)
+    - merge_cutoff_by_asset_id: dict[asset_id -> date] - a origem de uma fusao
+      so' tem suas transacoes ANTERIORES a essa data incorporadas ao destino;
+      a partir dela, o codigo pode voltar a ser negociado normalmente (ex:
+      reaberto pela B3/corretora) e suas compras/vendas contam como posicao
+      PROPRIA da origem, nao mais absorvida pelo destino. Se houver mais de
+      um evento de merger para o mesmo source (nao deveria por validacao na
+      criacao, mas defensivo), usa a data mais recente.
     Pode criar (e persistir via flush, sem commit) o Asset de destino de uma
     fusao quando o usuario ainda nao o possui na conta da origem."""
     splits_by_asset_id = {}
     merges_by_target_asset_id = {}
-    merged_away_asset_ids = set()
+    merge_cutoff_by_asset_id = {}
 
     eligible = [a for a in assets if a.type in CORPORATE_EVENT_ELIGIBLE_TYPES]
     if not eligible:
-        return splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+        return splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
 
     codes = {a.code.strip().upper() for a in eligible if a.code}
     if not codes:
-        return splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+        return splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
 
     events = (
         MarketCorporateEvent.query.filter(
@@ -130,7 +136,7 @@ def _resolve_market_events_for_assets(assets):
         .all()
     )
     if not events:
-        return splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+        return splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
 
     by_account = {}
     for a in eligible:
@@ -147,9 +153,11 @@ def _resolve_market_events_for_assets(assets):
                 for source_asset in account_assets.get(event.source_code.strip().upper(), []):
                     target_asset = _get_or_create_target_asset(investment_account_id, event.target_code)
                     merges_by_target_asset_id.setdefault(target_asset.id, []).append((event, source_asset))
-                    merged_away_asset_ids.add(source_asset.id)
+                    existing_cutoff = merge_cutoff_by_asset_id.get(source_asset.id)
+                    if existing_cutoff is None or event.date > existing_cutoff:
+                        merge_cutoff_by_asset_id[source_asset.id] = event.date
 
-    return splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+    return splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
 
 
 def _get_or_create_target_asset(investment_account_id, code):
@@ -179,13 +187,20 @@ def _round_quantity(value):
     return value.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
-def _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids, _visited=None):
+def _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id, _visited=None):
     """Historico 'efetivo' de um ativo, apos aplicar desdobramentos/
     grupamentos proprios e incorporar (recursivamente) o historico de
     ativos de origem de fusoes cujo destino e' este ativo. NAO muta
     AssetTransaction - so' gera uma lista sintetica, ordenada por data, usada
     no lugar de asset.asset_transactions por qualquer calculo de
     posicao/evolucao.
+
+    Se este proprio `asset` e' origem de uma fusao (esta em
+    merge_cutoff_by_asset_id), suas transacoes ANTERIORES a essa data ja
+    foram incorporadas ao destino e NAO contam aqui - o codigo pode ter
+    voltado a ser negociado apos a fusao (reaberto pela corretora/B3 com o
+    mesmo ticker), entao transacoes a partir da data do evento sao posicao
+    PROPRIA normal deste ativo.
 
     Cada quantity/unit_price escalado por um ratio e' arredondado na mesma
     precisao da coluna no banco (Numeric(18,8)/Numeric(14,6)) - sem isso, um
@@ -198,16 +213,25 @@ def _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id
         return []
     _visited = _visited | {asset.id}
 
+    cutoff = merge_cutoff_by_asset_id.get(asset.id)
     raw = [
         EffectiveTx(tx.type, tx.date, tx.quantity, tx.unit_price, tx.fee_amount, tx.fixed_income_rate_pct, tx.id)
         for tx in asset.asset_transactions
+        if cutoff is None or tx.date >= cutoff
     ]
 
     for event, source_asset in merges_by_target_asset_id.get(asset.id, []):
+        # Historico efetivo da origem SEM aplicar o cutoff dela mesma (essa
+        # chamada esta processando justamente esse merge - o cutoff so' deve
+        # remover as transacoes pre-fusao quando a origem e' consultada
+        # diretamente por conta propria, nao aqui). Ainda aplica splits
+        # proprios da origem e fusoes anteriores recebidas por ela.
+        source_cutoffs_excluding_self = {k: v for k, v in merge_cutoff_by_asset_id.items() if k != source_asset.id}
         source_effective = _effective_transactions(
-            source_asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids, _visited
+            source_asset, splits_by_asset_id, merges_by_target_asset_id, source_cutoffs_excluding_self, _visited
         )
-        merged_tx = _merge_into_single_lot(source_effective, event.ratio, event.date)
+        source_txs_before_event = [tx for tx in source_effective if tx.date < event.date]
+        merged_tx = _merge_into_single_lot(source_txs_before_event, event.ratio, event.date)
         if merged_tx is not None:
             raw.append(merged_tx)
 
@@ -392,37 +416,31 @@ def _fixed_income_month_value(asset: Asset, as_of: dt.date, daily_rates):
 
 
 def _asset_position(
-    asset: Asset, splits_by_asset_id=None, merges_by_target_asset_id=None, merged_away_asset_ids=None
+    asset: Asset, splits_by_asset_id=None, merges_by_target_asset_id=None, merge_cutoff_by_asset_id=None
 ):
     """Quantidade, custo total e preco medio a partir do historico de compras/vendas.
     Vendas reduzem a quantidade mas nao alteram o preco medio das compras restantes
     (metodo de custo medio, sem FIFO/LIFO). Rentabilidade e "total return":
     considera valorizacao do ativo + dividendos recebidos sobre o valor investido.
 
-    splits_by_asset_id/merges_by_target_asset_id/merged_away_asset_ids (ver
+    splits_by_asset_id/merges_by_target_asset_id/merge_cutoff_by_asset_id (ver
     _resolve_market_events_for_assets) ajustam o historico por eventos
     societarios de mercado (desdobramento/incorporacao) antes do calculo -
     todos default vazio, comportamento identico ao de antes da feature para
     quem nao chama com esses mapas."""
     splits_by_asset_id = splits_by_asset_id or {}
     merges_by_target_asset_id = merges_by_target_asset_id or {}
-    merged_away_asset_ids = merged_away_asset_ids or set()
-
-    if asset.id in merged_away_asset_ids:
-        return {
-            "quantity": 0.0,
-            "avg_unit_price": 0.0,
-            "invested_amount": 0.0,
-            "current_amount": 0.0,
-            "dividends_total": float(sum((d.amount for d in asset.dividends), Decimal("0"))),
-            "total_return_pct": None,
-        }
+    merge_cutoff_by_asset_id = merge_cutoff_by_asset_id or {}
 
     quantity = Decimal("0")
     cost_basis = Decimal("0")
     avg_price = Decimal("0")
 
-    txs = _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
+    # _effective_transactions ja filtra as transacoes da origem de uma fusao
+    # pela data de corte (so' conta o que foi negociado A PARTIR do evento,
+    # ja que o que veio antes foi incorporado ao destino) - nao ha mais
+    # necessidade de zerar a posicao aqui incondicionalmente.
+    txs = _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
     for tx in txs:
         if tx.type == "buy":
             cost_basis += tx.quantity * tx.unit_price + tx.fee_amount
@@ -458,10 +476,10 @@ def _asset_position(
 
 
 def _asset_to_dict(
-    asset: Asset, splits_by_asset_id=None, merges_by_target_asset_id=None, merged_away_asset_ids=None
+    asset: Asset, splits_by_asset_id=None, merges_by_target_asset_id=None, merge_cutoff_by_asset_id=None
 ):
     data = asset.to_dict()
-    data["position"] = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
+    data["position"] = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
     data["archived"] = data["position"]["quantity"] <= 0
     currency = asset.investment_account.account.currency
     data["currency"] = currency
@@ -638,7 +656,7 @@ def list_assets():
         if inv_account_ids
         else []
     )
-    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_assets(
+    splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
         all_assets
     )
     # _resolve_market_events_for_assets pode ter criado (via flush) um Asset
@@ -662,7 +680,7 @@ def list_assets():
 
     active, archived = [], []
     for asset in all_assets:
-        data = _asset_to_dict(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
+        data = _asset_to_dict(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
         (archived if data["position"]["quantity"] <= 0 else active).append(data)
     return {"assets": active, "archived_assets": archived}
 
@@ -728,13 +746,13 @@ def list_asset_transactions():
                 .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
                 .all()
             )
-            splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_assets(
+            splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
                 all_account_assets
             )
             db.session.commit()
             for event, source_asset in merges_by_target_asset_id.get(target_asset.id, []):
                 source_effective = _effective_transactions(
-                    source_asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+                    source_asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
                 )
                 merged_tx = _merge_into_single_lot(source_effective, event.ratio, event.date)
                 if merged_tx is None:
@@ -928,7 +946,7 @@ def _compute_asset_evolution(
     exact_first_day=False,
     splits_by_asset_id=None,
     merges_by_target_asset_id=None,
-    merged_away_asset_ids=None,
+    merge_cutoff_by_asset_id=None,
 ):
     """Serie mensal {year, month, invested, current} para o conjunto de
     `assets` informado (pode ser um unico ativo ou o portfolio inteiro).
@@ -943,15 +961,16 @@ def _compute_asset_evolution(
     fechamento de fim de mes - evita "atual" aparecer abaixo de "investido"
     logo no primeiro ponto so' por causa da variacao do resto do mes.
 
-    splits_by_asset_id/merges_by_target_asset_id/merged_away_asset_ids (ver
-    _resolve_market_events_for_assets): ativos em merged_away_asset_ids sao
-    pulados por completo (contribuem 0 em todos os meses) para nao contar o
-    historico duas vezes quando `assets` inclui tanto a origem quanto o
-    destino de uma fusao (ex: investments_summary) - o historico da origem
-    ja esta incorporado ao destino via _effective_transactions."""
+    splits_by_asset_id/merges_by_target_asset_id/merge_cutoff_by_asset_id (ver
+    _resolve_market_events_for_assets): a origem de uma fusao tem, via
+    _effective_transactions, apenas as transacoes ANTERIORES a data do
+    evento removidas (ja incorporadas ao destino) - transacoes a partir da
+    data do evento continuam contando como posicao propria dela normalmente,
+    sem duplicar nada (o que foi incorporado ao destino nunca aparece aqui de
+    novo)."""
     splits_by_asset_id = splits_by_asset_id or {}
     merges_by_target_asset_id = merges_by_target_asset_id or {}
-    merged_away_asset_ids = merged_away_asset_ids or set()
+    merge_cutoff_by_asset_id = merge_cutoff_by_asset_id or {}
 
     last = _month_start(today)
     earliest = months[0] if months else today
@@ -981,14 +1000,12 @@ def _compute_asset_evolution(
     # vez de reprocessar o historico inteiro em cada iteracao (O(ativos x
     # transacoes) no total, em vez de O(meses x ativos x transacoes)).
     effective_txs_by_asset_id = {
-        asset.id: _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
+        asset.id: _effective_transactions(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
         for asset in assets
-        if asset.id not in merged_away_asset_ids
     }
     asset_state = {
         asset.id: {"quantity": Decimal("0"), "cost_basis": Decimal("0"), "avg_price": Decimal("0"), "tx_idx": 0}
         for asset in assets
-        if asset.id not in merged_away_asset_ids
     }
 
     evolution = []
@@ -998,8 +1015,6 @@ def _compute_asset_evolution(
         invested_total = Decimal("0")
         current_total = Decimal("0")
         for asset in assets:
-            if asset.id in merged_away_asset_ids:
-                continue
             state = asset_state[asset.id]
             txs = effective_txs_by_asset_id[asset.id]
             idx = state["tx_idx"]
@@ -1085,13 +1100,13 @@ def asset_evolution(asset_id):
         if inv_account_ids
         else [asset]
     )
-    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_assets(
+    splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
         all_assets
     )
     db.session.commit()
 
     effective_txs = _effective_transactions(
-        asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+        asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
     )
     if not effective_txs:
         return {"evolution": []}
@@ -1114,7 +1129,7 @@ def asset_evolution(asset_id):
     _apply_cached_crypto_prices([asset], currency_by_ia_id)
     _apply_cached_stock_prices([asset], currency_by_ia_id)
 
-    position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
+    position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
     current_amount_by_asset_id = {str(asset.id): position["current_amount"]}
 
     # fx_rates=None e bank_filter=None mantem o valor na moeda nativa do
@@ -1131,7 +1146,7 @@ def asset_evolution(asset_id):
         exact_first_day=True,
         splits_by_asset_id=splits_by_asset_id,
         merges_by_target_asset_id=merges_by_target_asset_id,
-        merged_away_asset_ids=merged_away_asset_ids,
+        merge_cutoff_by_asset_id=merge_cutoff_by_asset_id,
     )
     return {"evolution": evolution}
 
@@ -1184,7 +1199,7 @@ def investments_summary():
         .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
         .all()
     )
-    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_assets(
+    splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
         all_assets
     )
     known_ids = {a.id for a in all_assets}
@@ -1211,7 +1226,7 @@ def investments_summary():
             continue
         bank = banks_by_id.get(account.bank_id)
         data = asset.to_dict()
-        position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
+        position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
         data["position"] = position
         data["bank_id"] = str(account.bank_id)
         data["bank_name"] = bank.name if bank else None
@@ -1228,7 +1243,7 @@ def investments_summary():
             position["dividends_total"] = converted_dividends if converted_dividends is not None else position["dividends_total"]
         assets_result.append(data)
         effective_txs_for_dates = _effective_transactions(
-            asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+            asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
         )
         for tx in effective_txs_for_dates:
             if earliest_date is None or tx.date < earliest_date:
@@ -1371,7 +1386,7 @@ def investments_summary():
             accounts_by_ia_id,
             splits_by_asset_id=splits_by_asset_id,
             merges_by_target_asset_id=merges_by_target_asset_id,
-            merged_away_asset_ids=merged_away_asset_ids,
+            merge_cutoff_by_asset_id=merge_cutoff_by_asset_id,
         )
         for point, month_start in zip(evolution, months):
             month_end = add_months(month_start, 1)
@@ -1587,11 +1602,15 @@ def _create_asset_transaction(asset, kind, data):
     account = asset.investment_account.account
     category = _get_or_create_transfer_category(g.current_user.id)
 
-    splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_account(
+    splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_account(
         asset.investment_account_id
     )
-    if asset.id in merged_away_asset_ids:
-        raise ApiError("Este ativo foi incorporado por outro e não aceita novas operações", 400)
+    merge_cutoff = merge_cutoff_by_asset_id.get(asset.id)
+    if merge_cutoff is not None and trade_date < merge_cutoff:
+        raise ApiError(
+            "Esta data é anterior à incorporação deste ativo por outro — a posição até essa data já foi convertida",
+            400,
+        )
 
     if kind == "buy":
         total_amount = (base_amount + fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -1603,7 +1622,7 @@ def _create_asset_transaction(asset, kind, data):
         if fee_amount > base_amount:
             raise ApiError("Taxa não pode ser maior que o valor da venda", 400)
         total_amount = (base_amount - fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)
+        position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
         if quantity > Decimal(str(position["quantity"])):
             raise ApiError("Quantidade insuficiente do ativo para vender", 400)
         tx_type = "income"
@@ -1725,11 +1744,11 @@ def update_asset_transaction(asset_transaction_id):
         if fee_amount > base_amount:
             raise ApiError("Taxa não pode ser maior que o valor da venda", 400)
         total_amount = (base_amount - fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_account(
+        splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_account(
             asset.investment_account_id
         )
         effective_txs = _effective_transactions(
-            asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
+            asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
         )
         other_quantity = sum(
             (t.quantity if t.type == "buy" else -t.quantity for t in effective_txs if t.source_tx_id != asset_tx.id),
