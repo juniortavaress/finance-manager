@@ -138,6 +138,7 @@ export default function Investments() {
     0
   );
   const totalDividends = activeAssets.reduce((s, a) => s + (a.position.dividends_total || 0), 0);
+  const totalDividendsAllTime = assets.reduce((s, a) => s + (a.position.dividends_total || 0), 0);
   const allocatedCostBasis =
     summaryData?.total_allocated_cost != null
       ? summaryData.total_allocated_cost
@@ -324,7 +325,7 @@ export default function Investments() {
           {summaryLoading || dividendsLoading ? (
             <Skeleton width={110} height={24} />
           ) : (
-            <div className="value num">{fmt(totalDividends)}</div>
+            <div className="value num">{fmt(totalDividendsAllTime)}</div>
           )}
           {dividends.length > 0 && (
             <button
