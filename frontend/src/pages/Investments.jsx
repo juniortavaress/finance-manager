@@ -4,6 +4,7 @@ import { investmentsApi, dividendsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, monthLabelFull } from '../utils/format';
+import Skeleton from '../components/Skeleton';
 import InvestmentEvolutionChart from '../components/charts/InvestmentEvolutionChart';
 import UpcomingDividendsChart from '../components/charts/UpcomingDividendsChart';
 import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
@@ -251,8 +252,17 @@ export default function Investments() {
       <div className="grid grid-4" style={{ marginBottom: 20 }}>
         <div className="card stat-card" style={{ '--stripe': '#3D7A8C' }}>
           <div className="label">Aportes</div>
-          <div className="value num">{fmt(totalInvested)}</div>
-          <div className="delta">dinheiro que saiu do banco pra carteira</div>
+          {summaryLoading ? (
+            <>
+              <Skeleton width={110} height={24} style={{ marginBottom: 6 }} />
+              <Skeleton width={160} height={12} />
+            </>
+          ) : (
+            <>
+              <div className="value num">{fmt(totalInvested)}</div>
+              <div className="delta">dinheiro que saiu do banco pra carteira</div>
+            </>
+          )}
           {contributionsByBank.length > 0 && (
             <button
               type="button"
@@ -266,8 +276,17 @@ export default function Investments() {
         </div>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
           <div className="label">Valor investido</div>
-          <div className="value num">{fmt(allocatedCostBasis)}</div>
-          <div className="delta">custo das posições atuais</div>
+          {summaryLoading ? (
+            <>
+              <Skeleton width={110} height={24} style={{ marginBottom: 6 }} />
+              <Skeleton width={140} height={12} />
+            </>
+          ) : (
+            <>
+              <div className="value num">{fmt(allocatedCostBasis)}</div>
+              <div className="delta">custo das posições atuais</div>
+            </>
+          )}
           {investedByBank.length > 0 && (
             <button
               type="button"
@@ -281,7 +300,11 @@ export default function Investments() {
         </div>
         <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
           <div className="label">Valor atual investido</div>
-          <div className="value num">{fmt(totalCurrent)}</div>
+          {summaryLoading ? (
+            <Skeleton width={110} height={24} />
+          ) : (
+            <div className="value num">{fmt(totalCurrent)}</div>
+          )}
           {byBank.length > 0 && (
             <button
               type="button"
@@ -295,7 +318,11 @@ export default function Investments() {
         </div>
         <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
           <div className="label">Dividendos</div>
-          <div className="value num">{fmt(totalDividends)}</div>
+          {summaryLoading || dividendsLoading ? (
+            <Skeleton width={110} height={24} />
+          ) : (
+            <div className="value num">{fmt(totalDividends)}</div>
+          )}
           {dividends.length > 0 && (
             <button
               type="button"
@@ -309,9 +336,13 @@ export default function Investments() {
         </div>
         <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
           <div className="label">Rentabilidade</div>
-          <div className="value num">
-            {activeAssets.length ? `${rentabilidade >= 0 ? '+' : ''}${rentabilidade.toFixed(1)}%` : '—'}
-          </div>
+          {summaryLoading ? (
+            <Skeleton width={80} height={24} />
+          ) : (
+            <div className="value num">
+              {activeAssets.length ? `${rentabilidade >= 0 ? '+' : ''}${rentabilidade.toFixed(1)}%` : '—'}
+            </div>
+          )}
           {activeAssets.length > 0 && (
             <button
               type="button"
@@ -325,7 +356,11 @@ export default function Investments() {
         </div>
         <div className="card stat-card" style={{ '--stripe': '#8B9A97' }}>
           <div className="label">Caixa disponível</div>
-          <div className="value num">{fmt(totalUnallocated)}</div>
+          {summaryLoading ? (
+            <Skeleton width={110} height={24} />
+          ) : (
+            <div className="value num">{fmt(totalUnallocated)}</div>
+          )}
           {unallocatedByBank.length > 0 && (
             <button
               type="button"
@@ -343,8 +378,18 @@ export default function Investments() {
       <div className="grid grid-2" style={{ marginBottom: 20 }}>
         <div className="card">
           <h3>Distribuição por tipo</h3>
-          {byType.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
-          {byType.map(({ type, total }) => (
+          {summaryLoading &&
+            [0, 1, 2].map((i) => (
+              <div className="hbar-row" key={i}>
+                <div className="hbar-top">
+                  <Skeleton width={90} height={12} />
+                  <Skeleton width={60} height={12} />
+                </div>
+                <Skeleton width="100%" height={8} radius={5} />
+              </div>
+            ))}
+          {!summaryLoading && byType.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
+          {!summaryLoading && byType.map(({ type, total }) => (
             <div className="hbar-row" key={type}>
               <div className="hbar-top">
                 <span className="cat">
@@ -366,8 +411,18 @@ export default function Investments() {
         </div>
         <div className="card">
           <h3>Distribuição por corretora/banco</h3>
-          {byBank.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
-          {byBank.map((b) => (
+          {summaryLoading &&
+            [0, 1, 2].map((i) => (
+              <div className="hbar-row" key={i}>
+                <div className="hbar-top">
+                  <Skeleton width={90} height={12} />
+                  <Skeleton width={60} height={12} />
+                </div>
+                <Skeleton width="100%" height={8} radius={5} />
+              </div>
+            ))}
+          {!summaryLoading && byBank.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
+          {!summaryLoading && byBank.map((b) => (
             <div className="hbar-row" key={b.bank_id}>
               <div className="hbar-top">
                 <span className="cat">
@@ -414,7 +469,9 @@ export default function Investments() {
               </span>
             )}
           </h3>
-          {evolution.length > 0 ? (
+          {summaryLoading ? (
+            <Skeleton width="100%" height={180} radius={8} />
+          ) : evolution.length > 0 ? (
             <InvestmentEvolutionChart periods={evolution} />
           ) : (
             <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -429,7 +486,9 @@ export default function Investments() {
               ver todos →
             </span>
           </h3>
-          {upcomingDividends.every((p) => p.total === 0) ? (
+          {schedulesData === null ? (
+            <Skeleton width="100%" height={180} radius={8} />
+          ) : upcomingDividends.every((p) => p.total === 0) ? (
             <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               Nenhum provento recorrente ativo.
             </div>
@@ -441,8 +500,21 @@ export default function Investments() {
 
       <div className="card">
         <h3>{bankFilter ? `Posições em ${bankOptions.find(([id]) => id === bankFilter)?.[1] || ''}` : 'Maiores posições'}</h3>
-        {topPositions.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
-        {topPositions.map((asset) => {
+        {summaryLoading &&
+          [0, 1, 2, 3].map((i) => (
+            <div className="tx-row" key={i}>
+              <div className="tx-left">
+                <Skeleton width={34} height={34} radius={9} />
+                <div>
+                  <Skeleton width={130} height={13} style={{ marginBottom: 5 }} />
+                  <Skeleton width={160} height={11} />
+                </div>
+              </div>
+              <Skeleton width={80} height={14} />
+            </div>
+          ))}
+        {!summaryLoading && topPositions.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
+        {!summaryLoading && topPositions.map((asset) => {
           const pos = asset.position;
           return (
             <div className="tx-row" key={asset.id}>

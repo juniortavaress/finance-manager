@@ -190,31 +190,54 @@ def get_monthly_prices(symbol, currency, months, earliest_date):
     preco historico real por mes, em vez de reaproveitar o preco atual.
     Retorna {month_start: Decimal}, so' com os meses que tem preco
     cacheado disponivel ate aquele ponto."""
-    if not months or earliest_date is None:
+    result = get_monthly_prices_bulk([(symbol, currency)], months, earliest_date)
+    return result.get((symbol, currency), {})
+
+
+def get_monthly_prices_bulk(symbol_currency_pairs, months, earliest_date):
+    """Equivalente a get_monthly_prices, mas para varios pares (symbol,
+    currency) de uma so' vez, com UMA UNICA query (WHERE symbol IN (...) AND
+    currency IN (...)) em vez de uma query por simbolo - usada pelo grafico
+    de evolucao do portfolio inteiro, onde chamar get_monthly_prices em loop
+    (uma ida ao banco por ativo/simbolo distinto) e' o gargalo dominante da
+    rota com dezenas de simbolos. Retorna {(symbol, currency): {month_start:
+    Decimal}}."""
+    if not months or earliest_date is None or not symbol_currency_pairs:
         return {}
 
+    symbols = {s for s, _ in symbol_currency_pairs}
+    currencies = {c for _, c in symbol_currency_pairs}
     rows = (
         StockPrice.query.filter(
-            StockPrice.symbol == symbol,
-            StockPrice.currency == currency,
+            StockPrice.symbol.in_(symbols),
+            StockPrice.currency.in_(currencies),
             StockPrice.date >= earliest_date,
         )
-        .order_by(StockPrice.date)
+        .order_by(StockPrice.symbol, StockPrice.currency, StockPrice.date)
         .all()
     )
-    if not rows:
-        return {}
-    daily_prices = [(row.date, row.price) for row in rows]
 
-    monthly = {}
-    price_idx = 0
-    last_price = None
-    for month_start in months:
-        month_end = add_months(month_start, 1)
-        while price_idx < len(daily_prices) and daily_prices[price_idx][0] < month_end:
-            last_price = daily_prices[price_idx][1]
-            price_idx += 1
-        if last_price is not None:
-            monthly[month_start] = last_price
+    daily_prices_by_key = {}
+    for row in rows:
+        key = (row.symbol, row.currency)
+        daily_prices_by_key.setdefault(key, []).append((row.date, row.price))
 
-    return monthly
+    result = {}
+    for key in symbol_currency_pairs:
+        daily_prices = daily_prices_by_key.get(key)
+        if not daily_prices:
+            continue
+        monthly = {}
+        price_idx = 0
+        last_price = None
+        for month_start in months:
+            month_end = add_months(month_start, 1)
+            while price_idx < len(daily_prices) and daily_prices[price_idx][0] < month_end:
+                last_price = daily_prices[price_idx][1]
+                price_idx += 1
+            if last_price is not None:
+                monthly[month_start] = last_price
+        if monthly:
+            result[key] = monthly
+
+    return result

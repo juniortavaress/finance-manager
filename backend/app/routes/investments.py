@@ -34,7 +34,7 @@ from app.services.market_data_service import trigger_refresh_for_current_user
 from app.services.quotes_service import convert_to_brl, get_brl_rates
 from app.services.stock_service import YAHOO_CURRENCY_SUFFIX
 from app.services.stock_service import get_current_prices as get_current_stock_prices
-from app.services.stock_service import get_monthly_prices as get_stock_monthly_prices
+from app.services.stock_service import get_monthly_prices_bulk as get_stock_monthly_prices_bulk
 from app.services.stock_service import get_price_on_or_before as get_stock_price_on_or_before
 
 investments_bp = Blueprint("investments", __name__)
@@ -858,20 +858,29 @@ def _crypto_monthly_prices(assets, months, earliest_date, currency_by_ia_id):
     if not assets_by_key:
         return {}
 
+    # UMA UNICA query com IN (symbols/currencies), em vez de uma query por
+    # simbolo distinto - com dezenas de criptos essa era uma fonte grande de
+    # latencia (uma ida ao banco por simbolo, sequencial).
+    symbols = {s for s, _ in assets_by_key}
+    currencies = {c for _, c in assets_by_key}
+    rows = (
+        CryptoPrice.query.filter(
+            CryptoPrice.symbol.in_(symbols),
+            CryptoPrice.currency.in_(currencies),
+            CryptoPrice.date >= earliest_date,
+        )
+        .order_by(CryptoPrice.symbol, CryptoPrice.currency, CryptoPrice.date)
+        .all()
+    )
+    daily_prices_by_key = {}
+    for row in rows:
+        daily_prices_by_key.setdefault((row.symbol, row.currency), []).append((row.date, row.price))
+
     result = {}
     for (symbol, currency), assets_for_id in assets_by_key.items():
-        rows = (
-            CryptoPrice.query.filter(
-                CryptoPrice.symbol == symbol,
-                CryptoPrice.currency == currency,
-                CryptoPrice.date >= earliest_date,
-            )
-            .order_by(CryptoPrice.date)
-            .all()
-        )
-        if not rows:
+        daily_prices = daily_prices_by_key.get((symbol, currency))
+        if not daily_prices:
             continue
-        daily_prices = [(row.date, row.price) for row in rows]
 
         monthly = {}
         price_idx = 0
@@ -909,9 +918,15 @@ def _stock_monthly_prices(assets, months, earliest_date, currency_by_ia_id):
     if not assets_by_key:
         return {}
 
+    # UMA UNICA query com IN (symbols/currencies) via get_stock_monthly_prices_bulk,
+    # em vez de uma query por simbolo distinto - com dezenas de acoes/FIIs
+    # essa era a maior fonte de latencia da rota (uma ida ao banco por
+    # simbolo, sequencial - ver conversa que motivou o batching).
+    monthly_by_key = get_stock_monthly_prices_bulk(list(assets_by_key.keys()), months, earliest_date)
+
     result = {}
-    for (symbol, currency), assets_for_id in assets_by_key.items():
-        monthly = get_stock_monthly_prices(symbol, currency, months, earliest_date)
+    for key, assets_for_id in assets_by_key.items():
+        monthly = monthly_by_key.get(key)
         if not monthly:
             continue
         for asset in assets_for_id:
@@ -1249,16 +1264,24 @@ def investments_summary():
             if earliest_date is None or tx.date < earliest_date:
                 earliest_date = tx.date
 
-    def _transfer_txs(account, tx_type):
-        return Transaction.query.filter(
-            Transaction.account_id == account.id,
+    # UMA UNICA query com account_id IN (...) para todas as contas de
+    # investimento, em vez de uma query por conta dentro do loop abaixo (N+1
+    # - com poucas contas ja bastava para dominar o tempo da rota, uma ida ao
+    # banco de cada vez). Indexado por (account_id, tx_type) em memoria.
+    all_transfer_txs_by_key = {}
+    if account_ids:
+        for tx in Transaction.query.filter(
+            Transaction.account_id.in_(account_ids),
             Transaction.is_transfer.is_(True),
-            Transaction.type == tx_type,
             Transaction.status == "confirmed",
             ~Transaction.description.startswith("Compra "),
             ~Transaction.description.startswith("Venda "),
             ~Transaction.description.startswith("Provento "),
-        ).all()
+        ).all():
+            all_transfer_txs_by_key.setdefault((tx.account_id, tx.type), []).append(tx)
+
+    def _transfer_txs(account, tx_type):
+        return all_transfer_txs_by_key.get((account.id, tx_type), [])
 
     def _transfer_flow(account, tx_type):
         return sum((tx.amount for tx in _transfer_txs(account, tx_type)), Decimal("0"))
@@ -1354,14 +1377,16 @@ def investments_summary():
         net_flow_events = []
         relevant_account_ids = [accounts_by_ia_id[ia_id].id for ia_id in relevant_ia_ids]
         if relevant_account_ids:
-            transfer_txs = Transaction.query.filter(
-                Transaction.account_id.in_(relevant_account_ids),
-                Transaction.is_transfer.is_(True),
-                Transaction.status == "confirmed",
-                ~Transaction.description.startswith("Compra "),
-                ~Transaction.description.startswith("Venda "),
-                ~Transaction.description.startswith("Provento "),
-            ).all()
+            relevant_account_id_set = set(relevant_account_ids)
+            # Reaproveita all_transfer_txs_by_key (ja buscado acima, uma
+            # unica query para todas as contas) em vez de repetir a mesma
+            # query de transferencias de novo.
+            transfer_txs = [
+                tx
+                for (account_id, _tx_type), txs in all_transfer_txs_by_key.items()
+                if account_id in relevant_account_id_set
+                for tx in txs
+            ]
             accounts_by_account_id = {a.id: a for a in accounts_by_id.values()}
             for tx in transfer_txs:
                 signed_amount = tx.amount if tx.type == "income" else -tx.amount
