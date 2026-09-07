@@ -43,7 +43,7 @@ function initials(text) {
 }
 
 export default function Dividends() {
-  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
+  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssetsLight(signal), []);
   const { data: schedulesData, loading: schedulesLoading, reload: reloadSchedules } = useFetch(
     () => dividendsApi.listSchedules(),
     []

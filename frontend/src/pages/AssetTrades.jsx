@@ -68,7 +68,7 @@ export default function AssetTrades() {
   const [buyPage, setBuyPage] = useState(1);
   const [sellPage, setSellPage] = useState(1);
 
-  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
+  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssetsLight(signal), []);
 
   const [purchasesAccumulated, setPurchasesAccumulated] = useState([]);
   const [salesAccumulated, setSalesAccumulated] = useState([]);

@@ -685,6 +685,62 @@ def list_assets():
     return {"assets": active, "archived_assets": archived}
 
 
+@investments_bp.get("/assets/light")
+@login_required
+def list_assets_light():
+    """Versao minima de GET /assets: so' id/code/name/type/investment_account_id
+    e a quantidade liquida (soma simples de compra-venda, SEM aplicar
+    splits/fusoes de mercado). Usada por telas que so' precisam identificar
+    ativos existentes para o usuario escolher (ex: PickAssetModal em Compras
+    e vendas) - a rota completa recalcula preco medio, rentabilidade e bate
+    no cache de cotacoes para TODOS os ativos a cada chamada, o que e' um
+    custo desnecessario so' para popular um dropdown de nomes.
+
+    A quantidade aqui pode divergir ligeiramente da quantidade "oficial" (ver
+    _asset_position) em torno de um evento de split/fusao ainda nao
+    processado, mas serve bem para o unico uso que faz dela: filtrar quais
+    ativos ainda tem posicao > 0 ao vender (o modal so' usa isso como
+    contagem grosseira, a validacao real de quantidade acontece no backend
+    ao confirmar a venda)."""
+    inv_accounts = _owned_investment_accounts()
+    inv_account_ids = [ia.id for ia in inv_accounts]
+    if not inv_account_ids:
+        return {"assets": []}
+
+    account_ids = [ia.account_id for ia in inv_accounts]
+    accounts_by_id = {a.id: a for a in Account.query.filter(Account.id.in_(account_ids)).all()}
+    currency_by_ia_id = {ia.id: accounts_by_id[ia.account_id].currency for ia in inv_accounts}
+
+    net_qty_by_asset_id = dict(
+        db.session.query(
+            AssetTransaction.asset_id,
+            db.func.sum(
+                db.case((AssetTransaction.type == "buy", AssetTransaction.quantity), else_=-AssetTransaction.quantity)
+            ),
+        )
+        .join(Asset, Asset.id == AssetTransaction.asset_id)
+        .filter(Asset.investment_account_id.in_(inv_account_ids))
+        .group_by(AssetTransaction.asset_id)
+        .all()
+    )
+
+    assets = Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all()
+    return {
+        "assets": [
+            {
+                "id": str(a.id),
+                "code": a.code,
+                "name": a.name,
+                "type": a.type,
+                "investment_account_id": str(a.investment_account_id),
+                "currency": currency_by_ia_id.get(a.investment_account_id),
+                "position": {"quantity": float(net_qty_by_asset_id.get(a.id, 0))},
+            }
+            for a in assets
+        ]
+    }
+
+
 @investments_bp.post("/refresh-market-data")
 @login_required
 def refresh_market_data():
