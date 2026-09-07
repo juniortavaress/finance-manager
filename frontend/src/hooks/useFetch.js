@@ -7,6 +7,16 @@ export function useFetch(fetcher, deps = []) {
   const hasLoadedOnce = useRef(false);
   const controllerRef = useRef(null);
 
+  // Reseta hasLoadedOnce sempre que as deps mudam (nao so' na primeira
+  // montagem) - senao, um segundo useFetch para um ID diferente (ex: trocar
+  // de ativo no mesmo modal aberto) herda hasLoadedOnce=true da carga
+  // anterior e initialLoading vira false na hora, pulando o skeleton e
+  // mostrando o empty-state por um instante com os dados do ID errado/vazios.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    hasLoadedOnce.current = false;
+  }, deps);
+
   const reload = useCallback(() => {
     controllerRef.current?.abort();
     const controller = new AbortController();

@@ -309,6 +309,10 @@ def list_dividends():
         .options(contains_eager(Dividend.asset).contains_eager(Asset.investment_account).contains_eager(InvestmentAccount.account))
     )
 
+    asset_id = request.args.get("asset_id")
+    if asset_id:
+        base_query = base_query.filter(Dividend.asset_id == asset_id)
+
     fx_rates, _ = get_brl_rates()
 
     # Totais (mes/ano correntes) somados sobre TODOS os dividendos do

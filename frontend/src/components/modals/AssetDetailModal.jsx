@@ -1,7 +1,9 @@
-import { investmentsApi } from '../../api/resources';
+import { useMemo, useState } from 'react';
+import { dividendsApi, investmentsApi } from '../../api/resources';
 import { useFetch } from '../../hooks/useFetch';
 import { fmt, fmtDateFull } from '../../utils/format';
 import InvestmentEvolutionChart from '../charts/InvestmentEvolutionChart';
+import UpcomingDividendsChart from '../charts/UpcomingDividendsChart';
 import ModalShell from './ModalShell';
 import Skeleton from '../Skeleton';
 
@@ -23,6 +25,7 @@ const TYPE_LABELS = {
 export default function AssetDetailModal({ open, onClose, asset }) {
   const assetId = asset?.id || null;
   const currency = asset?.currency;
+  const [chartView, setChartView] = useState('evolution');
 
   const { data: evoData, initialLoading: evoLoading } = useFetch(
     (signal) => (assetId ? investmentsApi.assetEvolution(assetId, signal) : Promise.resolve({ evolution: [] })),
@@ -35,6 +38,24 @@ export default function AssetDetailModal({ open, onClose, asset }) {
         : Promise.resolve({ asset_transactions: [] }),
     [assetId, open]
   );
+  const { data: divData, initialLoading: divLoading } = useFetch(
+    (signal) =>
+      assetId ? dividendsApi.list({ asset_id: assetId, limit: 1000 }, signal) : Promise.resolve({ dividends: [] }),
+    [assetId, open]
+  );
+
+  const dividendsByMonth = useMemo(() => {
+    const dividends = divData?.dividends || [];
+    const map = new Map();
+    dividends.forEach((d) => {
+      const [year, month] = d.date.split('-').map(Number);
+      const key = `${year}-${month}`;
+      const prev = map.get(key) || { year, month, total: 0 };
+      prev.total += d.amount_brl ?? d.amount;
+      map.set(key, prev);
+    });
+    return [...map.values()].sort((a, b) => (a.year - b.year) || (a.month - b.month));
+  }, [divData]);
 
   if (!open) return null;
 
@@ -85,12 +106,44 @@ export default function AssetDetailModal({ open, onClose, asset }) {
           </button>
         </div>
         <div className="modal-body modal-body-scroll">
-          <h3 style={{ fontSize: 13, marginBottom: 10 }}>Evolução</h3>
-          {evoLoading && <Skeleton width="100%" height={180} radius={8} />}
-          {!evoLoading && evolution.length < 2 && (
-            <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Histórico insuficiente para exibir o gráfico.</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <h3 style={{ fontSize: 13, margin: 0 }}>{chartView === 'evolution' ? 'Evolução' : 'Dividendos'}</h3>
+            {!divLoading && dividendsByMonth.length > 0 && (
+              <div className="seg" style={{ maxWidth: 148, padding: 2 }}>
+                <div
+                  className={`seg-opt${chartView === 'evolution' ? ' active' : ''}`}
+                  onClick={() => setChartView('evolution')}
+                  style={{ padding: '4px 8px', fontSize: 11.5, fontWeight: 500 }}
+                >
+                  Evolução
+                </div>
+                <div
+                  className={`seg-opt${chartView === 'dividends' ? ' active' : ''}`}
+                  onClick={() => setChartView('dividends')}
+                  style={{ padding: '4px 8px', fontSize: 11.5, fontWeight: 500 }}
+                >
+                  Dividendos
+                </div>
+              </div>
+            )}
+          </div>
+          {chartView === 'evolution' ? (
+            <>
+              {evoLoading && <Skeleton width="100%" height={180} radius={8} />}
+              {!evoLoading && evolution.length < 2 && (
+                <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Histórico insuficiente para exibir o gráfico.</p>
+              )}
+              {!evoLoading && evolution.length >= 2 && <InvestmentEvolutionChart periods={evolution} />}
+            </>
+          ) : (
+            <>
+              {divLoading && <Skeleton width="100%" height={180} radius={8} />}
+              {!divLoading && dividendsByMonth.length === 0 && (
+                <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Nenhum dividendo recebido ainda.</p>
+              )}
+              {!divLoading && dividendsByMonth.length > 0 && <UpcomingDividendsChart periods={dividendsByMonth} />}
+            </>
           )}
-          {!evoLoading && evolution.length >= 2 && <InvestmentEvolutionChart periods={evolution} />}
 
           <h3 style={{ fontSize: 13, marginTop: 36, marginBottom: 10 }}>Dados</h3>
           <div
