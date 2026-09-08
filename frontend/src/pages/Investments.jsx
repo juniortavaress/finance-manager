@@ -30,6 +30,7 @@ const TYPE_LABELS = {
   etf: 'ETF',
   cripto: 'Cripto',
   outro: 'Outro',
+  internacional: 'Internacional',
 };
 const TYPE_COLORS = {
   renda_fixa: '#0F5C5C',
@@ -39,6 +40,7 @@ const TYPE_COLORS = {
   etf: '#2E7D5B',
   cripto: '#A6432C',
   outro: '#8B9A97',
+  internacional: '#4A5FBF',
 };
 
 export default function Investments() {
@@ -154,12 +156,13 @@ export default function Investments() {
     const map = {};
     activeAssets.forEach((a) => {
       const value = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
-      map[a.type] = (map[a.type] || 0) + value;
+      const key = !bankFilter && a.currency && a.currency !== 'BRL' ? 'internacional' : a.type;
+      map[key] = (map[key] || 0) + value;
     });
     return Object.entries(map)
       .map(([type, total]) => ({ type, total }))
       .sort((a, b) => b.total - a.total);
-  }, [activeAssets]);
+  }, [activeAssets, bankFilter]);
   const typeMax = Math.max(1, ...byType.map((t) => t.total));
   const typeSum = byType.reduce((s, t) => s + t.total, 0) || 1;
 
