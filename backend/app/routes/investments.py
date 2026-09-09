@@ -309,6 +309,39 @@ def _merge_into_single_lot(source_effective_txs, ratio, event_date):
     return EffectiveTx("buy", event_date, new_quantity, new_unit_price, Decimal("0"), None, None)
 
 
+def _effective_dividends(asset, merges_by_target_asset_id, merge_cutoff_by_asset_id, _visited=None):
+    """Historico 'efetivo' de dividendos de um ativo: lista de (date, amount),
+    incorporando (recursivamente) os dividendos de ativos de origem de fusao
+    cujo destino e' este ativo - mesma estrutura de _effective_transactions.
+
+    Se este proprio `asset` e' origem de uma fusao (esta em
+    merge_cutoff_by_asset_id), seus dividendos ANTERIORES a essa data ja
+    foram incorporados ao destino e NAO contam aqui; dividendos a partir da
+    data do evento sao proventos PROPRIOS normais deste ativo (o codigo pode
+    ter voltado a ser negociado apos a fusao)."""
+    if _visited is None:
+        _visited = set()
+    if asset.id in _visited:
+        return []
+    _visited = _visited | {asset.id}
+
+    cutoff = merge_cutoff_by_asset_id.get(asset.id)
+    raw = [(d.date, d.amount) for d in asset.dividends if cutoff is None or d.date >= cutoff]
+
+    for event, source_asset in merges_by_target_asset_id.get(asset.id, []):
+        # Historico efetivo da origem SEM aplicar o cutoff dela mesma (essa
+        # chamada esta processando justamente esse merge), igual
+        # _effective_transactions - so' os dividendos pagos ANTES do evento
+        # sao incorporados ao destino.
+        source_cutoffs_excluding_self = {k: v for k, v in merge_cutoff_by_asset_id.items() if k != source_asset.id}
+        source_effective = _effective_dividends(
+            source_asset, merges_by_target_asset_id, source_cutoffs_excluding_self, _visited
+        )
+        raw += [(date, amount) for date, amount in source_effective if date < event.date]
+
+    return raw
+
+
 def _lot_rate_pct(asset: Asset, tx):
     """Taxa contratada de um lote (compra) especifico: usa a taxa gravada na
     propria transacao (cada compra trava a taxa de mercado do dia) e cai para
@@ -458,7 +491,8 @@ def _asset_position(
             current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
     else:
         current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
-    dividends_total = sum((d.amount for d in asset.dividends), Decimal("0"))
+    effective_dividends = _effective_dividends(asset, merges_by_target_asset_id, merge_cutoff_by_asset_id)
+    dividends_total = sum((amount for _, amount in effective_dividends), Decimal("0"))
 
     base_value = current_value if current_value is not None else cost_basis
     total_return_pct = (
