@@ -9,7 +9,7 @@ from sqlalchemy.orm import contains_eager
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import Account, Asset, Category, Dividend, DividendSchedule, InvestmentAccount, Transaction
+from app.models import Account, Asset, Bank, Category, Dividend, DividendSchedule, InvestmentAccount, Transaction
 from app.models.investment import DIVIDEND_CALC_MODES, DIVIDEND_FREQUENCIES, DIVIDEND_KINDS
 from app.services.finance_service import add_months, recalc_account_balance, safe_day
 from app.services.quotes_service import convert_to_brl, get_brl_rates
@@ -208,13 +208,29 @@ def list_schedules():
         .join(InvestmentAccount, InvestmentAccount.id == Asset.investment_account_id)
         .join(Account, Account.id == InvestmentAccount.account_id)
         .filter(Account.user_id == g.current_user.id)
+        .options(
+            contains_eager(DividendSchedule.asset)
+            .contains_eager(Asset.investment_account)
+            .contains_eager(InvestmentAccount.account),
+            contains_eager(DividendSchedule.asset).selectinload(Asset.asset_transactions),
+            contains_eager(DividendSchedule.asset).selectinload(Asset.dividends),
+        )
         .order_by(DividendSchedule.created_at.desc())
         .all()
     )
+    bank_ids = {s.asset.investment_account.account.bank_id for s in schedules}
+    banks_by_id = {b.id: b for b in Bank.query.filter(Bank.id.in_(bank_ids)).all()}
+
     result = []
     for s in schedules:
         data = s.to_dict()
+        account = s.asset.investment_account.account
+        bank = banks_by_id.get(account.bank_id)
+        quantity = Decimal(str(_asset_position(s.asset)["quantity"]))
         data["asset"] = s.asset.to_dict()
+        data["bank_id"] = str(account.bank_id)
+        data["bank_name"] = bank.name if bank else None
+        data["expected_amount"] = float(_amount_for_schedule(s, quantity))
         result.append(data)
     return {"dividend_schedules": result}
 

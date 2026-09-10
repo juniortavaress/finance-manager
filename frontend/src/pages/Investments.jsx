@@ -96,13 +96,10 @@ export default function Investments() {
     const nextKey = `${nextMonthDate.getFullYear()}-${nextMonthDate.getMonth() + 1}`;
 
     const rows = schedules
-      .filter((s) => s.active)
+      .filter((s) => s.active && (!bankFilter || s.bank_id === bankFilter))
       .map((s) => {
-        const asset = assets.find((a) => a.id === s.asset_id);
-        const quantity = asset?.position?.quantity || 0;
-        const value = s.calc_mode === 'fixed' ? s.fixed_amount || 0 : (s.amount_per_share || 0) * quantity;
         const dueDate = new Date(`${s.next_due_date}T00:00:00`);
-        return { schedule: s, asset, value, dueDate, key: `${dueDate.getFullYear()}-${dueDate.getMonth() + 1}` };
+        return { schedule: s, asset: s.asset, value: s.expected_amount || 0, dueDate, key: `${dueDate.getFullYear()}-${dueDate.getMonth() + 1}` };
       })
       .filter((r) => r.value > 0);
 
@@ -110,7 +107,7 @@ export default function Investments() {
     const list = thisMonth.length > 0 ? thisMonth : rows.filter((r) => r.key === nextKey);
 
     return list.sort((a, b) => a.dueDate - b.dueDate);
-  }, [schedules, assets]);
+  }, [schedules, bankFilter]);
 
   const totalCurrent = activeAssets.reduce(
     (s, a) => s + (a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount),
@@ -457,7 +454,7 @@ export default function Investments() {
                       <div className="tx-desc">{r.asset?.code || r.asset?.name}</div>
                       <div className="tx-meta">
                         {KIND_LABELS[r.schedule.kind] || r.schedule.kind} · {FREQUENCY_LABELS[r.schedule.frequency] || r.schedule.frequency}
-                        {r.asset?.bank_name ? ` · ${r.asset.bank_name}` : ''}
+                        {r.schedule.bank_name ? ` · ${r.schedule.bank_name}` : ''}
                       </div>
                     </div>
                   </div>
