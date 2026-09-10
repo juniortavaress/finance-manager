@@ -1278,7 +1278,6 @@ def investments_summary():
             "assets": [],
             "unallocated_by_bank": [],
             "invested_by_bank": [],
-            "evolution": [],
             "total_transferred": 0,
             "total_invested": 0,
             "total_allocated_cost": 0,
@@ -1332,7 +1331,6 @@ def investments_summary():
     _apply_cached_crypto_prices(all_assets, currency_by_ia_id_all)
     _apply_cached_stock_prices(all_assets, currency_by_ia_id_all)
     assets_result = []
-    earliest_date = None
     for asset in all_assets:
         account = accounts_by_ia_id[asset.investment_account_id]
         if bank_filter and str(account.bank_id) != bank_filter:
@@ -1355,12 +1353,6 @@ def investments_summary():
             converted_dividends = _to_brl(position["dividends_total"], account.currency)
             position["dividends_total"] = converted_dividends if converted_dividends is not None else position["dividends_total"]
         assets_result.append(data)
-        effective_txs_for_dates = _effective_transactions(
-            asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
-        )
-        for tx in effective_txs_for_dates:
-            if earliest_date is None or tx.date < earliest_date:
-                earliest_date = tx.date
 
     # UMA UNICA query com account_id IN (...) para todas as contas de
     # investimento, em vez de uma query por conta dentro do loop abaixo (N+1
@@ -1449,74 +1441,6 @@ def investments_summary():
             }
         )
 
-    evolution = []
-    if earliest_date:
-        today = dt.date.today()
-        cursor = _month_start(earliest_date)
-        last = _month_start(today)
-        months = []
-        while cursor <= last:
-            months.append(cursor)
-            cursor = add_months(cursor, 1)
-
-        relevant_ia_ids = [
-            ia.id
-            for ia in inv_accounts
-            if not bank_filter or str(accounts_by_ia_id[ia.id].bank_id) == bank_filter
-        ]
-        relevant_assets = [a for a in all_assets if a.investment_account_id in relevant_ia_ids]
-        current_amount_by_asset_id = {a["id"]: a["position"]["current_amount"] for a in assets_result}
-
-        # Movimentacoes de aporte liquido, com data, pra plotar em degrau (mesmo
-        # criterio de net_transferred acima): transferencias externas para a
-        # conta de investimento, excluindo movimentacoes internas de compra/venda.
-        # Conceito de conta/portfolio (nao de ativo individual), por isso fica
-        # de fora de _compute_asset_evolution e e' mesclado de volta abaixo.
-        net_flow_events = []
-        relevant_account_ids = [accounts_by_ia_id[ia_id].id for ia_id in relevant_ia_ids]
-        if relevant_account_ids:
-            relevant_account_id_set = set(relevant_account_ids)
-            # Reaproveita all_transfer_txs_by_key (ja buscado acima, uma
-            # unica query para todas as contas) em vez de repetir a mesma
-            # query de transferencias de novo.
-            transfer_txs = [
-                tx
-                for (account_id, _tx_type), txs in all_transfer_txs_by_key.items()
-                if account_id in relevant_account_id_set
-                for tx in txs
-            ]
-            accounts_by_account_id = {a.id: a for a in accounts_by_id.values()}
-            for tx in transfer_txs:
-                signed_amount = tx.amount if tx.type == "income" else -tx.amount
-                tx_currency = accounts_by_account_id[tx.account_id].currency
-                if not bank_filter and tx_currency != "BRL":
-                    # tx.exchange_rate e' BRL->moeda_destino (ver
-                    # _transfer_flow_brl acima) - dividir, nao multiplicar,
-                    # pra converter o valor (na moeda estrangeira) para BRL.
-                    if tx.exchange_rate:
-                        signed_amount /= tx.exchange_rate
-                    else:
-                        signed_amount *= Decimal(str((fx_rates or {}).get(tx_currency, 1)))
-                net_flow_events.append((tx.date, signed_amount))
-
-        evolution = _compute_asset_evolution(
-            relevant_assets,
-            months,
-            today,
-            current_amount_by_asset_id,
-            fx_rates,
-            bank_filter,
-            accounts_by_ia_id,
-            splits_by_asset_id=splits_by_asset_id,
-            merges_by_target_asset_id=merges_by_target_asset_id,
-            merge_cutoff_by_asset_id=merge_cutoff_by_asset_id,
-        )
-        for point, month_start in zip(evolution, months):
-            month_end = add_months(month_start, 1)
-            point["net_flow"] = float(
-                sum((amount for date, amount in net_flow_events if date < month_end), Decimal("0"))
-            )
-
     active_assets_result = [a for a in assets_result if a["position"]["quantity"] > 0]
     allocated_cost_basis = sum(
         (Decimal(str(a["position"]["invested_amount"])) for a in active_assets_result), Decimal("0")
@@ -1533,39 +1457,17 @@ def investments_summary():
         else None
     )
 
-    def _rentability_from(base_current):
-        if base_current is None or base_current <= 0 or not evolution:
-            return None
-        last_current = Decimal(str(evolution[-1]["current"]))
-        return float(((last_current - base_current) / base_current) * 100)
-
-    rentability_last_month = (
-        _rentability_from(Decimal(str(evolution[-2]["current"]))) if len(evolution) >= 2 else None
-    )
-
-    rentability_last_year = None
-    if len(evolution) >= 2:
-        last_point = evolution[-1]
-        target_year = last_point["year"] - 1
-        year_ago_point = next(
-            (p for p in evolution if p["year"] == target_year and p["month"] == last_point["month"]), None
-        )
-        base_point = year_ago_point or evolution[0]
-        if base_point is not evolution[-1]:
-            rentability_last_year = _rentability_from(Decimal(str(base_point["current"])))
-
     return {
         "assets": assets_result,
         "unallocated_by_bank": unallocated_by_bank,
         "invested_by_bank": invested_by_bank,
-        "evolution": evolution,
         "total_transferred": float(total_transferred),
         "total_invested": float(total_invested),
         "total_allocated_cost": float(allocated_cost_basis),
         "total_unallocated": float(total_unallocated),
         "rentability_total": rentability_total,
-        "rentability_last_month": rentability_last_month,
-        "rentability_last_year": rentability_last_year,
+        "rentability_last_month": None,
+        "rentability_last_year": None,
         "fx_rates": fx_rates,
         "fx_updated_at": fx_updated_at.isoformat() if fx_updated_at else None,
     }

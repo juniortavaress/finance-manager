@@ -5,7 +5,6 @@ import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, monthLabelFull } from '../utils/format';
 import Skeleton from '../components/Skeleton';
-import InvestmentEvolutionChart from '../components/charts/InvestmentEvolutionChart';
 import UpcomingDividendsChart from '../components/charts/UpcomingDividendsChart';
 import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
 import InvestmentBreakdownDrilldownModal from '../components/modals/InvestmentBreakdownDrilldownModal';
@@ -60,7 +59,6 @@ export default function Investments() {
 
   const assets = summaryData?.assets || [];
   const unallocatedByBank = summaryData?.unallocated_by_bank || [];
-  const evolution = summaryData?.evolution || [];
   const totalUnallocated = summaryData?.total_unallocated || 0;
   const dividends = dividendsData?.dividends || [];
   const schedules = schedulesData?.dividend_schedules || [];
@@ -450,41 +448,10 @@ export default function Investments() {
 
       <div className="grid grid-2" style={{ marginBottom: 20 }}>
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>Evolução do patrimônio investido</span>
-            {evolution.length > 0 && (
-              <span style={{ display: 'flex', gap: 12, textTransform: 'none', letterSpacing: 0 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--ink-soft)' }}>
-                  <span style={{ width: 14, height: 2, background: 'var(--teal)', display: 'inline-block' }} />
-                  Valor atual
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--ink-soft)' }}>
-                  <span
-                    style={{
-                      width: 14,
-                      height: 0,
-                      borderTop: '2px dashed var(--ink-faint)',
-                      display: 'inline-block',
-                    }}
-                  />
-                  Investido
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--ink-soft)' }}>
-                  <span style={{ width: 14, height: 2, background: 'var(--gold)', display: 'inline-block' }} />
-                  Aporte líquido
-                </span>
-              </span>
-            )}
-          </h3>
-          {summaryLoading ? (
-            <Skeleton width="100%" height={180} radius={8} />
-          ) : evolution.length > 0 ? (
-            <InvestmentEvolutionChart periods={evolution} />
-          ) : (
-            <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              Nenhuma compra registrada ainda.
-            </div>
-          )}
+          <h3>Análises</h3>
+          <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            Mais análises em breve.
+          </div>
         </div>
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
           <h3>
