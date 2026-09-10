@@ -85,6 +85,7 @@ export const marketDataApi = {
 
 export const dividendsApi = {
   list: (params, signal) => api.get('/dividends/', typeof params === 'object' ? params : { limit: params }, signal),
+  summary: (signal) => api.get('/dividends/summary', undefined, signal),
   create: (data) => api.post('/dividends/', data),
   update: (id, data) => api.patch(`/dividends/${id}`, data),
   remove: (id) => api.delete(`/dividends/${id}`),

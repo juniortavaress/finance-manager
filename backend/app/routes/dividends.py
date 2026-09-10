@@ -340,6 +340,62 @@ def delete_schedule(schedule_id):
     return {"ok": True}
 
 
+@dividends_bp.get("/summary")
+@login_required
+def dividends_summary():
+    """Totais agregados por mes/ano para a Visao Geral - ao contrario de
+    GET / (lista paginada, com asset embutido por item, usada na pagina
+    dedicada de Dividendos), aqui buscamos so' date/amount/currency de cada
+    dividendo (sem carregar o asset) e agregamos em memoria, evitando trazer
+    o historico inteiro (que so' cresce) para o frontend somar."""
+    trigger_schedule_sync_for_current_user()
+
+    rows = (
+        db.session.query(Dividend.date, Dividend.amount, Account.currency)
+        .join(Asset, Asset.id == Dividend.asset_id)
+        .join(InvestmentAccount, InvestmentAccount.id == Asset.investment_account_id)
+        .join(Account, Account.id == InvestmentAccount.account_id)
+        .filter(Account.user_id == g.current_user.id)
+        .all()
+    )
+
+    fx_rates, _ = get_brl_rates()
+
+    today = dt.date.today()
+    month_start = today.replace(day=1)
+    year_start = today.replace(month=1, day=1)
+
+    recebido_mes = Decimal("0")
+    recebido_ano = Decimal("0")
+    total_all_time = Decimal("0")
+    by_month = {}
+    by_year = {}
+
+    for date, amount, currency in rows:
+        amount_brl = convert_to_brl(amount, currency, fx_rates)
+        total_all_time += amount_brl
+        if date >= year_start:
+            recebido_ano += amount_brl
+            if date >= month_start:
+                recebido_mes += amount_brl
+
+        month_key = f"{date.year:04d}-{date.month:02d}"
+        by_month[month_key] = by_month.get(month_key, Decimal("0")) + amount_brl
+        by_year[date.year] = by_year.get(date.year, Decimal("0")) + amount_brl
+
+    return {
+        "total_all_time": float(total_all_time),
+        "recebido_mes": float(recebido_mes),
+        "recebido_ano": float(recebido_ano),
+        "has_dividends": len(rows) > 0,
+        "by_month": [
+            {"year": int(k[:4]), "month": int(k[5:7]), "total": float(v)}
+            for k, v in sorted(by_month.items(), reverse=True)
+        ],
+        "by_year": [{"year": year, "total": float(total)} for year, total in sorted(by_year.items(), reverse=True)],
+    }
+
+
 @dividends_bp.get("/")
 @login_required
 def list_dividends():

@@ -56,7 +56,7 @@ export default function Investments() {
     [bankFilter]
   );
   const { data: dividendsData, loading: dividendsLoading, reload: reloadDividends } = useFetch(
-    () => dividendsApi.list({ limit: 100000 }),
+    (signal) => dividendsApi.summary(signal),
     []
   );
   const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
@@ -65,7 +65,7 @@ export default function Investments() {
   const assets = summaryData?.assets || [];
   const unallocatedByBank = summaryData?.unallocated_by_bank || [];
   const totalUnallocated = summaryData?.total_unallocated || 0;
-  const dividends = dividendsData?.dividends || [];
+  const hasDividends = dividendsData?.has_dividends || false;
   const schedules = schedulesData?.dividend_schedules || [];
   const totalInvested = summaryData?.total_invested || 0;
   const totalAllocatedCost = summaryData?.total_allocated_cost || 0;
@@ -79,32 +79,15 @@ export default function Investments() {
 
   const activeAssets = useMemo(() => assets.filter((a) => a.position.quantity > 0), [assets]);
 
-  const dividendsAllTime = useMemo(() => dividends.reduce((s, d) => s + (d.amount_brl ?? d.amount), 0), [dividends]);
+  const dividendsByMonth = useMemo(
+    () => (dividendsData?.by_month || []).map((p) => ({ label: `${monthLabelFull(p.month)} ${p.year}`, value: p.total })),
+    [dividendsData]
+  );
 
-  const dividendsByMonth = useMemo(() => {
-    const map = new Map();
-    dividends.forEach((d) => {
-      const key = d.date.slice(0, 7);
-      map.set(key, (map.get(key) || 0) + (d.amount_brl ?? d.amount));
-    });
-    return [...map.entries()]
-      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-      .map(([key, total]) => {
-        const [year, month] = key.split('-').map(Number);
-        return { label: `${monthLabelFull(month)} ${year}`, value: total };
-      });
-  }, [dividends]);
-
-  const dividendsByYear = useMemo(() => {
-    const map = new Map();
-    dividends.forEach((d) => {
-      const year = d.date.slice(0, 4);
-      map.set(year, (map.get(year) || 0) + (d.amount_brl ?? d.amount));
-    });
-    return [...map.entries()]
-      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-      .map(([year, total]) => ({ label: year, value: total }));
-  }, [dividends]);
+  const dividendsByYear = useMemo(
+    () => (dividendsData?.by_year || []).map((p) => ({ label: String(p.year), value: p.total })),
+    [dividendsData]
+  );
 
   const upcomingDividends = useMemo(() => {
     const today = new Date();
@@ -324,7 +307,7 @@ export default function Investments() {
           ) : (
             <div className="value num">{fmt(totalDividendsAllTime)}</div>
           )}
-          {dividends.length > 0 && (
+          {hasDividends && (
             <button
               type="button"
               className="stat-card-expand"
