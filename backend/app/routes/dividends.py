@@ -1,7 +1,9 @@
 import datetime as dt
+import logging
+import threading
 from decimal import Decimal, ROUND_HALF_UP
 
-from flask import Blueprint, g, request
+from flask import Blueprint, current_app, g, request
 from sqlalchemy.orm import contains_eager
 
 from app.auth_decorator import login_required
@@ -14,6 +16,15 @@ from app.services.quotes_service import convert_to_brl, get_brl_rates
 from app.routes.investments import _asset_position, _resolve_market_events_for_account
 
 dividends_bp = Blueprint("dividends", __name__)
+
+logger = logging.getLogger(__name__)
+
+# Mesmo padrao de market_data_service.refresh_market_data_async: so' deixa
+# uma sincronizacao de schedules em andamento por vez no processo inteiro por
+# usuario, pra nao empilhar threads se o usuario abrir a pagina varias vezes
+# seguidas antes da anterior terminar.
+_sync_lock = threading.Lock()
+_sync_in_progress_user_ids = set()
 
 DIVIDEND_CATEGORY_NAME = "Investimentos"
 
@@ -82,7 +93,7 @@ def _amount_for_schedule(schedule: DividendSchedule, quantity: Decimal):
     return (per_share * quantity).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-def _materialize_schedule(schedule: DividendSchedule):
+def _materialize_schedule(schedule: DividendSchedule, user_id):
     """Gera os recebimentos vencidos (ate hoje) que ainda nao existem para este
     provento recorrente, usando a posicao do ativo na data de cada ocorrencia."""
     if not schedule.active:
@@ -91,7 +102,7 @@ def _materialize_schedule(schedule: DividendSchedule):
     today = dt.date.today()
     asset = schedule.asset
     account = asset.investment_account.account
-    category = _get_or_create_dividend_category(g.current_user.id)
+    category = _get_or_create_dividend_category(user_id)
     months_step = FREQUENCY_MONTHS[schedule.frequency]
 
     splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_account(
@@ -108,7 +119,7 @@ def _materialize_schedule(schedule: DividendSchedule):
 
         if amount > 0:
             tx = Transaction(
-                user_id=g.current_user.id,
+                user_id=user_id,
                 account_id=account.id,
                 category_id=category.id,
                 description=f"Provento {asset.code or asset.name}",
@@ -149,14 +160,48 @@ def _sync_all_schedules(user_id):
         .all()
     )
     for schedule in schedules:
-        _materialize_schedule(schedule)
+        _materialize_schedule(schedule, user_id)
+
+
+def sync_schedules_async(app, user_id):
+    """Dispara _sync_all_schedules em background (thread separada, com seu
+    proprio contexto de app e sessao de banco) e retorna imediatamente - as
+    rotas de leitura (GET /schedules, GET /dividends) nao esperam a
+    materializacao terminar, mesmo padrao de
+    market_data_service.refresh_market_data_async. So' deixa uma sincronizacao
+    em andamento por usuario; chamadas concorrentes (ex: duas abas) viram
+    no-op."""
+    with _sync_lock:
+        if user_id in _sync_in_progress_user_ids:
+            return False
+        _sync_in_progress_user_ids.add(user_id)
+
+    def _run():
+        try:
+            with app.app_context():
+                try:
+                    _sync_all_schedules(user_id)
+                    db.session.commit()
+                except Exception:
+                    logger.exception("Falha na sincronizacao de proventos recorrentes em background")
+                    db.session.rollback()
+        finally:
+            with _sync_lock:
+                _sync_in_progress_user_ids.discard(user_id)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return True
+
+
+def trigger_schedule_sync_for_current_user():
+    app = current_app._get_current_object()
+    return sync_schedules_async(app, g.current_user.id)
 
 
 @dividends_bp.get("/schedules")
 @login_required
 def list_schedules():
-    _sync_all_schedules(g.current_user.id)
-    db.session.commit()
+    trigger_schedule_sync_for_current_user()
 
     schedules = (
         DividendSchedule.query.join(Asset, Asset.id == DividendSchedule.asset_id)
@@ -229,7 +274,7 @@ def create_schedule():
     db.session.add(schedule)
     db.session.flush()
 
-    _materialize_schedule(schedule)
+    _materialize_schedule(schedule, g.current_user.id)
     db.session.commit()
 
     result = schedule.to_dict()
@@ -298,8 +343,7 @@ def delete_schedule(schedule_id):
 @dividends_bp.get("/")
 @login_required
 def list_dividends():
-    _sync_all_schedules(g.current_user.id)
-    db.session.commit()
+    trigger_schedule_sync_for_current_user()
 
     base_query = (
         Dividend.query.join(Asset, Asset.id == Dividend.asset_id)

@@ -5,21 +5,26 @@ import { useFetch } from '../hooks/useFetch';
 import { useData } from '../context/DataContext';
 import { fmt, monthLabelFull } from '../utils/format';
 import Skeleton from '../components/Skeleton';
-import UpcomingDividendsChart from '../components/charts/UpcomingDividendsChart';
 import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
 import InvestmentBreakdownDrilldownModal from '../components/modals/InvestmentBreakdownDrilldownModal';
 import DividendsDrilldownModal from '../components/modals/DividendsDrilldownModal';
 import { IconChevronDown } from '../components/icons';
 
-const FREQUENCY_MONTHS = {
-  monthly: 1,
-  quarterly: 3,
-  semiannual: 6,
-  yearly: 12,
+const KIND_LABELS = {
+  dividendo: 'Dividendo',
+  rendimento: 'Rendimento (FII)',
+  jcp: 'JCP',
+  cupom: 'Cupom',
+  bonificacao: 'Bonificação',
+  outro: 'Outro',
 };
 
-const PROJECTION_MONTHS = 6;
-const PROJECTION_OCCURRENCES_CAP = 24;
+const FREQUENCY_LABELS = {
+  monthly: 'Mensal',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  yearly: 'Anual',
+};
 
 const TYPE_LABELS = {
   renda_fixa: 'Renda fixa',
@@ -103,34 +108,25 @@ export default function Investments() {
 
   const upcomingDividends = useMemo(() => {
     const today = new Date();
-    const monthBuckets = [];
-    for (let i = 0; i < PROJECTION_MONTHS; i += 1) {
-      const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
-      monthBuckets.push({ year: d.getFullYear(), month: d.getMonth() + 1, total: 0 });
-    }
-    const bucketIndex = new Map(monthBuckets.map((b, i) => [`${b.year}-${b.month}`, i]));
-    const horizonEnd = new Date(today.getFullYear(), today.getMonth() + PROJECTION_MONTHS, 1);
+    const currentKey = `${today.getFullYear()}-${today.getMonth() + 1}`;
+    const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const nextKey = `${nextMonthDate.getFullYear()}-${nextMonthDate.getMonth() + 1}`;
 
-    schedules
+    const rows = schedules
       .filter((s) => s.active)
-      .forEach((s) => {
+      .map((s) => {
         const asset = assets.find((a) => a.id === s.asset_id);
         const quantity = asset?.position?.quantity || 0;
         const value = s.calc_mode === 'fixed' ? s.fixed_amount || 0 : (s.amount_per_share || 0) * quantity;
-        if (value <= 0) return;
+        const dueDate = new Date(`${s.next_due_date}T00:00:00`);
+        return { schedule: s, asset, value, dueDate, key: `${dueDate.getFullYear()}-${dueDate.getMonth() + 1}` };
+      })
+      .filter((r) => r.value > 0);
 
-        const step = FREQUENCY_MONTHS[s.frequency] || 1;
-        let cursor = new Date(`${s.next_due_date}T00:00:00`);
-        let guard = 0;
-        while (cursor < horizonEnd && guard < PROJECTION_OCCURRENCES_CAP) {
-          const key = `${cursor.getFullYear()}-${cursor.getMonth() + 1}`;
-          if (bucketIndex.has(key)) monthBuckets[bucketIndex.get(key)].total += value;
-          cursor = new Date(cursor.getFullYear(), cursor.getMonth() + step, cursor.getDate());
-          guard += 1;
-        }
-      });
+    const thisMonth = rows.filter((r) => r.key === currentKey);
+    const list = thisMonth.length > 0 ? thisMonth : rows.filter((r) => r.key === nextKey);
 
-    return monthBuckets;
+    return list.sort((a, b) => a.dueDate - b.dueDate);
   }, [schedules, assets]);
 
   const totalCurrent = activeAssets.reduce(
@@ -462,12 +458,33 @@ export default function Investments() {
           </h3>
           {schedulesData === null ? (
             <Skeleton width="100%" height={180} radius={8} />
-          ) : upcomingDividends.every((p) => p.total === 0) ? (
+          ) : upcomingDividends.length === 0 ? (
             <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               Nenhum provento recorrente ativo.
             </div>
           ) : (
-            <UpcomingDividendsChart periods={upcomingDividends} />
+            <div className="list-scroll-hidden" style={{ maxHeight: 168 }}>
+              {upcomingDividends.map((r) => (
+                <div className="tx-row" key={r.schedule.id}>
+                  <div className="tx-left">
+                    <div className="tx-icon" style={{ background: 'var(--gold-soft)', color: 'var(--gold)' }}>
+                      {(r.asset?.code || r.asset?.name || '?').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="tx-desc">{r.asset?.code || r.asset?.name}</div>
+                      <div className="tx-meta">
+                        {KIND_LABELS[r.schedule.kind] || r.schedule.kind} · {FREQUENCY_LABELS[r.schedule.frequency] || r.schedule.frequency}
+                        {r.asset?.bank_name ? ` · ${r.asset.bank_name}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div className="tx-val num">{fmt(r.value)}</div>
+                    <div className="tx-meta">todo dia {r.dueDate.getDate()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

@@ -375,6 +375,15 @@
   font-size: 13px;
 }
 
+.list-scroll-hidden {
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.list-scroll-hidden::-webkit-scrollbar {
+  display: none;
+}
+
 @media (max-width: 480px) {
   .tx-row {
     flex-wrap: wrap;
