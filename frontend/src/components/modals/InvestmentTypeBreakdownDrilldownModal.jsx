@@ -30,23 +30,25 @@ export default function InvestmentTypeBreakdownDrilldownModal({ open, onClose, t
           </button>
         </div>
         <div className="modal-body">
-          {loading &&
-            [0, 1, 2].map((i) => (
-              <div className="bank-row" key={i}>
-                <div className="bank-id">
-                  <Skeleton width={8} height={8} radius={2} />
-                  <Skeleton width={110} height={13} />
+          <div className="list-scroll-hidden" style={{ maxHeight: 384 }}>
+            {loading &&
+              [0, 1, 2].map((i) => (
+                <div className="bank-row" key={i}>
+                  <div className="bank-id">
+                    <Skeleton width={8} height={8} radius={2} />
+                    <Skeleton width={110} height={13} />
+                  </div>
+                  <Skeleton width={70} height={14} />
                 </div>
-                <Skeleton width={70} height={14} />
-              </div>
-            ))}
-          {!loading && rows.length === 0 && (
-            <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>{emptyMessage || 'Nenhum dado disponível.'}</p>
-          )}
-          {!loading &&
-            rows.map((r) => (
-              <AssetBreakdownRow key={r.label} label={r.label} value={r.value} pct={r.pct} color={r.color} />
-            ))}
+              ))}
+            {!loading && rows.length === 0 && (
+              <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>{emptyMessage || 'Nenhum dado disponível.'}</p>
+            )}
+            {!loading &&
+              rows.map((r) => (
+                <AssetBreakdownRow key={r.label} label={r.label} value={r.value} pct={r.pct} color={r.color} />
+              ))}
+          </div>
         </div>
       </div>
     </ModalShell>
