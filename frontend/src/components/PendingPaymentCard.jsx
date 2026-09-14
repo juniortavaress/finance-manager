@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useData } from '../context/DataContext';
 import { fmt } from '../utils/format';
 
 /**
@@ -9,10 +8,19 @@ import { fmt } from '../utils/format';
  * o receiver). Mesma UI -- texto + seletor de conta e categoria proprios +
  * botao confirmar. `kind` define se a categoria e de despesa ou receita.
  */
-export default function PendingPaymentCard({ label, amount, accountIdDefault, kind = 'expense', onConfirm }) {
-  const { checkingAccounts, creditCardAccounts, expenseCategories, incomeCategories } = useData();
+export default function PendingPaymentCard({
+  label,
+  amount,
+  accountIdDefault,
+  kind = 'expense',
+  onConfirm,
+  checkingAccounts,
+  creditCardAccounts,
+  expenseCategories,
+  incomeCategories,
+}) {
   const categories = kind === 'income' ? incomeCategories : expenseCategories;
-  const [accountId, setAccountId] = useState(accountIdDefault || checkingAccounts[0]?.id || '');
+  const [accountId, setAccountId] = useState(accountIdDefault || checkingAccounts?.[0]?.id || '');
   const [categoryId, setCategoryId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,7 +43,7 @@ export default function PendingPaymentCard({ label, amount, accountIdDefault, ki
       <div className="pending-payment-actions">
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
           <optgroup label="Contas correntes">
-            {checkingAccounts.map((a) => (
+            {(checkingAccounts || []).map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
               </option>
@@ -43,7 +51,7 @@ export default function PendingPaymentCard({ label, amount, accountIdDefault, ki
           </optgroup>
           {kind === 'expense' && (
             <optgroup label="Cartões de crédito">
-              {creditCardAccounts.map((a) => (
+              {(creditCardAccounts || []).map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
@@ -53,7 +61,7 @@ export default function PendingPaymentCard({ label, amount, accountIdDefault, ki
         </select>
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
           <option value="">Categoria...</option>
-          {categories.map((c) => (
+          {(categories || []).map((c) => (
             <option key={c.id} value={c.id}>
               {c.icon} {c.name}
             </option>

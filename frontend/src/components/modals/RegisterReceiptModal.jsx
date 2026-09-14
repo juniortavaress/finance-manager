@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useData } from '../../context/DataContext';
 import { settlementsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { maskToNumber, numberToMasked } from '../../utils/currency';
@@ -21,8 +20,18 @@ function todayIso() {
  * settlement por origem com saldo positivo (o que ele me deve), ja que cada
  * grupo mantem seu proprio saldo isolado.
  */
-export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, friendUserId, counterpartyName, suggestedAmount, breakdown }) {
-  const { checkingAccounts, incomeCategories } = useData();
+export default function RegisterReceiptModal({
+  open,
+  onClose,
+  onSaved,
+  groupId,
+  friendUserId,
+  counterpartyName,
+  suggestedAmount,
+  breakdown,
+  checkingAccounts,
+  incomeCategories,
+}) {
   const { showSuccess, showError } = useToast();
 
   const [amount, setAmount] = useState('');
@@ -36,7 +45,7 @@ export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, 
     if (!open) return;
     setAmount(suggestedAmount ? numberToMasked(Math.abs(suggestedAmount)) : '');
     setDate(todayIso());
-    setAccountId(checkingAccounts[0]?.id || '');
+    setAccountId(checkingAccounts?.[0]?.id || '');
     setCategoryId('');
     setError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,7 +130,7 @@ export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, 
             <div className="field">
               <label>Sua conta de entrada</label>
               <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-                {checkingAccounts.map((a) => (
+                {(checkingAccounts || []).map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name}
                   </option>
@@ -132,7 +141,7 @@ export default function RegisterReceiptModal({ open, onClose, onSaved, groupId, 
               <label>Categoria</label>
               <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                 <option value="">Selecione...</option>
-                {incomeCategories.map((c) => (
+                {(incomeCategories || []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.icon} {c.name}
                   </option>

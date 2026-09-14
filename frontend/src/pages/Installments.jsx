@@ -1,7 +1,14 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { installmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
-import { useData } from '../context/DataContext';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { useCategories } from '../hooks/resources/useCategories';
+import {
+  checkingAccounts as filterChecking,
+  creditCardAccounts as filterCreditCard,
+  investmentAccounts as filterInvestment,
+} from '../utils/accounts';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
 import { fmt, fmtDateShort } from '../utils/format';
 import { IconPencil, IconChevronDown } from '../components/icons';
 import AdvanceInstallmentModal from '../components/modals/AdvanceInstallmentModal';
@@ -11,7 +18,14 @@ import Skeleton from '../components/Skeleton';
 
 export default function Installments() {
   const { data, loading, reload } = useFetch(() => installmentsApi.list({ status: 'active' }), []);
-  const { categoryById } = useData();
+  const { accounts } = useAccounts();
+  const { categories } = useCategories();
+  const categoryById = useCallback((id) => categories.find((c) => c.id === id), [categories]);
+  const checkingAccounts = useMemo(() => filterChecking(accounts), [accounts]);
+  const creditCardAccounts = useMemo(() => filterCreditCard(accounts), [accounts]);
+  const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
+  const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
+  const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
   const [advancePlan, setAdvancePlan] = useState(null);
   const [cancelPlan, setCancelPlan] = useState(null);
   const [newModalOpen, setNewModalOpen] = useState(false);
@@ -236,6 +250,11 @@ export default function Installments() {
       <TransactionModal
         open={newModalOpen}
         installmentOnly
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        investmentAccounts={investmentAccounts}
+        expenseCategories={expenseCategories}
+        incomeCategories={incomeCategories}
         onClose={() => setNewModalOpen(false)}
         onCreated={() => {
           setNewModalOpen(false);
@@ -246,6 +265,11 @@ export default function Installments() {
       <TransactionModal
         open={!!editingTx}
         transaction={editingTx}
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        investmentAccounts={investmentAccounts}
+        expenseCategories={expenseCategories}
+        incomeCategories={incomeCategories}
         onClose={() => setEditingTx(null)}
         onCreated={() => {
           setEditingTx(null);

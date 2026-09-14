@@ -1,6 +1,5 @@
 import { transactionsApi, dashboardApi } from '../../api/resources';
 import { useFetch } from '../../hooks/useFetch';
-import { useData } from '../../context/DataContext';
 import { fmt, fmtDateShort } from '../../utils/format';
 import ModalShell from './ModalShell';
 import Skeleton from '../Skeleton';
@@ -9,8 +8,7 @@ function lastDayIso(year, month) {
   return new Date(year, month, 0).toISOString().slice(0, 10);
 }
 
-export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type, categoryId }) {
-  const { categoryById } = useData();
+export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type, categoryId, categoryById = () => undefined }) {
   const isMonthlyExpenseCard = type === 'expense' && !categoryId;
   const { data, initialLoading } = useFetch(
     () =>

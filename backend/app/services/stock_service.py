@@ -44,6 +44,12 @@ def _fetch_daily_closes(ticker, start_date, end_date):
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            logger.warning("Ticker %s nao encontrado no Yahoo Finance (404) - pulando.", ticker)
+        else:
+            logger.warning("Falha ao buscar historico do Yahoo Finance para %s", ticker, exc_info=True)
+        return []
     except Exception:
         logger.warning("Falha ao buscar historico do Yahoo Finance para %s", ticker, exc_info=True)
         return []

@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useData } from '../context/DataContext';
 import { friendsApi } from '../api/resources';
+import { useFriends } from '../hooks/resources/useFriends';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { useCategories } from '../hooks/resources/useCategories';
+import { checkingAccounts as filterChecking, creditCardAccounts as filterCreditCard } from '../utils/accounts';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
 import { fmt, fmtDateShort } from '../utils/format';
 import SharedExpenseModal from '../components/modals/SharedExpenseModal';
 import SettleUpModal from '../components/modals/SettleUpModal';
@@ -36,7 +40,17 @@ export default function FriendDetail() {
   const { friendUserId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { friends, reloadAll } = useData();
+  const { friends, reload: reloadFriends } = useFriends();
+  const { accounts, reload: reloadAccounts } = useAccounts();
+  const { categories, reload: reloadCategories } = useCategories();
+  const checkingAccounts = useMemo(() => filterChecking(accounts), [accounts]);
+  const creditCardAccounts = useMemo(() => filterCreditCard(accounts), [accounts]);
+  const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
+  const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
+  const reloadAll = useCallback(
+    () => Promise.all([reloadFriends(), reloadAccounts(), reloadCategories()]),
+    [reloadFriends, reloadAccounts, reloadCategories]
+  );
   const friend = friends.find((f) => f.id === friendUserId);
 
   const [history, setHistory] = useState([]);
@@ -278,6 +292,9 @@ export default function FriendDetail() {
         expense={editingExpense}
         friendUserId={friendUserId}
         friendName={friend.name}
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        expenseCategories={expenseCategories}
         onSaved={() => {
           setExpenseModalOpen(false);
           load();
@@ -297,6 +314,9 @@ export default function FriendDetail() {
         counterpartyName={friend.name}
         suggestedAmount={balance}
         breakdown={breakdown}
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        expenseCategories={expenseCategories}
         onSaved={() => {
           setSettleModalOpen(false);
           load();
@@ -311,6 +331,8 @@ export default function FriendDetail() {
         counterpartyName={friend.name}
         suggestedAmount={balance}
         breakdown={breakdown}
+        checkingAccounts={checkingAccounts}
+        incomeCategories={incomeCategories}
         onSaved={() => {
           setReceiptModalOpen(false);
           load();

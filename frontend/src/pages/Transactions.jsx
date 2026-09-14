@@ -1,7 +1,15 @@
-import { useEffect, useState } from 'react';
-import { useData } from '../context/DataContext';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { transactionsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
+import { useBanks } from '../hooks/resources/useBanks';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { useCategories } from '../hooks/resources/useCategories';
+import {
+  checkingAccounts as filterChecking,
+  creditCardAccounts as filterCreditCard,
+  investmentAccounts as filterInvestment,
+} from '../utils/accounts';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
 import { fmt, fmtDateShort } from '../utils/format';
 import { IconSearch, IconPencil, IconChevronDown } from '../components/icons';
 import TransactionModal from '../components/modals/TransactionModal';
@@ -47,7 +55,16 @@ function RowActionButton({ title, onClick, color, children }) {
 }
 
 export default function Transactions() {
-  const { banks, categories, categoryById, accountById } = useData();
+  const { banks } = useBanks();
+  const { accounts } = useAccounts();
+  const { categories } = useCategories();
+  const categoryById = useCallback((id) => categories.find((c) => c.id === id), [categories]);
+  const accountById = useCallback((id) => accounts.find((a) => a.id === id), [accounts]);
+  const checkingAccounts = useMemo(() => filterChecking(accounts), [accounts]);
+  const creditCardAccounts = useMemo(() => filterCreditCard(accounts), [accounts]);
+  const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
+  const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
+  const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [bankFilter, setBankFilter] = useState('');
@@ -334,6 +351,11 @@ export default function Transactions() {
       <TransactionModal
         open={txModalOpen || !!editingTx}
         transaction={editingTx}
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        investmentAccounts={investmentAccounts}
+        expenseCategories={expenseCategories}
+        incomeCategories={incomeCategories}
         onClose={() => {
           setTxModalOpen(false);
           setEditingTx(null);

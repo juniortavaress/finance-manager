@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { groupsApi } from '../api/resources';
+import { useFriends } from '../hooks/resources/useFriends';
 import { fmt } from '../utils/format';
 import { IconPencil } from '../components/icons';
 import NewGroupModal from '../components/modals/NewGroupModal';
 
 export default function Groups() {
+  const { friends } = useFriends();
   const [groups, setGroups] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
@@ -77,6 +79,7 @@ export default function Groups() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         group={editingGroup}
+        friends={friends}
         onSaved={() => {
           setModalOpen(false);
           load();

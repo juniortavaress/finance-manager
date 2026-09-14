@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useData } from '../context/DataContext';
 import { creditCardsApi, investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
+import { useBanks } from '../hooks/resources/useBanks';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { checkingAccounts as filterChecking } from '../utils/accounts';
 import { fmt, monthLabel } from '../utils/format';
 import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
@@ -17,7 +19,9 @@ function todayIso() {
 }
 
 export default function Accounts() {
-  const { banks, accounts, loaded, reloadAll } = useData();
+  const { banks, initialLoading: banksLoading, reload: reloadBanks } = useBanks();
+  const { accounts, initialLoading: accountsLoading, reload: reloadAccounts } = useAccounts();
+  const loaded = !banksLoading && !accountsLoading;
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState(null);
   const [payingCard, setPayingCard] = useState(null);
@@ -26,6 +30,7 @@ export default function Accounts() {
 
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
   const investmentAccounts = useMemo(() => accounts.filter((a) => !!a.investment_account), [accounts]);
+  const checkingAccountsList = useMemo(() => filterChecking(accounts), [accounts]);
   const { data: assetsData, loading: assetsLoading, reload: reloadAssets } = useFetch(
     (signal) => investmentsApi.listAssets(false, signal),
     []
@@ -385,7 +390,8 @@ export default function Accounts() {
         onClose={() => setModalOpen(false)}
         onSaved={() => {
           setModalOpen(false);
-          reloadAll();
+          reloadBanks();
+          reloadAccounts();
         }}
       />
 
@@ -395,19 +401,24 @@ export default function Accounts() {
         invoice={payingCard?.invoice}
         bankName={payingCard?.bankName}
         bankId={payingCard?.bankId}
+        checkingAccounts={checkingAccountsList}
         onClose={() => setPayingCard(null)}
         onPaid={() => {
           setPayingCard(null);
-          reloadAll();
+          reloadBanks();
+          reloadAccounts();
         }}
       />
 
       <TransferModal
         open={transferModalOpen}
+        checkingAccounts={checkingAccountsList}
+        investmentAccounts={investmentAccounts}
         onClose={() => setTransferModalOpen(false)}
         onCreated={() => {
           setTransferModalOpen(false);
-          reloadAll();
+          reloadBanks();
+          reloadAccounts();
           reloadAssets();
         }}
       />

@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useData } from '../../context/DataContext';
 import { settlementsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { maskToNumber, numberToMasked } from '../../utils/currency';
@@ -22,8 +21,19 @@ function todayIso() {
  * proprio saldo isolado (nunca se mistura). Quitar de dentro de um grupo
  * (`groupId` presente) sempre cria um unico settlement escopado aquele grupo.
  */
-export default function SettleUpModal({ open, onClose, onSaved, groupId, friendUserId, counterpartyName, suggestedAmount, breakdown }) {
-  const { checkingAccounts, creditCardAccounts, expenseCategories } = useData();
+export default function SettleUpModal({
+  open,
+  onClose,
+  onSaved,
+  groupId,
+  friendUserId,
+  counterpartyName,
+  suggestedAmount,
+  breakdown,
+  checkingAccounts,
+  creditCardAccounts,
+  expenseCategories,
+}) {
   const { showSuccess, showError } = useToast();
 
   const [amount, setAmount] = useState('');
@@ -37,7 +47,7 @@ export default function SettleUpModal({ open, onClose, onSaved, groupId, friendU
     if (!open) return;
     setAmount(suggestedAmount ? numberToMasked(Math.abs(suggestedAmount)) : '');
     setDate(todayIso());
-    setAccountId(checkingAccounts[0]?.id || '');
+    setAccountId(checkingAccounts?.[0]?.id || '');
     setCategoryId('');
     setError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,14 +133,14 @@ export default function SettleUpModal({ open, onClose, onSaved, groupId, friendU
               <label>Sua conta de saída</label>
               <select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
                 <optgroup label="Contas correntes">
-                  {checkingAccounts.map((a) => (
+                  {(checkingAccounts || []).map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label="Cartões de crédito">
-                  {creditCardAccounts.map((a) => (
+                  {(creditCardAccounts || []).map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.name}
                     </option>
@@ -142,7 +152,7 @@ export default function SettleUpModal({ open, onClose, onSaved, groupId, friendU
               <label>Categoria</label>
               <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                 <option value="">Selecione...</option>
-                {expenseCategories.map((c) => (
+                {(expenseCategories || []).map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.icon} {c.name}
                   </option>

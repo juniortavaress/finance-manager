@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { investmentsApi, dividendsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
-import { useData } from '../context/DataContext';
+import { useBanks } from '../hooks/resources/useBanks';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { investmentAccounts as filterInvestment } from '../utils/accounts';
 import { fmt, monthLabelFull } from '../utils/format';
 import Skeleton from '../components/Skeleton';
 import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
@@ -49,7 +51,10 @@ const TYPE_COLORS = {
 
 export default function Investments() {
   const navigate = useNavigate();
-  const { bankById, investmentAccounts, reloadAll } = useData();
+  const { banks, reload: reloadBanks } = useBanks();
+  const { accounts, reload: reloadAccounts } = useAccounts();
+  const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);
+  const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
   const [bankFilter, setBankFilter] = useState('');
   const { data: summaryData, loading: summaryLoading, reload: reloadSummary } = useFetch(
     () => investmentsApi.summary(bankFilter || undefined),
@@ -74,7 +79,8 @@ export default function Investments() {
     reloadSummary();
     reloadDividends();
     reloadSchedules();
-    reloadAll();
+    reloadBanks();
+    reloadAccounts();
   }
 
   const activeAssets = useMemo(() => assets.filter((a) => a.position.quantity > 0), [assets]);

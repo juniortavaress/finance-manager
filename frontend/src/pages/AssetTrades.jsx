@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
-import { useData } from '../context/DataContext';
+import { useBanks } from '../hooks/resources/useBanks';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { investmentAccounts as filterInvestment } from '../utils/accounts';
 import { fmt, fmtDateShort } from '../utils/format';
 import { IconSearch, IconPencil, IconTrash } from '../components/icons';
 import PickAssetModal from '../components/modals/PickAssetModal';
@@ -61,7 +63,10 @@ function RowActionButton({ title, onClick, color, children }) {
 }
 
 export default function AssetTrades() {
-  const { banks, investmentAccounts, bankById, reloadAll } = useData();
+  const { banks, reload: reloadBanks } = useBanks();
+  const { accounts, reload: reloadAccounts } = useAccounts();
+  const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);
+  const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
   const [bankFilter, setBankFilter] = useState('');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -137,7 +142,8 @@ export default function AssetTrades() {
 
   function reload() {
     reloadAssets();
-    reloadAll();
+    reloadBanks();
+    reloadAccounts();
     if (buyPage === 1) reloadBuys();
     else setBuyPage(1);
     if (sellPage === 1) reloadSells();

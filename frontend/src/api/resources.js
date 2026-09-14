@@ -8,7 +8,7 @@ export const authApi = {
 };
 
 export const banksApi = {
-  list: () => api.get('/banks/'),
+  list: (signal) => api.get('/banks/', undefined, signal),
   create: (data) => api.post('/banks/', data),
   update: (id, data) => api.patch(`/banks/${id}`, data),
   archive: (id) => api.delete(`/banks/${id}`),
@@ -16,7 +16,7 @@ export const banksApi = {
 };
 
 export const accountsApi = {
-  list: (params) => api.get('/accounts/', params),
+  list: (params, signal) => api.get('/accounts/', params, signal),
   create: (data) => api.post('/accounts/', data),
   update: (id, data) => api.patch(`/accounts/${id}`, data),
   archive: (id) => api.delete(`/accounts/${id}`),
@@ -24,7 +24,7 @@ export const accountsApi = {
 };
 
 export const categoriesApi = {
-  list: (params) => api.get('/categories/', params),
+  list: (params, signal) => api.get('/categories/', params, signal),
   create: (data) => api.post('/categories/', data),
   update: (id, data) => api.patch(`/categories/${id}`, data),
   archive: (id, body) => api.delete(`/categories/${id}`, body),
@@ -117,7 +117,7 @@ export const quotesApi = {
 
 export const friendsApi = {
   search: (q) => api.get('/friends/search', { q }),
-  list: () => api.get('/friends/'),
+  list: (signal) => api.get('/friends/', undefined, signal),
   requests: () => api.get('/friends/requests'),
   sendRequest: (addresseeId) => api.post('/friends/requests', { addressee_id: addresseeId }),
   acceptRequest: (id) => api.post(`/friends/requests/${id}/accept`),

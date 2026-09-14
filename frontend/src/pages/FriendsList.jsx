@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useData } from '../context/DataContext';
 import { friendsApi } from '../api/resources';
 import { useToast } from '../context/ToastContext';
+import { useFriends } from '../hooks/resources/useFriends';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { useCategories } from '../hooks/resources/useCategories';
+import { checkingAccounts as filterChecking, creditCardAccounts as filterCreditCard } from '../utils/accounts';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
 import { IconSearch, IconBell } from '../components/icons';
 import { fmt } from '../utils/format';
 import AddFriendModal from '../components/modals/AddFriendModal';
@@ -27,7 +31,17 @@ function saldoLabel(v) {
 }
 
 export default function FriendsList() {
-  const { friends, reloadAll } = useData();
+  const { friends, reload: reloadFriends } = useFriends();
+  const { accounts, reload: reloadAccounts } = useAccounts();
+  const { categories, reload: reloadCategories } = useCategories();
+  const checkingAccounts = useMemo(() => filterChecking(accounts), [accounts]);
+  const creditCardAccounts = useMemo(() => filterCreditCard(accounts), [accounts]);
+  const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
+  const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
+  const reloadAll = useCallback(
+    () => Promise.all([reloadFriends(), reloadAccounts(), reloadCategories()]),
+    [reloadFriends, reloadAccounts, reloadCategories]
+  );
   const { showSuccess, showError } = useToast();
   const [search, setSearch] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -161,6 +175,9 @@ export default function FriendsList() {
         counterpartyName={settleTarget?.name}
         suggestedAmount={settleTarget?.balance}
         breakdown={settleTarget?.balance_breakdown}
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        expenseCategories={expenseCategories}
         onSaved={() => {
           setSettleTarget(null);
           reloadAll();
@@ -173,6 +190,8 @@ export default function FriendsList() {
         friendUserId={receiptTarget?.id}
         counterpartyName={receiptTarget?.name}
         breakdown={receiptTarget?.balance_breakdown}
+        checkingAccounts={checkingAccounts}
+        incomeCategories={incomeCategories}
         suggestedAmount={receiptTarget?.balance}
         onSaved={() => {
           setReceiptTarget(null);

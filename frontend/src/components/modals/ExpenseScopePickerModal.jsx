@@ -1,4 +1,3 @@
-import { useData } from '../../context/DataContext';
 import ModalShell from './ModalShell';
 
 function initials(name) {
@@ -16,9 +15,7 @@ function initials(name) {
  * Amigos: escolhe primeiro com quem é a despesa (um amigo ou um grupo) antes
  * de abrir o formulário completo, já com o escopo fixo.
  */
-export default function ExpenseScopePickerModal({ open, onClose, groups, onPickFriend, onPickGroup }) {
-  const { friends } = useData();
-
+export default function ExpenseScopePickerModal({ open, onClose, groups, friends = [], onPickFriend, onPickGroup }) {
   return (
     <ModalShell open={open} onClose={onClose}>
       <div className="modal">

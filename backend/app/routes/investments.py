@@ -342,6 +342,31 @@ def _effective_dividends(asset, merges_by_target_asset_id, merge_cutoff_by_asset
     return raw
 
 
+def _last_zeroed_date(txs):
+    """Data da ULTIMA transacao (em `txs`, ja no historico efetivo) que
+    zerou a posicao do ativo, se houver. Usada para cortar dividendos
+    antigos de um ciclo anterior quando o usuario vendeu tudo e recomprou
+    do zero mais tarde (ex: manteve o ticker guardado na carteira, mas o
+    dividendo recebido no ciclo antigo nao deve contar no total do ciclo
+    atual). Retorna None se a posicao nunca zerou (ou zerou e nunca foi
+    recomprada, caso em que nao ha "ciclo atual" para isolar)."""
+    quantity = Decimal("0")
+    last_zeroed_date = None
+    for tx in txs:
+        if tx.type == "buy":
+            quantity += tx.quantity
+        else:
+            quantity -= tx.quantity
+            if quantity <= 0:
+                last_zeroed_date = tx.date
+
+    if last_zeroed_date is None:
+        return None
+    if not any(tx.date > last_zeroed_date for tx in txs):
+        return None
+    return last_zeroed_date
+
+
 def _lot_rate_pct(asset: Asset, tx):
     """Taxa contratada de um lote (compra) especifico: usa a taxa gravada na
     propria transacao (cada compra trava a taxa de mercado do dia) e cai para
@@ -492,6 +517,9 @@ def _asset_position(
     else:
         current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
     effective_dividends = _effective_dividends(asset, merges_by_target_asset_id, merge_cutoff_by_asset_id)
+    zeroed_cutoff = _last_zeroed_date(txs)
+    if zeroed_cutoff is not None:
+        effective_dividends = [(date, amount) for date, amount in effective_dividends if date > zeroed_cutoff]
     dividends_total = sum((amount for _, amount in effective_dividends), Decimal("0"))
 
     base_value = current_value if current_value is not None else cost_basis

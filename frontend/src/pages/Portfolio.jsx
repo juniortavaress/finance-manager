@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
-import { useData } from '../context/DataContext';
+import { useBanks } from '../hooks/resources/useBanks';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { investmentAccounts as filterInvestment } from '../utils/accounts';
 import { useToast } from '../context/ToastContext';
 import { fmt, fmtDateFull } from '../utils/format';
 import { maskToNumber, numberToMasked } from '../utils/currency';
@@ -97,7 +99,10 @@ function profitAmount(a) {
 export default function Portfolio() {
   const [showArchived, setShowArchived] = useState(false);
   const { data: assetsData, loading: assetsLoading, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
-  const { banks, investmentAccounts, bankById, reloadAll } = useData();
+  const { banks, reload: reloadBanks } = useBanks();
+  const { accounts, reload: reloadAccounts } = useAccounts();
+  const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);
+  const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
   const { showSuccess, showError } = useToast();
 
   const [search, setSearch] = useState('');
@@ -128,7 +133,8 @@ export default function Portfolio() {
 
   function reload() {
     reloadAssets();
-    reloadAll();
+    reloadBanks();
+    reloadAccounts();
   }
 
   function accountFor(asset) {

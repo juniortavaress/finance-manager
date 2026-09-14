@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useData } from '../../context/DataContext';
 import { transactionsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { maskToNumber, currencySymbol } from '../../utils/currency';
@@ -11,8 +10,7 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function TransferModal({ open, onClose, onCreated }) {
-  const { checkingAccounts, investmentAccounts } = useData();
+export default function TransferModal({ open, onClose, onCreated, checkingAccounts = [], investmentAccounts = [] }) {
   const { showSuccess, showError } = useToast();
 
   const [fromAccountId, setFromAccountId] = useState('');

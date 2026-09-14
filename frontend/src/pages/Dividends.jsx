@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { dividendsApi, investmentsApi, quotesApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
-import { useData } from '../context/DataContext';
+import { useBanks } from '../hooks/resources/useBanks';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { investmentAccounts as filterInvestment } from '../utils/accounts';
 import { fmt, fmtDateShort, monthLabel, monthLabelFull } from '../utils/format';
 import DividendScheduleModal from '../components/modals/DividendScheduleModal';
 import DividendModal from '../components/modals/DividendModal';
@@ -43,7 +45,10 @@ export default function Dividends() {
     []
   );
   const { data: quotesData } = useFetch(() => quotesApi.list(), []);
-  const { investmentAccounts, bankById, reloadAll } = useData();
+  const { banks, reload: reloadBanks } = useBanks();
+  const { accounts, reload: reloadAccounts } = useAccounts();
+  const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);
+  const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
 
   // Uma UNICA chamada busca todo o historico (sem paginacao no backend) -
   // alimenta o grafico, os totais do mes/ano e a lista "Historico de
@@ -116,7 +121,8 @@ export default function Dividends() {
   function reload() {
     reloadAssets();
     reloadSchedules();
-    reloadAll();
+    reloadBanks();
+    reloadAccounts();
     reloadDividends();
     setVisibleCount(PAGE_SIZE);
   }

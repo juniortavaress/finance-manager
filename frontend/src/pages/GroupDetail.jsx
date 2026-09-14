@@ -1,9 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useData } from '../context/DataContext';
 import { groupsApi } from '../api/resources';
 import { useToast } from '../context/ToastContext';
+import { useFriends } from '../hooks/resources/useFriends';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { useCategories } from '../hooks/resources/useCategories';
+import { checkingAccounts as filterChecking, creditCardAccounts as filterCreditCard } from '../utils/accounts';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
 import { fmt, fmtDateShort } from '../utils/format';
 import { IconGear } from '../components/icons';
 import SharedExpenseModal from '../components/modals/SharedExpenseModal';
@@ -35,7 +39,17 @@ export default function GroupDetail() {
   const { groupId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { friends, reloadAll } = useData();
+  const { friends, reload: reloadFriends } = useFriends();
+  const { accounts, reload: reloadAccounts } = useAccounts();
+  const { categories, reload: reloadCategories } = useCategories();
+  const checkingAccounts = useMemo(() => filterChecking(accounts), [accounts]);
+  const creditCardAccounts = useMemo(() => filterCreditCard(accounts), [accounts]);
+  const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
+  const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
+  const reloadAll = useCallback(
+    () => Promise.all([reloadFriends(), reloadAccounts(), reloadCategories()]),
+    [reloadFriends, reloadAccounts, reloadCategories]
+  );
   const { showSuccess, showError } = useToast();
 
   const [group, setGroup] = useState(null);
@@ -287,6 +301,9 @@ export default function GroupDetail() {
         expense={editingExpense}
         groupId={groupId}
         groupMembers={group.members}
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        expenseCategories={expenseCategories}
         onSaved={() => {
           setExpenseModalOpen(false);
           load();
@@ -306,6 +323,9 @@ export default function GroupDetail() {
         friendUserId={settleTarget?.toUserId}
         counterpartyName={settleTarget?.name}
         suggestedAmount={settleTarget?.amount}
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        expenseCategories={expenseCategories}
         onSaved={() => {
           setSettleTarget(null);
           load();
@@ -320,6 +340,8 @@ export default function GroupDetail() {
         friendUserId={receiptTarget?.fromUserId}
         counterpartyName={receiptTarget?.name}
         suggestedAmount={receiptTarget?.amount}
+        checkingAccounts={checkingAccounts}
+        incomeCategories={incomeCategories}
         onSaved={() => {
           setReceiptTarget(null);
           load();

@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { categoriesApi } from '../../api/resources';
-import { useData } from '../../context/DataContext';
 import { useToast } from '../../context/ToastContext';
 import { maskToNumber, numberToMasked } from '../../utils/currency';
 import { IconTrash } from '../icons';
@@ -18,9 +17,8 @@ const COLOR_OPTIONS = ['#0F5C5C', '#C0912F', '#A6432C', '#7A4FE0', '#3D7A8C', '#
  * Modal unico para criar OU editar uma categoria.
  * Se `category` for passado, edita (e permite excluir); senao, cria uma nova.
  */
-export default function CategoryConfigModal({ open, onClose, onSaved, category, defaultKind = 'expense' }) {
+export default function CategoryConfigModal({ open, onClose, onSaved, category, defaultKind = 'expense', categories }) {
   const isEditing = !!category;
-  const { categories } = useData();
   const { showSuccess, showError } = useToast();
 
   const [name, setName] = useState('');
@@ -106,7 +104,7 @@ export default function CategoryConfigModal({ open, onClose, onSaved, category, 
     onSaved?.();
   }
 
-  const reassignOptions = categories.filter(
+  const reassignOptions = (categories || []).filter(
     (c) => c.id !== category?.id && !c.archived && (c.kind === kind || c.kind === 'both')
   );
 

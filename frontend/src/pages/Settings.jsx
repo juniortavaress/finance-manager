@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useData } from '../context/DataContext';
+import { useBanks } from '../hooks/resources/useBanks';
+import { useAccounts } from '../hooks/resources/useAccounts';
 import { useFetch } from '../hooks/useFetch';
 import { useToast } from '../context/ToastContext';
 import { marketDataApi } from '../api/resources';
@@ -15,7 +16,8 @@ const EVENT_TYPE_LABELS = {
 
 export default function Settings() {
   const { user } = useAuth();
-  const { banks, accounts } = useData();
+  const { banks } = useBanks();
+  const { accounts } = useAccounts();
   const { showSuccess, showError } = useToast();
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [eventModalOpen, setEventModalOpen] = useState(false);

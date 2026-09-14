@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useData } from '../../context/DataContext';
 import { creditCardsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
 
-export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, bankName, bankId }) {
-  const { checkingAccounts } = useData();
+export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, bankName, bankId, checkingAccounts = [] }) {
   const { showSuccess, showError } = useToast();
 
   const [accountId, setAccountId] = useState('');

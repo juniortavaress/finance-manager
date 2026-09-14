@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useData } from '../../context/DataContext';
 import { recurringApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { maskToNumber, numberToMasked } from '../../utils/currency';
@@ -12,8 +11,17 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function RecurringModal({ open, onClose, onCreated, onDeleted, recurring }) {
-  const { checkingAccounts, creditCardAccounts, expenseCategories, incomeCategories } = useData();
+export default function RecurringModal({
+  open,
+  onClose,
+  onCreated,
+  onDeleted,
+  recurring,
+  checkingAccounts = [],
+  creditCardAccounts = [],
+  expenseCategories = [],
+  incomeCategories = [],
+}) {
   const { showSuccess, showError } = useToast();
   const isEditing = !!recurring;
 

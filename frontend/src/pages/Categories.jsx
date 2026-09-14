@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useData } from '../context/DataContext';
 import { dashboardApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
+import { useCategories } from '../hooks/resources/useCategories';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
 import { fmt } from '../utils/format';
 import { IconPencil } from '../components/icons';
 import CategoryConfigModal from '../components/modals/CategoryConfigModal';
@@ -67,7 +68,9 @@ function CategoryGrid({ title, items, totalsById, totalsLoading, onEdit }) {
 }
 
 export default function Categories() {
-  const { expenseCategories, incomeCategories, reloadAll } = useData();
+  const { categories, reload: reloadCategories } = useCategories();
+  const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
+  const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [newCategoryKind, setNewCategoryKind] = useState('expense');
@@ -129,11 +132,12 @@ export default function Categories() {
       <CategoryConfigModal
         open={modalOpen}
         category={editingCategory}
+        categories={categories}
         defaultKind={newCategoryKind}
         onClose={() => setModalOpen(false)}
         onSaved={() => {
           setModalOpen(false);
-          reloadAll();
+          reloadCategories();
         }}
       />
     </div>

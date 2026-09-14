@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useData } from '../../context/DataContext';
 import { transactionsApi, recurringApi, installmentsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
@@ -16,8 +15,19 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function TransactionModal({ open, onClose, onCreated, onDeleted, transaction, installmentOnly = false }) {
-  const { checkingAccounts, creditCardAccounts, investmentAccounts, expenseCategories, incomeCategories } = useData();
+export default function TransactionModal({
+  open,
+  onClose,
+  onCreated,
+  onDeleted,
+  transaction,
+  installmentOnly = false,
+  checkingAccounts = [],
+  creditCardAccounts = [],
+  investmentAccounts = [],
+  expenseCategories = [],
+  incomeCategories = [],
+}) {
   const { showSuccess, showError } = useToast();
   const isEditing = !!transaction;
   const isTransfer = isEditing && !!transaction?.is_transfer;

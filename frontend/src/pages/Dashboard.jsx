@@ -1,7 +1,14 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { dashboardApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
-import { useData } from '../context/DataContext';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { useCategories } from '../hooks/resources/useCategories';
+import {
+  checkingAccounts as filterChecking,
+  creditCardAccounts as filterCreditCard,
+  investmentAccounts as filterInvestment,
+} from '../utils/accounts';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
 import { fmt, monthLabel, monthLabelFull, fmtDateShort } from '../utils/format';
 import { hexToRgba } from '../utils/color';
 import TransactionModal from '../components/modals/TransactionModal';
@@ -21,7 +28,14 @@ function todayPeriod() {
 }
 
 export default function Dashboard() {
-  const { categoryById } = useData();
+  const { accounts } = useAccounts();
+  const { categories: allCategories } = useCategories();
+  const categoryById = useCallback((id) => allCategories.find((c) => c.id === id), [allCategories]);
+  const checkingAccounts = useMemo(() => filterChecking(accounts), [accounts]);
+  const creditCardAccounts = useMemo(() => filterCreditCard(accounts), [accounts]);
+  const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
+  const expenseCategories = useMemo(() => filterExpense(allCategories), [allCategories]);
+  const incomeCategories = useMemo(() => filterIncome(allCategories), [allCategories]);
   const [period, setPeriod] = useState(todayPeriod());
   const [modalOpen, setModalOpen] = useState(false);
   const [rdGranularity, setRdGranularity] = useState('monthly');
@@ -413,6 +427,11 @@ export default function Dashboard() {
 
       <TransactionModal
         open={modalOpen}
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        investmentAccounts={investmentAccounts}
+        expenseCategories={expenseCategories}
+        incomeCategories={incomeCategories}
         onClose={() => setModalOpen(false)}
         onCreated={() => {
           setModalOpen(false);
@@ -431,6 +450,7 @@ export default function Dashboard() {
           year={period.year}
           month={period.month}
           type="income"
+          categoryById={categoryById}
         />
       )}
       {drilldown?.kind === 'expense' && (
@@ -441,6 +461,7 @@ export default function Dashboard() {
           year={period.year}
           month={period.month}
           type="expense"
+          categoryById={categoryById}
         />
       )}
       {drilldown?.kind === 'invoices' && (
@@ -455,6 +476,7 @@ export default function Dashboard() {
           month={period.month}
           type="expense"
           categoryId={drilldown.categoryId}
+          categoryById={categoryById}
         />
       )}
     </div>

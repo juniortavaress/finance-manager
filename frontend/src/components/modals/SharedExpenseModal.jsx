@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { useData } from '../../context/DataContext';
 import { sharedExpensesApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
@@ -33,9 +32,12 @@ export default function SharedExpenseModal({
   friendUserId,
   friendName,
   groups = [],
+  friends = [],
+  checkingAccounts,
+  creditCardAccounts,
+  expenseCategories,
 }) {
   const { user } = useAuth();
-  const { friends, checkingAccounts, creditCardAccounts, expenseCategories } = useData();
   const { showSuccess, showError } = useToast();
   const isEditing = !!expense;
 
@@ -113,7 +115,7 @@ export default function SharedExpenseModal({
       setSelectedGroupId(groupId || '');
       setSplitMode('equal');
       setCustomValues({});
-      setPayerAccountId(checkingAccounts[0]?.id || '');
+      setPayerAccountId(checkingAccounts?.[0]?.id || '');
       setPayerCategoryId('');
       const initialIds = groupId && groupMembers ? groupMembers.map((m) => m.user_id) : friendUserId ? [user?.id, friendUserId] : [user?.id];
       setParticipantIds(initialIds);
@@ -364,14 +366,14 @@ export default function SharedExpenseModal({
                 <select value={payerAccountId} onChange={(e) => setPayerAccountId(e.target.value)}>
                   <option value="">Não vincular a uma conta agora</option>
                   <optgroup label="Contas correntes">
-                    {checkingAccounts.map((a) => (
+                    {(checkingAccounts || []).map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}
                       </option>
                     ))}
                   </optgroup>
                   <optgroup label="Cartões de crédito">
-                    {creditCardAccounts.map((a) => (
+                    {(creditCardAccounts || []).map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}
                       </option>
@@ -384,7 +386,7 @@ export default function SharedExpenseModal({
                   <label>Categoria</label>
                   <select value={payerCategoryId} onChange={(e) => setPayerCategoryId(e.target.value)}>
                     <option value="">Selecione...</option>
-                    {expenseCategories.map((c) => (
+                    {(expenseCategories || []).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.icon} {c.name}
                       </option>

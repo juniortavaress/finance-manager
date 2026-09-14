@@ -1,9 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import DataBootstrap from './components/DataBootstrap';
 import AppLayout from './components/AppLayout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -38,11 +36,7 @@ export default function App() {
               path="/"
               element={
                 <ProtectedRoute>
-                  <DataProvider>
-                    <DataBootstrap>
-                      <AppLayout />
-                    </DataBootstrap>
-                  </DataProvider>
+                  <AppLayout />
                 </ProtectedRoute>
               }
             >

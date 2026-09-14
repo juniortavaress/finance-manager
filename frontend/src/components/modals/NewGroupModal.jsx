@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useData } from '../../context/DataContext';
 import { groupsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import ModalShell from './ModalShell';
@@ -15,9 +14,8 @@ const COLOR_OPTIONS = ['#0F5C5C', '#C0912F', '#A6432C', '#7A4FE0', '#3D7A8C', '#
  * Modal unico para criar OU editar um grupo. Se `group` for passado, edita
  * (nome/icone/cor); senao, cria um novo (com selecao de membros iniciais).
  */
-export default function NewGroupModal({ open, onClose, onSaved, onCreated, group }) {
+export default function NewGroupModal({ open, onClose, onSaved, onCreated, group, friends = [] }) {
   const isEditing = !!group;
-  const { friends } = useData();
   const { showSuccess, showError } = useToast();
   const [name, setName] = useState('');
   const [icon, setIcon] = useState(ICON_OPTIONS[0]);

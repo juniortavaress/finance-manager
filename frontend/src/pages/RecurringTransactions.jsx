@@ -1,8 +1,11 @@
-import { useState } from 'react';
-import { useData } from '../context/DataContext';
+import { useCallback, useMemo, useState } from 'react';
 import { recurringApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useToast } from '../context/ToastContext';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { useCategories } from '../hooks/resources/useCategories';
+import { checkingAccounts as filterChecking, creditCardAccounts as filterCreditCard } from '../utils/accounts';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
 import { fmt, fmtDateShort } from '../utils/format';
 import { IconPencil, IconBell, IconCheck } from '../components/icons';
 import RecurringModal from '../components/modals/RecurringModal';
@@ -14,7 +17,14 @@ function todayIso() {
 }
 
 export default function RecurringTransactions() {
-  const { categoryById, accountById } = useData();
+  const { accounts } = useAccounts();
+  const { categories } = useCategories();
+  const categoryById = useCallback((id) => categories.find((c) => c.id === id), [categories]);
+  const accountById = useCallback((id) => accounts.find((a) => a.id === id), [accounts]);
+  const checkingAccounts = useMemo(() => filterChecking(accounts), [accounts]);
+  const creditCardAccounts = useMemo(() => filterCreditCard(accounts), [accounts]);
+  const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
+  const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
   const { showSuccess, showError } = useToast();
   const [autoModalOpen, setAutoModalOpen] = useState(false);
   const [editingRecurring, setEditingRecurring] = useState(null);
@@ -211,6 +221,10 @@ export default function RecurringTransactions() {
       <RecurringModal
         open={autoModalOpen || !!editingRecurring}
         recurring={editingRecurring}
+        checkingAccounts={checkingAccounts}
+        creditCardAccounts={creditCardAccounts}
+        expenseCategories={expenseCategories}
+        incomeCategories={incomeCategories}
         onClose={() => {
           setAutoModalOpen(false);
           setEditingRecurring(null);
