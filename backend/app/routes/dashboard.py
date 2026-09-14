@@ -428,6 +428,7 @@ def balance_evolution():
         month_periods = [add_months(start_cursor, i) for i in range(total_months)]
         period_ends = [_month_bounds(p.year, p.month)[1] for p in month_periods]
 
+    fx_rates, _ = get_brl_rates()
     balance_by_end = {end: Decimal("0") for end in period_ends}
     for account in accounts:
         txs = (
@@ -446,7 +447,7 @@ def balance_evolution():
                 tx = txs[tx_idx]
                 running += tx.amount if tx.type == "income" else -tx.amount
                 tx_idx += 1
-            balance_by_end[end] += running
+            balance_by_end[end] += convert_to_brl(running, account.currency, fx_rates)
 
     if granularity == "yearly":
         result = [

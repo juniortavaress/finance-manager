@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { dividendsApi, investmentsApi } from '../../api/resources';
 import { useFetch } from '../../hooks/useFetch';
 import { fmt, fmtDateFull } from '../../utils/format';
@@ -26,6 +26,10 @@ export default function AssetDetailModal({ open, onClose, asset }) {
   const assetId = asset?.id || null;
   const currency = asset?.currency;
   const [chartView, setChartView] = useState('evolution');
+
+  useEffect(() => {
+    setChartView('evolution');
+  }, [assetId]);
 
   const { data: evoData, initialLoading: evoLoading } = useFetch(
     (signal) => (assetId ? investmentsApi.assetEvolution(assetId, signal) : Promise.resolve({ evolution: [] })),
