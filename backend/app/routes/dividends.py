@@ -4,6 +4,7 @@ import threading
 from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, current_app, g, request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import contains_eager
 
 from app.auth_decorator import login_required
@@ -112,36 +113,53 @@ def _materialize_schedule(schedule: DividendSchedule, user_id):
     created_any = False
     while schedule.next_due_date <= today:
         due_date = schedule.next_due_date
+
+        already_exists = Dividend.query.filter_by(schedule_id=schedule.id, date=due_date).first() is not None
+        if already_exists:
+            schedule.next_due_date = add_months(schedule.next_due_date, months_step)
+            continue
+
         quantity = Decimal(
             str(_asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)["quantity"])
         )
         amount = _amount_for_schedule(schedule, quantity)
 
         if amount > 0:
-            tx = Transaction(
-                user_id=user_id,
-                account_id=account.id,
-                category_id=category.id,
-                description=f"Provento {asset.code or asset.name}",
-                amount=amount,
-                type="income",
-                date=due_date,
-                payment_method="debit",
-                status="confirmed",
-            )
-            db.session.add(tx)
-            db.session.flush()
+            # SAVEPOINT (nao a transacao inteira): se o INSERT do Dividend
+            # colidir com uq_dividend_schedule_date (outro worker do gunicorn
+            # materializou essa mesma ocorrencia entre a checagem acima e
+            # este flush), so' desfaz esta tentativa, preservando meses
+            # anteriores deste mesmo schedule ja flush(ados) nesta chamada.
+            try:
+                with db.session.begin_nested():
+                    tx = Transaction(
+                        user_id=user_id,
+                        account_id=account.id,
+                        category_id=category.id,
+                        description=f"Provento {asset.code or asset.name}",
+                        amount=amount,
+                        type="income",
+                        date=due_date,
+                        payment_method="debit",
+                        status="confirmed",
+                    )
+                    db.session.add(tx)
+                    db.session.flush()
 
-            dividend = Dividend(
-                asset_id=asset.id,
-                schedule_id=schedule.id,
-                transaction_id=tx.id,
-                kind=schedule.kind,
-                date=due_date,
-                quantity_snapshot=quantity,
-                amount=amount,
-            )
-            db.session.add(dividend)
+                    dividend = Dividend(
+                        asset_id=asset.id,
+                        schedule_id=schedule.id,
+                        transaction_id=tx.id,
+                        kind=schedule.kind,
+                        date=due_date,
+                        quantity_snapshot=quantity,
+                        amount=amount,
+                    )
+                    db.session.add(dividend)
+                    db.session.flush()
+            except IntegrityError:
+                schedule.next_due_date = add_months(schedule.next_due_date, months_step)
+                continue
             created_any = True
 
         schedule.next_due_date = add_months(schedule.next_due_date, months_step)
