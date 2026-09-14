@@ -384,14 +384,18 @@ def dividends_summary():
     o historico inteiro (que so' cresce) para o frontend somar."""
     trigger_schedule_sync_for_current_user()
 
-    rows = (
+    bank_filter = request.args.get("bank_id")
+
+    query = (
         db.session.query(Dividend.date, Dividend.amount, Account.currency)
         .join(Asset, Asset.id == Dividend.asset_id)
         .join(InvestmentAccount, InvestmentAccount.id == Asset.investment_account_id)
         .join(Account, Account.id == InvestmentAccount.account_id)
         .filter(Account.user_id == g.current_user.id)
-        .all()
     )
+    if bank_filter:
+        query = query.filter(Account.bank_id == bank_filter)
+    rows = query.all()
 
     fx_rates, _ = get_brl_rates()
 

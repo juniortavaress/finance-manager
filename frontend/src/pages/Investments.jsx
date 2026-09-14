@@ -61,8 +61,8 @@ export default function Investments() {
     [bankFilter]
   );
   const { data: dividendsData, loading: dividendsLoading, reload: reloadDividends } = useFetch(
-    (signal) => dividendsApi.summary(signal),
-    []
+    (signal) => dividendsApi.summary(bankFilter ? { bank_id: bankFilter } : undefined, signal),
+    [bankFilter]
   );
   const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
   const [drilldown, setDrilldown] = useState(null);
