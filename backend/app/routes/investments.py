@@ -1501,6 +1501,169 @@ def investments_summary():
     }
 
 
+@investments_bp.get("/profit-evolution")
+@login_required
+def investments_profit_evolution():
+    """Serie mensal {year, month, invested, current, cash, contributed,
+    profit} do portfolio inteiro (todas as corretoras - sem filtro de banco,
+    ja que lucro so' faz sentido consolidado). profit = current + cash -
+    contributed, ou seja "o que eu teria se liquidasse tudo hoje, menos o que
+    eu coloquei" (formula acertada com o usuario - dividendo reinvestido ou
+    parado em caixa ja fica embutido em current/cash, nao e' somado a parte).
+
+    Endpoint separado do /summary porque reconstruir o historico mensal (via
+    _compute_asset_evolution, que ja bate em stock_prices/crypto_prices e
+    projeta renda fixa) e' bem mais pesado que o resto do summary, que so'
+    olha o estado de hoje - isolado aqui pra nao atrasar o carregamento do
+    resto da pagina de investimentos."""
+    _settle_all_matured_fixed_income(g.current_user.id)
+
+    inv_accounts = _owned_investment_accounts()
+    inv_account_ids = [ia.id for ia in inv_accounts]
+    if not inv_account_ids:
+        return {"evolution": []}
+
+    account_ids = [ia.account_id for ia in inv_accounts]
+    accounts_by_id = {a.id: a for a in Account.query.filter(Account.id.in_(account_ids)).all()}
+    accounts_by_ia_id = {ia.id: accounts_by_id[ia.account_id] for ia in inv_accounts}
+
+    fx_rates, _fx_updated_at = get_brl_rates()
+
+    all_assets = (
+        Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids))
+        .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
+        .all()
+    )
+    splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
+        all_assets
+    )
+    db.session.commit()
+
+    currency_by_ia_id_all = {ia.id: accounts_by_ia_id[ia.id].currency for ia in inv_accounts}
+    _apply_cached_crypto_prices(all_assets, currency_by_ia_id_all)
+    _apply_cached_stock_prices(all_assets, currency_by_ia_id_all)
+
+    today = dt.date.today()
+
+    all_tx_dates = [tx.date for asset in all_assets for tx in asset.asset_transactions]
+    account_txs = (
+        Transaction.query.filter(
+            Transaction.account_id.in_(account_ids),
+            Transaction.status == "confirmed",
+            Transaction.payment_method != "credit",
+        ).all()
+        if account_ids
+        else []
+    )
+    all_tx_dates += [tx.date for tx in account_txs]
+    if not all_tx_dates:
+        return {"evolution": []}
+
+    earliest_date = min(all_tx_dates)
+    cursor = _month_start(earliest_date)
+    last = _month_start(today)
+    months = []
+    while cursor <= last:
+        months.append(cursor)
+        cursor = add_months(cursor, 1)
+
+    current_amount_by_asset_id = {}
+    for asset in all_assets:
+        position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
+        currency = currency_by_ia_id_all.get(asset.investment_account_id)
+        current_value = position["current_amount"]
+        if currency and currency != "BRL" and current_value is not None:
+            current_value = float(convert_to_brl(Decimal(str(current_value)), currency, fx_rates))
+        current_amount_by_asset_id[str(asset.id)] = current_value
+
+    asset_evolution = _compute_asset_evolution(
+        all_assets,
+        months,
+        today,
+        current_amount_by_asset_id,
+        fx_rates=fx_rates,
+        bank_filter=None,
+        accounts_by_ia_id=accounts_by_ia_id,
+        splits_by_asset_id=splits_by_asset_id,
+        merges_by_target_asset_id=merges_by_target_asset_id,
+        merge_cutoff_by_asset_id=merge_cutoff_by_asset_id,
+    )
+
+    # Reconstroi caixa (saldo da conta) e aporte acumulados mes a mes com a
+    # mesma tecnica O(contas x transacoes) usada acima para cost_basis: cada
+    # conta avanca pelas suas transacoes uma unica vez, na ordem, em vez de
+    # somar do zero em cada mes.
+    txs_by_account = {}
+    for tx in account_txs:
+        txs_by_account.setdefault(tx.account_id, []).append(tx)
+    for txs in txs_by_account.values():
+        txs.sort(key=lambda t: t.date)
+
+    def _is_investment_transfer(tx):
+        return (
+            tx.is_transfer
+            and not tx.description.startswith("Compra ")
+            and not tx.description.startswith("Venda ")
+            and not tx.description.startswith("Provento ")
+        )
+
+    state_by_account = {
+        ia.account_id: {"cash": accounts_by_id[ia.account_id].opening_balance, "contributed": Decimal("0"), "idx": 0}
+        for ia in inv_accounts
+    }
+
+    cash_by_month = []
+    contributed_by_month = []
+    for month_start in months:
+        month_end = add_months(month_start, 1)
+        month_cash_total = Decimal("0")
+        month_contributed_total = Decimal("0")
+        for ia in inv_accounts:
+            account = accounts_by_id[ia.account_id]
+            state = state_by_account[account.id]
+            txs = txs_by_account.get(account.id, [])
+            idx = state["idx"]
+            cash = state["cash"]
+            contributed = state["contributed"]
+            while idx < len(txs) and txs[idx].date < month_end:
+                tx = txs[idx]
+                signed = tx.amount if tx.type == "income" else -tx.amount
+                cash += signed
+                if _is_investment_transfer(tx):
+                    contributed += signed
+                idx += 1
+            state["idx"] = idx
+            state["cash"] = cash
+            state["contributed"] = contributed
+
+            currency = account.currency
+            fx_factor = (
+                Decimal(str(fx_rates.get(currency, 1))) if currency != "BRL" else Decimal("1")
+            )
+            month_cash_total += max(cash, Decimal("0")) * fx_factor
+            month_contributed_total += contributed * fx_factor
+        cash_by_month.append(month_cash_total)
+        contributed_by_month.append(month_contributed_total)
+
+    evolution = []
+    for i, month_start in enumerate(months):
+        current = Decimal(str(asset_evolution[i]["current"]))
+        cash = cash_by_month[i]
+        contributed = contributed_by_month[i]
+        evolution.append(
+            {
+                "year": month_start.year,
+                "month": month_start.month,
+                "current": float(current),
+                "cash": float(cash),
+                "contributed": float(contributed),
+                "profit": float(current + cash - contributed),
+            }
+        )
+
+    return {"evolution": evolution}
+
+
 def _parse_fixed_income_fields(data, required):
     """Valida e extrai os campos de renda fixa do payload. Quando `required`
     e True (criacao de ativo renda_fixa), exige tipo, vencimento e a info

@@ -11,6 +11,7 @@ import InvestmentRentabilityDrilldownModal from '../components/modals/Investment
 import InvestmentBreakdownDrilldownModal from '../components/modals/InvestmentBreakdownDrilldownModal';
 import InvestmentTypeBreakdownDrilldownModal from '../components/modals/InvestmentTypeBreakdownDrilldownModal';
 import DividendsDrilldownModal from '../components/modals/DividendsDrilldownModal';
+import ProfitEvolutionChart from '../components/charts/ProfitEvolutionChart';
 import { IconChevronDown } from '../components/icons';
 
 const KIND_LABELS = {
@@ -66,6 +67,10 @@ export default function Investments() {
     [bankFilter]
   );
   const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
+  const { data: profitData, loading: profitLoading, reload: reloadProfit } = useFetch(
+    (signal) => investmentsApi.profitEvolution(signal),
+    []
+  );
   const [drilldown, setDrilldown] = useState(null);
 
   const assets = summaryData?.assets || [];
@@ -82,9 +87,12 @@ export default function Investments() {
     reloadSchedules();
     reloadBanks();
     reloadAccounts();
+    reloadProfit();
   }
 
   const activeAssets = useMemo(() => assets.filter((a) => a.position.quantity > 0), [assets]);
+
+  const profitEvolution = profitData?.evolution || [];
 
   const dividendsByMonth = useMemo(
     () => (dividendsData?.by_month || []).map((p) => ({ label: `${monthLabelFull(p.month)} ${p.year}`, value: p.total })),
@@ -457,10 +465,21 @@ export default function Investments() {
 
       <div className="grid grid-2" style={{ marginBottom: 20 }}>
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-          <h3>Análises</h3>
-          <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            Mais análises em breve.
-          </div>
+          <h3>Lucro</h3>
+          {profitLoading ? (
+            <Skeleton width="100%" height={180} radius={8} />
+          ) : profitEvolution.length < 2 ? (
+            <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              Histórico insuficiente para o gráfico.
+            </div>
+          ) : (
+            <>
+              <ProfitEvolutionChart periods={profitEvolution} />
+              <div className="delta" style={{ marginTop: 6 }}>
+                valor atual + caixa − aportes
+              </div>
+            </>
+          )}
         </div>
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
           <h3>
