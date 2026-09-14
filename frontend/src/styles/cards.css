@@ -204,6 +204,40 @@
   user-select: none;
 }
 
+/* icone de info com tooltip em hover, ao lado de titulos de card */
+.info-tooltip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  vertical-align: middle;
+  cursor: help;
+}
+.info-tooltip-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--ink-faint);
+}
+.info-tooltip-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  box-shadow: 0 4px 16px rgba(28, 43, 41, 0.12);
+  z-index: 20;
+  white-space: normal;
+}
+
 /* tooltip customizado dos gráficos (Recharts) */
 .chart-tooltip {
   background: var(--surface);

@@ -12,6 +12,7 @@ import InvestmentBreakdownDrilldownModal from '../components/modals/InvestmentBr
 import InvestmentTypeBreakdownDrilldownModal from '../components/modals/InvestmentTypeBreakdownDrilldownModal';
 import DividendsDrilldownModal from '../components/modals/DividendsDrilldownModal';
 import ProfitEvolutionChart from '../components/charts/ProfitEvolutionChart';
+import InfoTooltip from '../components/InfoTooltip';
 import { IconChevronDown } from '../components/icons';
 
 const KIND_LABELS = {
@@ -465,7 +466,10 @@ export default function Investments() {
 
       <div className="grid grid-2" style={{ marginBottom: 20 }}>
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-          <h3>Lucro</h3>
+          <h3>
+            Evolução do lucro
+            <InfoTooltip text="Lucro = valor atual dos ativos + caixa disponível − aportes. É o que você teria se liquidasse tudo hoje, descontando o que colocou." />
+          </h3>
           {profitLoading ? (
             <Skeleton width="100%" height={180} radius={8} />
           ) : profitEvolution.length < 2 ? (
@@ -473,12 +477,7 @@ export default function Investments() {
               Histórico insuficiente para o gráfico.
             </div>
           ) : (
-            <>
-              <ProfitEvolutionChart periods={profitEvolution} />
-              <div className="delta" style={{ marginTop: 6 }}>
-                valor atual + caixa − aportes
-              </div>
-            </>
+            <ProfitEvolutionChart periods={profitEvolution} />
           )}
         </div>
         <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
