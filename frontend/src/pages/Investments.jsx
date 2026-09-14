@@ -9,6 +9,7 @@ import { fmt, monthLabelFull } from '../utils/format';
 import Skeleton from '../components/Skeleton';
 import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
 import InvestmentBreakdownDrilldownModal from '../components/modals/InvestmentBreakdownDrilldownModal';
+import InvestmentTypeBreakdownDrilldownModal from '../components/modals/InvestmentTypeBreakdownDrilldownModal';
 import DividendsDrilldownModal from '../components/modals/DividendsDrilldownModal';
 import { IconChevronDown } from '../components/icons';
 
@@ -145,6 +146,23 @@ export default function Investments() {
   }, [activeAssets, bankFilter]);
   const typeMax = Math.max(1, ...byType.map((t) => t.total));
   const typeSum = byType.reduce((s, t) => s + t.total, 0) || 1;
+
+  const assetsByType = useMemo(() => {
+    const map = {};
+    activeAssets.forEach((a) => {
+      const value = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
+      const key = !bankFilter && a.currency && a.currency !== 'BRL' ? 'internacional' : a.type;
+      map[key] = map[key] || [];
+      map[key].push({ label: a.code || a.name, value, color: TYPE_COLORS[a.type] });
+    });
+    Object.keys(map).forEach((key) => {
+      const groupTotal = map[key].reduce((s, r) => s + r.value, 0) || 1;
+      map[key] = map[key]
+        .map((r) => ({ ...r, pct: (r.value / groupTotal) * 100 }))
+        .sort((a, b) => b.value - a.value);
+    });
+    return map;
+  }, [activeAssets, bankFilter]);
 
   const byBank = useMemo(() => {
     const map = {};
@@ -377,7 +395,16 @@ export default function Investments() {
             ))}
           {!summaryLoading && byType.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
           {!summaryLoading && byType.map(({ type, total }) => (
-            <div className="hbar-row" key={type}>
+            <div
+              className="hbar-row hbar-row-clickable"
+              key={type}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDrilldown({ kind: 'assetType', type })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') setDrilldown({ kind: 'assetType', type });
+              }}
+            >
               <div className="hbar-top">
                 <span className="cat">
                   <span className="catdot" style={{ background: TYPE_COLORS[type] }} />
@@ -594,6 +621,14 @@ export default function Investments() {
           original: b.originalTotal,
           originalCurrency: b.currency,
         }))}
+      />
+
+      <InvestmentTypeBreakdownDrilldownModal
+        open={drilldown?.kind === 'assetType'}
+        onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
+        title={`${TYPE_LABELS[drilldown?.type] || ''} por ativo`}
+        rows={assetsByType[drilldown?.type] || []}
       />
 
       <DividendsDrilldownModal
