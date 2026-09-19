@@ -293,6 +293,9 @@ main {
 .grid-2 {
   grid-template-columns: 1.3fr 1fr;
 }
+.grid-2-even {
+  grid-template-columns: 1fr 1fr;
+}
 .grid-3 {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -302,6 +305,9 @@ main {
     grid-template-columns: repeat(2, 1fr);
   }
   .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .grid-2-even {
     grid-template-columns: 1fr;
   }
   .grid-3 {
@@ -362,7 +368,8 @@ main {
     padding-top: 68px;
   }
   .grid-4,
-  .grid-3 {
+  .grid-3,
+  .grid-2-even {
     grid-template-columns: 1fr;
   }
 }

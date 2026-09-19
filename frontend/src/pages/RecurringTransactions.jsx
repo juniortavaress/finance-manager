@@ -230,15 +230,7 @@ export default function RecurringTransactions() {
         };
 
         return (
-          <div className="grid grid-2">
-            <div className="card">
-              <h3>Entradas</h3>
-              {recurringLoading && renderSkeletonRows()}
-              {!recurringLoading && incomeList.length === 0 && (
-                <div className="empty-state">Nenhuma entrada recorrente cadastrada.</div>
-              )}
-              {!recurringLoading && incomeList.map(renderRow)}
-            </div>
+          <div className="grid grid-2-even">
             <div className="card">
               <h3>Cobranças</h3>
               {recurringLoading && renderSkeletonRows()}
@@ -246,6 +238,14 @@ export default function RecurringTransactions() {
                 <div className="empty-state">Nenhuma cobrança recorrente cadastrada.</div>
               )}
               {!recurringLoading && expenseList.map(renderRow)}
+            </div>
+            <div className="card">
+              <h3>Entradas</h3>
+              {recurringLoading && renderSkeletonRows()}
+              {!recurringLoading && incomeList.length === 0 && (
+                <div className="empty-state">Nenhuma entrada recorrente cadastrada.</div>
+              )}
+              {!recurringLoading && incomeList.map(renderRow)}
             </div>
           </div>
         );
