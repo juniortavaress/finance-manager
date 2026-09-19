@@ -34,12 +34,17 @@ export default function RecurringTransactions() {
   const { data: recurringData, reload: reloadRecurring, loading: recurringLoading } = useFetch(() => recurringApi.list(), []);
   const recurringList = recurringData?.recurring_transactions || [];
   const activeRecurring = recurringList.filter((r) => r.active);
-  const totalCommitted = activeRecurring.reduce((s, r) => s + r.amount, 0);
+  const activeExpenses = activeRecurring.filter((r) => r.type !== 'income');
+  const activeIncomes = activeRecurring.filter((r) => r.type === 'income');
+  const totalCommittedExpense = activeExpenses.reduce((s, r) => s + r.amount, 0);
+  const totalCommittedIncome = activeIncomes.reduce((s, r) => s + r.amount, 0);
+
+  const incomeList = recurringList.filter((r) => r.type === 'income');
+  const expenseList = recurringList.filter((r) => r.type !== 'income');
 
   const today = todayIso();
   const manualActive = activeRecurring.filter((r) => !r.auto_debit);
-  const overdue = manualActive.filter((r) => !r.paid_at && r.current_due_date < today);
-  const dueToday = manualActive.filter((r) => !r.paid_at && r.current_due_date === today);
+  const overdue = manualActive.filter((r) => !r.paid_at && r.current_due_date <= today);
 
   async function toggleRecurring(recurring) {
     try {
@@ -78,8 +83,8 @@ export default function RecurringTransactions() {
       </div>
 
       <div className="grid grid-3" style={{ marginBottom: 20 }}>
-        <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
-          <div className="label">Total comprometido por mês</div>
+        <div className="card stat-card" style={{ '--stripe': 'var(--brick)' }}>
+          <div className="label">Cobranças por mês</div>
           {recurringLoading ? (
             <>
               <Skeleton width={110} height={24} style={{ marginBottom: 6 }} />
@@ -87,14 +92,24 @@ export default function RecurringTransactions() {
             </>
           ) : (
             <>
-              <div className="value num">{fmt(totalCommitted)}</div>
-              <div className="delta">{activeRecurring.length} recorrentes ativos</div>
+              <div className="value num">{fmt(totalCommittedExpense)}</div>
+              <div className="delta">{activeExpenses.length} recorrentes ativos</div>
             </>
           )}
         </div>
-        <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
-          <div className="label">Vencendo hoje</div>
-          {recurringLoading ? <Skeleton width={40} height={24} /> : <div className="value num">{dueToday.length}</div>}
+        <div className="card stat-card" style={{ '--stripe': 'var(--teal)' }}>
+          <div className="label">Entradas por mês</div>
+          {recurringLoading ? (
+            <>
+              <Skeleton width={110} height={24} style={{ marginBottom: 6 }} />
+              <Skeleton width={140} height={12} />
+            </>
+          ) : (
+            <>
+              <div className="value num">{fmt(totalCommittedIncome)}</div>
+              <div className="delta">{activeIncomes.length} recorrentes ativos</div>
+            </>
+          )}
         </div>
         <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
           <div className="label">Atrasados</div>
@@ -102,9 +117,8 @@ export default function RecurringTransactions() {
         </div>
       </div>
 
-      <div className="card">
-        <h3>Recorrentes cadastrados</h3>
-        {recurringLoading &&
+      {(() => {
+        const renderSkeletonRows = () =>
           [0, 1, 2].map((i) => (
             <div className="auto-row" key={i}>
               <div className="auto-left">
@@ -116,16 +130,14 @@ export default function RecurringTransactions() {
               </div>
               <Skeleton width={70} height={14} />
             </div>
-          ))}
-        {!recurringLoading && recurringList.length === 0 && (
-          <div className="empty-state">Nenhum recorrente cadastrado.</div>
-        )}
-        {!recurringLoading && recurringList.map((r) => {
+          ));
+
+        const renderRow = (r) => {
           const category = categoryById(r.category_id) || r.category;
           const account = accountById(r.account_id) || r.account;
           const isCredit = r.payment_method === 'credit';
           const isManual = !r.auto_debit;
-          const isOverdue = isManual && !r.paid_at && r.current_due_date < today;
+          const isOverdue = isManual && !r.paid_at && r.current_due_date <= today;
           const isPaid = isManual && !!r.paid_at;
           return (
             <div className="auto-row" key={r.id}>
@@ -215,8 +227,29 @@ export default function RecurringTransactions() {
               </div>
             </div>
           );
-        })}
-      </div>
+        };
+
+        return (
+          <div className="grid grid-2">
+            <div className="card">
+              <h3>Entradas</h3>
+              {recurringLoading && renderSkeletonRows()}
+              {!recurringLoading && incomeList.length === 0 && (
+                <div className="empty-state">Nenhuma entrada recorrente cadastrada.</div>
+              )}
+              {!recurringLoading && incomeList.map(renderRow)}
+            </div>
+            <div className="card">
+              <h3>Cobranças</h3>
+              {recurringLoading && renderSkeletonRows()}
+              {!recurringLoading && expenseList.length === 0 && (
+                <div className="empty-state">Nenhuma cobrança recorrente cadastrada.</div>
+              )}
+              {!recurringLoading && expenseList.map(renderRow)}
+            </div>
+          </div>
+        );
+      })()}
 
       <RecurringModal
         open={autoModalOpen || !!editingRecurring}
