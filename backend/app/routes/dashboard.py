@@ -95,6 +95,23 @@ def summary():
     current = period_totals(start, end)
     previous = period_totals(prev_start, prev_end)
 
+    scheduled_expense = (
+        db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
+        .join(Account, Account.id == Transaction.account_id)
+        .filter(
+            Transaction.user_id == g.current_user.id,
+            Transaction.type == "expense",
+            Transaction.date >= start,
+            Transaction.date <= end,
+            Transaction.status == "scheduled",
+            Transaction.is_invoice_payment.is_(False),
+            Transaction.is_transfer.is_(False),
+            Account.type == "checking",
+        )
+        .scalar()
+    ) or Decimal("0")
+    despesas_projetado = current["expense"] + scheduled_expense
+
     income_count = (
         Transaction.query.join(Account, Account.id == Transaction.account_id).filter(
             Transaction.user_id == g.current_user.id,
@@ -122,6 +139,7 @@ def summary():
         "receitas_mes_qtd": income_count,
         "despesas_mes": float(current["expense"]),
         "despesas_variacao_pct": pct_change(current["expense"], previous["expense"]),
+        "despesas_projetado": float(despesas_projetado),
         "saldo_variacao_pct": None,
         "faturas_abertas_total": float(faturas_abertas_total),
         "faturas_abertas_qtd": len(outstanding_invoices),

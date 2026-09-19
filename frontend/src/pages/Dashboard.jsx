@@ -171,9 +171,7 @@ export default function Dashboard() {
             <>
               <div className="value num"><AnimatedNumber value={summary?.despesas_mes ?? 0} /></div>
               <div className="delta">
-                {summary?.despesas_variacao_pct != null
-                  ? `${summary.despesas_variacao_pct >= 0 ? '↑' : '↓'} ${Math.abs(summary.despesas_variacao_pct).toFixed(1)}% vs mês anterior`
-                  : 'sem dado do mês anterior'}
+                Projetado: {fmt(summary?.despesas_projetado ?? summary?.despesas_mes ?? 0)}
               </div>
             </>
           )}
