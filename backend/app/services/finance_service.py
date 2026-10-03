@@ -26,6 +26,14 @@ def day_after_closing(credit_card, reference_month: dt.date) -> dt.date:
     return closing_date + dt.timedelta(days=1)
 
 
+def invoice_cycle_start(credit_card, reference_month: dt.date) -> dt.date:
+    """Primeiro dia do ciclo da fatura de referencia (dia apos o fechamento do mes anterior).
+
+    E a data das parcelas 2..N: cai dentro da propria fatura, entao data e fatura sempre concordam.
+    """
+    return day_after_closing(credit_card, add_months(reference_month.replace(day=1), -1))
+
+
 def mark_installment_plan_completed_if_done(plan: InstallmentPlan):
     remaining = Transaction.query.filter_by(installment_plan_id=plan.id, status="scheduled").count()
     if remaining == 0:

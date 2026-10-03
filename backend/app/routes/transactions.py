@@ -12,8 +12,8 @@ from app.models.transaction import TRANSACTION_STATUSES
 from app.services.finance_service import (
     add_months,
     apply_transaction_side_effects,
-    day_after_closing,
     get_or_create_invoice,
+    invoice_cycle_start,
     invoice_month_for_date,
     recalc_account_balance,
     recalc_credit_card_used_amount,
@@ -239,7 +239,7 @@ def create_transaction():
             first_ref_month = invoice_month_for_date(credit_card, purchase_date)
             for n in range(1, installments_count + 1):
                 ref_month = first_ref_month if n == 1 else add_months(first_ref_month, n - 1)
-                installment_date = purchase_date if n == 1 else day_after_closing(credit_card, ref_month)
+                installment_date = purchase_date if n == 1 else invoice_cycle_start(credit_card, ref_month)
                 invoice = get_or_create_invoice(credit_card, ref_month)
 
                 value = installment_amount if n < installments_count else remaining
@@ -563,13 +563,17 @@ def update_transaction(transaction_id):
         account_changed = True
         current_account = new_account
 
+    date_changed = False
     if "date" in data:
-        tx.date = dt.date.fromisoformat(data["date"])
+        new_date = dt.date.fromisoformat(data["date"])
+        date_changed = new_date != tx.date
+        tx.date = new_date
         if tx.is_transfer and tx.transfer_pair:
             tx.transfer_pair.date = tx.date
         if dividend:
             dividend.date = tx.date
-    if (account_changed or "date" in data) and tx.payment_method == "credit" and current_account.credit_card:
+    # So re-deriva a fatura se a data de fato mudou: editar valor/descricao nao pode mover a transacao de fatura.
+    if (account_changed or date_changed) and tx.payment_method == "credit" and current_account.credit_card:
         ref_month = invoice_month_for_date(current_account.credit_card, tx.date)
         new_invoice = get_or_create_invoice(current_account.credit_card, ref_month)
         tx.credit_card_invoice_id = new_invoice.id
