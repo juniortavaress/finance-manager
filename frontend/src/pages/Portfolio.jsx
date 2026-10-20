@@ -98,7 +98,7 @@ function profitAmount(a) {
 
 export default function Portfolio() {
   const [showArchived, setShowArchived] = useState(false);
-  const { data: assetsData, loading: assetsLoading, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
+  const { data: assetsData, setData: setAssetsData, loading: assetsLoading, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
   const { banks, reload: reloadBanks } = useBanks();
   const { accounts, reload: reloadAccounts } = useAccounts();
   const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);
@@ -213,6 +213,30 @@ export default function Portfolio() {
     setEditingPriceValue('');
   }
 
+  // Aplica o novo valor atual direto na lista em memória (mesma conta do
+  // backend em _asset_position para ativos de preço manual), sem refazer o
+  // GET /assets - evita o skeleton piscando depois de editar um valor.
+  function applyCurrentPriceLocally(assetId, unitPrice) {
+    const patch = (a) => {
+      if (a.id !== assetId) return a;
+      const { quantity, invested_amount: invested, dividends_total: dividends } = a.position;
+      const currentAmount = unitPrice != null ? quantity * unitPrice : null;
+      const base = currentAmount != null ? currentAmount : invested;
+      return {
+        ...a,
+        current_unit_price: unitPrice,
+        position: {
+          ...a.position,
+          current_amount: currentAmount,
+          total_return_pct: invested > 0 ? ((base + (dividends || 0)) / invested - 1) * 100 : null,
+        },
+      };
+    };
+    setAssetsData((prev) =>
+      prev ? { ...prev, assets: prev.assets?.map(patch), archived_assets: prev.archived_assets?.map(patch) } : prev
+    );
+  }
+
   async function saveEditTotal(asset) {
     if (editSettledRef.current) return;
     editSettledRef.current = true;
@@ -222,10 +246,10 @@ export default function Portfolio() {
     setSavingPrice(true);
     try {
       await investmentsApi.updateAsset(asset.id, { current_unit_price: unitPrice });
+      applyCurrentPriceLocally(asset.id, unitPrice);
       showSuccess('Valor atualizado com sucesso.');
       setEditingPriceId(null);
       setEditingPriceValue('');
-      reload();
     } catch (err) {
       showError(err.message || 'Não foi possível atualizar o valor.');
     } finally {

@@ -47,5 +47,5 @@ export function useFetch(fetcher, deps = []) {
 
   const initialLoading = loading && !hasLoadedOnce.current;
 
-  return { data, loading, initialLoading, error, reload };
+  return { data, setData, loading, initialLoading, error, reload };
 }
