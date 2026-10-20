@@ -1,4 +1,4 @@
-import { transactionsApi, dashboardApi } from '../../api/resources';
+import { transactionsApi, dashboardApi, quotesApi } from '../../api/resources';
 import { useFetch } from '../../hooks/useFetch';
 import { fmt, fmtDateShort } from '../../utils/format';
 import ModalShell from './ModalShell';
@@ -6,12 +6,6 @@ import Skeleton from '../Skeleton';
 
 function lastDayIso(year, month) {
   return new Date(year, month, 0).toISOString().slice(0, 10);
-}
-
-// Para gastos em moeda estrangeira, o valor da linha já vem convertido para
-// BRL; aqui mostramos o valor original ao lado, na linha de detalhe.
-function originalAmountLabel(amount, currency) {
-  return currency && currency !== 'BRL' ? ` · ${fmt(amount, currency)}` : '';
 }
 
 export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type, categoryId, categoryById = () => undefined }) {
@@ -33,7 +27,22 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
           }),
     [year, month, type, categoryId]
   );
+  const { data: quotesData } = useFetch(() => quotesApi.list(), []);
   const pos = type === 'income';
+
+  const rateByCurrency = {};
+  (quotesData?.quotes || []).forEach((q) => {
+    rateByCurrency[q.currency] = q.brl_rate;
+  });
+
+  // Cada item guarda o valor na moeda original e o equivalente em BRL (o
+  // backend já manda `amount_brl` no detalhe de despesas; nos demais usamos a
+  // cotação atual), pra mostrar "€ 35,19" com a conversão ao lado e somar tudo em BRL.
+  function toItemAmounts(amount, currency, amountBrl) {
+    const cur = currency || 'BRL';
+    const rate = cur === 'BRL' ? 1 : rateByCurrency[cur];
+    return { amount, currency: cur, amountBrl: amountBrl ?? (rate ? amount * rate : amount) };
+  }
 
   let items;
   if (isMonthlyExpenseCard) {
@@ -44,8 +53,8 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
         date: t.date,
         icon: category?.icon || '📁',
         desc: t.description,
-        meta: `${t.account?.name} · ${fmtDateShort(t.date)}${originalAmountLabel(t.amount, t.currency)}`,
-        amount: t.amount_brl ?? t.amount,
+        meta: `${t.account?.name} · ${fmtDateShort(t.date)}`,
+        ...toItemAmounts(t.amount, t.currency || t.account?.currency, t.amount_brl),
         scheduled: false,
       };
     });
@@ -54,8 +63,8 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
       date: inv.closing_date,
       icon: '💳',
       desc: `${inv.bank_name} · cartão`,
-      meta: `fechou ${fmtDateShort(inv.closing_date)}${originalAmountLabel(inv.total_amount, inv.currency)}`,
-      amount: inv.amount_brl ?? inv.total_amount,
+      meta: `fechou ${fmtDateShort(inv.closing_date)}`,
+      ...toItemAmounts(inv.total_amount, inv.currency, inv.amount_brl),
       scheduled: false,
     }));
     const scheduledItems = (data?.scheduled || []).map((s) => ({
@@ -63,8 +72,8 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
       date: s.due_date,
       icon: s.category?.icon || '📁',
       desc: s.description,
-      meta: `vence ${fmtDateShort(s.due_date)}${originalAmountLabel(s.amount, s.currency)}`,
-      amount: s.amount_brl ?? s.amount,
+      meta: `vence ${fmtDateShort(s.due_date)}`,
+      ...toItemAmounts(s.amount, s.currency, s.amount_brl),
       scheduled: true,
     }));
     items = [...txItems, ...invoiceItems, ...scheduledItems].sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -77,14 +86,14 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
         icon: category?.icon || '📁',
         desc: t.description,
         meta: `${t.account?.name} · ${fmtDateShort(t.date)}`,
-        amount: t.amount,
+        ...toItemAmounts(t.amount, t.account?.currency),
         scheduled: false,
       };
     });
   }
 
-  const scheduledTotal = items.filter((i) => i.scheduled).reduce((sum, i) => sum + i.amount, 0);
-  const grandTotal = items.reduce((sum, i) => sum + i.amount, 0);
+  const scheduledTotal = items.filter((i) => i.scheduled).reduce((sum, i) => sum + i.amountBrl, 0);
+  const grandTotal = items.reduce((sum, i) => sum + i.amountBrl, 0);
 
   return (
     <ModalShell open={open} onClose={onClose}>
@@ -124,11 +133,18 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
                     <div className="tx-meta">{item.meta}</div>
                   </div>
                 </div>
-                <div
-                  className={`tx-val num ${item.scheduled ? '' : pos ? 'pos' : 'neg'}`}
-                  style={item.scheduled ? { color: 'var(--ink-faint)' } : undefined}
-                >
-                  {item.scheduled ? fmt(item.amount) : fmt(pos ? item.amount : -item.amount)}
+                <div style={{ textAlign: 'right' }}>
+                  <div
+                    className={`tx-val num ${item.scheduled ? '' : pos ? 'pos' : 'neg'}`}
+                    style={item.scheduled ? { color: 'var(--ink-faint)' } : undefined}
+                  >
+                    {item.scheduled ? fmt(item.amount, item.currency) : fmt(pos ? item.amount : -item.amount, item.currency)}
+                  </div>
+                  {item.currency !== 'BRL' && (
+                    <div className="num" style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
+                      ≈ {fmt(item.amountBrl, 'BRL')}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
