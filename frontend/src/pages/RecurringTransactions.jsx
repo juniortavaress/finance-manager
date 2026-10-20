@@ -187,15 +187,6 @@ export default function RecurringTransactions() {
       </div>
 
       {(() => {
-        const subheadStyle = {
-          fontSize: 11.5,
-          fontWeight: 600,
-          letterSpacing: '0.04em',
-          textTransform: 'uppercase',
-          color: 'var(--ink-faint)',
-          margin: '4px 0 6px',
-        };
-
         const renderSkeletonRows = () =>
           [0, 1, 2].map((i) => (
             <div className="auto-row" key={i}>
@@ -311,24 +302,23 @@ export default function RecurringTransactions() {
 
         return (
           <div className="grid grid-2-even">
-            <div className="card">
-              <h3>Cobranças</h3>
-              {recurringLoading && renderSkeletonRows()}
-              {!recurringLoading && expenseList.length === 0 && (
-                <div className="empty-state">Nenhuma cobrança recorrente cadastrada.</div>
-              )}
-              {!recurringLoading && manualExpenseList.length > 0 && (
-                <>
-                  <div style={subheadStyle}>A pagar</div>
-                  {manualExpenseList.map(renderRow)}
-                </>
-              )}
-              {!recurringLoading && autoExpenseList.length > 0 && (
-                <>
-                  <div style={{ ...subheadStyle, marginTop: manualExpenseList.length > 0 ? 18 : 0 }}>Automáticas</div>
-                  {autoExpenseList.map(renderRow)}
-                </>
-              )}
+            <div className="grid">
+              <div className="card">
+                <h3>Cobranças a pagar</h3>
+                {recurringLoading && renderSkeletonRows()}
+                {!recurringLoading && manualExpenseList.length === 0 && (
+                  <div className="empty-state">Nenhuma cobrança a pagar cadastrada.</div>
+                )}
+                {!recurringLoading && manualExpenseList.map(renderRow)}
+              </div>
+              <div className="card">
+                <h3>Cobranças automáticas</h3>
+                {recurringLoading && renderSkeletonRows()}
+                {!recurringLoading && autoExpenseList.length === 0 && (
+                  <div className="empty-state">Nenhuma cobrança automática cadastrada.</div>
+                )}
+                {!recurringLoading && autoExpenseList.map(renderRow)}
+              </div>
             </div>
             <div className="card">
               <h3>Entradas</h3>
