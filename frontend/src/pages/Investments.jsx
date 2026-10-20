@@ -6,6 +6,7 @@ import { useBanks } from '../hooks/resources/useBanks';
 import { useAccounts } from '../hooks/resources/useAccounts';
 import { investmentAccounts as filterInvestment } from '../utils/accounts';
 import { fmt, monthLabelFull } from '../utils/format';
+import { deriveBankSummary } from '../utils/investmentSummary';
 import Skeleton from '../components/Skeleton';
 import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
 import InvestmentBreakdownDrilldownModal from '../components/modals/InvestmentBreakdownDrilldownModal';
@@ -59,13 +60,20 @@ export default function Investments() {
   const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);
   const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
   const [bankFilter, setBankFilter] = useState('');
-  const { data: summaryData, loading: summaryLoading, reload: reloadSummary } = useFetch(
-    () => investmentsApi.summary(bankFilter || undefined),
-    [bankFilter]
+  // Busca sempre o consolidado ("todas as corretoras") uma única vez; o filtro
+  // de corretora só recorta esses dados em memória, sem nova ida ao backend.
+  const { data: summaryAll, loading: summaryLoading, reload: reloadSummary } = useFetch(
+    (signal) => investmentsApi.summary(undefined, signal),
+    []
   );
-  const { data: dividendsData, loading: dividendsLoading, reload: reloadDividends } = useFetch(
-    (signal) => dividendsApi.summary(bankFilter ? { bank_id: bankFilter } : undefined, signal),
-    [bankFilter]
+  const { data: dividendsAll, loading: dividendsLoading, reload: reloadDividends } = useFetch(
+    (signal) => dividendsApi.summary(undefined, signal),
+    []
+  );
+  const summaryData = useMemo(() => deriveBankSummary(summaryAll, bankFilter), [summaryAll, bankFilter]);
+  const dividendsData = useMemo(
+    () => (bankFilter ? dividendsAll?.by_bank?.[bankFilter] || { has_dividends: false, by_month: [], by_year: [] } : dividendsAll),
+    [dividendsAll, bankFilter]
   );
   const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
   const { data: profitData, loading: profitLoading, reload: reloadProfit } = useFetch(

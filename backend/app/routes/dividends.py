@@ -387,7 +387,7 @@ def dividends_summary():
     bank_filter = request.args.get("bank_id")
 
     query = (
-        db.session.query(Dividend.date, Dividend.amount, Account.currency)
+        db.session.query(Dividend.date, Dividend.amount, Account.currency, Account.bank_id)
         .join(Asset, Asset.id == Dividend.asset_id)
         .join(InvestmentAccount, InvestmentAccount.id == Asset.investment_account_id)
         .join(Account, Account.id == InvestmentAccount.account_id)
@@ -403,35 +403,48 @@ def dividends_summary():
     month_start = today.replace(day=1)
     year_start = today.replace(month=1, day=1)
 
-    recebido_mes = Decimal("0")
-    recebido_ano = Decimal("0")
-    total_all_time = Decimal("0")
-    by_month = {}
-    by_year = {}
+    def aggregate(subset):
+        recebido_mes = Decimal("0")
+        recebido_ano = Decimal("0")
+        total_all_time = Decimal("0")
+        by_month = {}
+        by_year = {}
 
-    for date, amount, currency in rows:
-        amount_brl = convert_to_brl(amount, currency, fx_rates)
-        total_all_time += amount_brl
-        if date >= year_start:
-            recebido_ano += amount_brl
-            if date >= month_start:
-                recebido_mes += amount_brl
+        for date, amount, currency, _bank_id in subset:
+            amount_brl = convert_to_brl(amount, currency, fx_rates)
+            total_all_time += amount_brl
+            if date >= year_start:
+                recebido_ano += amount_brl
+                if date >= month_start:
+                    recebido_mes += amount_brl
 
-        month_key = f"{date.year:04d}-{date.month:02d}"
-        by_month[month_key] = by_month.get(month_key, Decimal("0")) + amount_brl
-        by_year[date.year] = by_year.get(date.year, Decimal("0")) + amount_brl
+            month_key = f"{date.year:04d}-{date.month:02d}"
+            by_month[month_key] = by_month.get(month_key, Decimal("0")) + amount_brl
+            by_year[date.year] = by_year.get(date.year, Decimal("0")) + amount_brl
 
-    return {
-        "total_all_time": float(total_all_time),
-        "recebido_mes": float(recebido_mes),
-        "recebido_ano": float(recebido_ano),
-        "has_dividends": len(rows) > 0,
-        "by_month": [
-            {"year": int(k[:4]), "month": int(k[5:7]), "total": float(v)}
-            for k, v in sorted(by_month.items(), reverse=True)
-        ],
-        "by_year": [{"year": year, "total": float(total)} for year, total in sorted(by_year.items(), reverse=True)],
-    }
+        return {
+            "total_all_time": float(total_all_time),
+            "recebido_mes": float(recebido_mes),
+            "recebido_ano": float(recebido_ano),
+            "has_dividends": len(subset) > 0,
+            "by_month": [
+                {"year": int(k[:4]), "month": int(k[5:7]), "total": float(v)}
+                for k, v in sorted(by_month.items(), reverse=True)
+            ],
+            "by_year": [
+                {"year": year, "total": float(total)} for year, total in sorted(by_year.items(), reverse=True)
+            ],
+        }
+
+    # `by_bank` traz o mesmo agregado ja recortado por corretora, para a Visao
+    # Geral trocar o filtro de corretora sem uma nova chamada ao backend.
+    rows_by_bank = {}
+    for row in rows:
+        rows_by_bank.setdefault(str(row[3]), []).append(row)
+
+    result = aggregate(rows)
+    result["by_bank"] = {bank_id: aggregate(bank_rows) for bank_id, bank_rows in rows_by_bank.items()}
+    return result
 
 
 @dividends_bp.get("/")
