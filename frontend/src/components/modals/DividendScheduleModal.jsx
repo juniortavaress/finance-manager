@@ -7,6 +7,7 @@ import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
+import BrokerAssetPicker from '../BrokerAssetPicker';
 
 const KIND_OPTIONS = [
   { value: 'dividendo', label: 'Dividendo' },
@@ -31,7 +32,15 @@ function todayIso() {
  * periodicidade). O backend materializa os recebimentos automaticamente na
  * data prevista, usando a posição do ativo naquele momento.
  */
-export default function DividendScheduleModal({ open, onClose, onSaved, schedule, assets = [], bankNameFor }) {
+export default function DividendScheduleModal({
+  open,
+  onClose,
+  onSaved,
+  schedule,
+  assets = [],
+  investmentAccounts = [],
+  bankById,
+}) {
   const isEditing = !!schedule;
   const { showSuccess, showError } = useToast();
 
@@ -58,7 +67,7 @@ export default function DividendScheduleModal({ open, onClose, onSaved, schedule
       setFrequency(schedule.frequency);
       setDayOfMonth(String(schedule.day_of_month));
     } else {
-      setAssetId(assets[0]?.id || '');
+      setAssetId('');
       setKind('dividendo');
       setCalcMode('per_share');
       setAmountPerShare('');
@@ -142,16 +151,13 @@ export default function DividendScheduleModal({ open, onClose, onSaved, schedule
         <form className="modal-body" onSubmit={handleSubmit}>
           {error && <div className="form-error-banner">{error}</div>}
 
-          <div className="field">
-            <label>Ativo</label>
-            <select value={assetId} onChange={(e) => setAssetId(e.target.value)}>
-              {assets.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.code || a.name} — {bankNameFor?.(a) || ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          <BrokerAssetPicker
+            assets={assets}
+            investmentAccounts={investmentAccounts}
+            bankById={bankById}
+            assetId={assetId}
+            onAssetChange={setAssetId}
+          />
 
           <div className="field">
             <label>Tipo de provento</label>

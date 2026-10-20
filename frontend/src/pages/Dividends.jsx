@@ -359,7 +359,8 @@ export default function Dividends() {
         open={scheduleModalOpen}
         schedule={editingSchedule}
         assets={assets}
-        bankNameFor={bankNameFor}
+        investmentAccounts={investmentAccounts}
+        bankById={bankById}
         onClose={() => setScheduleModalOpen(false)}
         onSaved={() => {
           setScheduleModalOpen(false);
@@ -371,7 +372,8 @@ export default function Dividends() {
         open={dividendModalOpen}
         dividend={editingDividend}
         assets={assets}
-        bankNameFor={bankNameFor}
+        investmentAccounts={investmentAccounts}
+        bankById={bankById}
         onClose={() => setDividendModalOpen(false)}
         onSaved={() => {
           setDividendModalOpen(false);

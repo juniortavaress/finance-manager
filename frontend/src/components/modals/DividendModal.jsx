@@ -6,6 +6,7 @@ import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
+import BrokerAssetPicker from '../BrokerAssetPicker';
 
 const KIND_OPTIONS = [
   { value: 'dividendo', label: 'Dividendo' },
@@ -23,7 +24,16 @@ function todayIso() {
  * cadastrada. Também serve para editar/corrigir um recebimento já existente
  * (avulso ou já materializado de um provento recorrente).
  */
-export default function DividendModal({ open, onClose, onSaved, onDeleted, dividend, assets = [], bankNameFor }) {
+export default function DividendModal({
+  open,
+  onClose,
+  onSaved,
+  onDeleted,
+  dividend,
+  assets = [],
+  investmentAccounts = [],
+  bankById,
+}) {
   const isEditing = !!dividend;
   const { showSuccess, showError } = useToast();
 
@@ -44,7 +54,7 @@ export default function DividendModal({ open, onClose, onSaved, onDeleted, divid
       setAmount(numberToMasked(dividend.amount));
       setDate(dividend.date);
     } else {
-      setAssetId(assets[0]?.id || '');
+      setAssetId('');
       setKind('dividendo');
       setAmount('');
       setDate(todayIso());
@@ -110,16 +120,14 @@ export default function DividendModal({ open, onClose, onSaved, onDeleted, divid
         <form className="modal-body" onSubmit={handleSubmit}>
           {error && <div className="form-error-banner">{error}</div>}
 
-          <div className="field">
-            <label>Ativo</label>
-            <select value={assetId} onChange={(e) => setAssetId(e.target.value)} disabled={isEditing}>
-              {(isEditing ? assets.filter((a) => a.id === assetId) : assets).map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.code || a.name} — {bankNameFor?.(a) || ''}
-                </option>
-              ))}
-            </select>
-          </div>
+          <BrokerAssetPicker
+            assets={assets}
+            investmentAccounts={investmentAccounts}
+            bankById={bankById}
+            assetId={assetId}
+            onAssetChange={setAssetId}
+            disabled={isEditing}
+          />
 
           <div className="field">
             <label>Tipo de provento</label>
