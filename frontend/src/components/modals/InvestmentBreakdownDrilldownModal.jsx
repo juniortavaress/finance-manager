@@ -2,7 +2,7 @@ import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
 import Skeleton from '../Skeleton';
 
-function BreakdownRow({ label, value, color, original, originalCurrency }) {
+function BreakdownRow({ label, value, color, original, originalCurrency, currency }) {
   return (
     <div className="bank-row">
       <div className="bank-id">
@@ -10,7 +10,7 @@ function BreakdownRow({ label, value, color, original, originalCurrency }) {
         <div className="bank-name">{label}</div>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <div className="bank-val num">{fmt(value)}</div>
+        <div className="bank-val num">{fmt(value, currency)}</div>
         {original != null && (
           <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{fmt(original, originalCurrency)}</div>
         )}
@@ -19,7 +19,7 @@ function BreakdownRow({ label, value, color, original, originalCurrency }) {
   );
 }
 
-export default function InvestmentBreakdownDrilldownModal({ open, onClose, title, rows, emptyMessage, loading }) {
+export default function InvestmentBreakdownDrilldownModal({ open, onClose, title, rows, emptyMessage, loading, currency }) {
   if (!open) return null;
 
   return (
@@ -53,6 +53,7 @@ export default function InvestmentBreakdownDrilldownModal({ open, onClose, title
               color={r.color}
               original={r.original}
               originalCurrency={r.originalCurrency}
+              currency={currency}
             />
           ))}
         </div>

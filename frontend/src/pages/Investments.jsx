@@ -236,6 +236,13 @@ export default function Investments() {
     return [...seen.entries()];
   }, [investmentAccounts, bankById]);
 
+  // Com uma corretora filtrada os valores ficam na moeda dela (ex: US$ na
+  // Nomad); no consolidado, tudo já vem convertido para BRL.
+  const displayCurrency = bankFilter
+    ? investmentAccounts.find((a) => a.bank_id === bankFilter)?.currency || 'BRL'
+    : 'BRL';
+  const money = (value) => fmt(value, displayCurrency);
+
   const topPositions = useMemo(
     () =>
       [...activeAssets]
@@ -281,7 +288,7 @@ export default function Investments() {
             </>
           ) : (
             <>
-              <div className="value num">{fmt(totalInvested)}</div>
+              <div className="value num">{money(totalInvested)}</div>
               <div className="delta">dinheiro que saiu do banco pra carteira</div>
             </>
           )}
@@ -305,7 +312,7 @@ export default function Investments() {
             </>
           ) : (
             <>
-              <div className="value num">{fmt(allocatedCostBasis)}</div>
+              <div className="value num">{money(allocatedCostBasis)}</div>
               <div className="delta">custo das posições atuais</div>
             </>
           )}
@@ -325,7 +332,7 @@ export default function Investments() {
           {summaryLoading ? (
             <Skeleton width={110} height={24} />
           ) : (
-            <div className="value num">{fmt(totalCurrent)}</div>
+            <div className="value num">{money(totalCurrent)}</div>
           )}
           {byBank.length > 0 && (
             <button
@@ -343,7 +350,7 @@ export default function Investments() {
           {summaryLoading || dividendsLoading ? (
             <Skeleton width={110} height={24} />
           ) : (
-            <div className="value num">{fmt(totalDividendsAllTime)}</div>
+            <div className="value num">{money(totalDividendsAllTime)}</div>
           )}
           {hasDividends && (
             <button
@@ -381,7 +388,7 @@ export default function Investments() {
           {summaryLoading ? (
             <Skeleton width={110} height={24} />
           ) : (
-            <div className="value num">{fmt(totalUnallocated)}</div>
+            <div className="value num">{money(totalUnallocated)}</div>
           )}
           {unallocatedByBank.length > 0 && (
             <button
@@ -428,7 +435,7 @@ export default function Investments() {
                   {TYPE_LABELS[type]}
                 </span>
                 <span className="val num">
-                  {fmt(total)} · {((total / typeSum) * 100).toFixed(0)}%
+                  {money(total)} · {((total / typeSum) * 100).toFixed(0)}%
                 </span>
               </div>
               <div className="hbar-track">
@@ -461,7 +468,7 @@ export default function Investments() {
                   {b.name}
                 </span>
                 <span className="val num">
-                  {fmt(b.total)} · {((b.total / bankSum) * 100).toFixed(0)}%
+                  {money(b.total)} · {((b.total / bankSum) * 100).toFixed(0)}%
                 </span>
               </div>
               <div className="hbar-track">
@@ -518,7 +525,7 @@ export default function Investments() {
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div className="tx-val num">{fmt(r.value)}</div>
+                    <div className="tx-val num">{money(r.value)}</div>
                     <div className="tx-meta">todo dia {r.dueDate.getDate()}</div>
                   </div>
                 </div>
@@ -571,13 +578,13 @@ export default function Investments() {
                     )}
                   </div>
                   <div className="tx-meta">
-                    {asset.bank_name} · {pos.quantity} un. · preço médio {fmt(pos.avg_unit_price)}
+                    {asset.bank_name} · {pos.quantity} un. · preço médio {money(pos.avg_unit_price)}
                   </div>
                 </div>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div className="tx-val num">{fmt(pos.current_amount != null ? pos.current_amount : pos.invested_amount)}</div>
-                <div className="tx-meta">investido {fmt(pos.invested_amount)}</div>
+                <div className="tx-val num">{money(pos.current_amount != null ? pos.current_amount : pos.invested_amount)}</div>
+                <div className="tx-meta">investido {money(pos.invested_amount)}</div>
               </div>
             </div>
           );
@@ -597,12 +604,13 @@ export default function Investments() {
         open={drilldown?.kind === 'contributions'}
         onClose={() => setDrilldown(null)}
         loading={summaryLoading}
+        currency={displayCurrency}
         title="Aportes por corretora"
         rows={contributionsByBank.map((b) => ({
           label: b.bank_name,
           value: b.value,
           color: b.bank_color,
-          original: b.value_original,
+          original: bankFilter ? null : b.value_original,
           originalCurrency: b.currency,
         }))}
       />
@@ -611,12 +619,13 @@ export default function Investments() {
         open={drilldown?.kind === 'invested'}
         onClose={() => setDrilldown(null)}
         loading={summaryLoading}
+        currency={displayCurrency}
         title="Valor investido por corretora"
         rows={investedByBank.map((b) => ({
           label: b.name,
           value: b.total,
           color: b.color,
-          original: b.originalTotal,
+          original: bankFilter ? null : b.originalTotal,
           originalCurrency: b.currency,
         }))}
       />
@@ -625,12 +634,13 @@ export default function Investments() {
         open={drilldown?.kind === 'unallocated'}
         onClose={() => setDrilldown(null)}
         loading={summaryLoading}
+        currency={displayCurrency}
         title="Caixa disponível por corretora"
         rows={unallocatedByBank.map((b) => ({
           label: b.bank_name,
           value: b.balance,
           color: b.bank_color,
-          original: b.balance_original,
+          original: bankFilter ? null : b.balance_original,
           originalCurrency: b.currency,
         }))}
       />
@@ -639,12 +649,13 @@ export default function Investments() {
         open={drilldown?.kind === 'current'}
         onClose={() => setDrilldown(null)}
         loading={summaryLoading}
+        currency={displayCurrency}
         title="Valor atual por corretora"
         rows={byBank.map((b) => ({
           label: b.name,
           value: b.total,
           color: b.color,
-          original: b.originalTotal,
+          original: bankFilter ? null : b.originalTotal,
           originalCurrency: b.currency,
         }))}
       />
@@ -653,6 +664,7 @@ export default function Investments() {
         open={drilldown?.kind === 'assetType'}
         onClose={() => setDrilldown(null)}
         loading={summaryLoading}
+        currency={displayCurrency}
         title={`${TYPE_LABELS[drilldown?.type] || ''} por ativo`}
         rows={assetsByType[drilldown?.type] || []}
       />

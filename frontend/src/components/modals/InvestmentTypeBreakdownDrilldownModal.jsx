@@ -2,7 +2,7 @@ import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
 import Skeleton from '../Skeleton';
 
-function AssetBreakdownRow({ label, value, pct, color }) {
+function AssetBreakdownRow({ label, value, pct, color, currency }) {
   return (
     <div className="bank-row">
       <div className="bank-id">
@@ -10,14 +10,14 @@ function AssetBreakdownRow({ label, value, pct, color }) {
         <div className="bank-name">{label}</div>
       </div>
       <div style={{ textAlign: 'right' }}>
-        <div className="bank-val num">{fmt(value)}</div>
+        <div className="bank-val num">{fmt(value, currency)}</div>
         <div style={{ fontSize: 11, color: 'var(--ink-faint)' }}>{pct.toFixed(1)}%</div>
       </div>
     </div>
   );
 }
 
-export default function InvestmentTypeBreakdownDrilldownModal({ open, onClose, title, rows, emptyMessage, loading }) {
+export default function InvestmentTypeBreakdownDrilldownModal({ open, onClose, title, rows, emptyMessage, loading, currency }) {
   if (!open) return null;
 
   return (
@@ -46,7 +46,7 @@ export default function InvestmentTypeBreakdownDrilldownModal({ open, onClose, t
             )}
             {!loading &&
               rows.map((r) => (
-                <AssetBreakdownRow key={r.label} label={r.label} value={r.value} pct={r.pct} color={r.color} />
+                <AssetBreakdownRow key={r.label} label={r.label} value={r.value} pct={r.pct} color={r.color} currency={currency} />
               ))}
           </div>
         </div>
