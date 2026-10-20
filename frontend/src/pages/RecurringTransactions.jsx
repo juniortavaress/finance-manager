@@ -16,6 +16,57 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function parseIso(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function toIso(date) {
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${m}-${d}`;
+}
+
+// Soma `months` meses mantendo o dia de `base` (limitado ao último dia do mês).
+function addMonthsClamped(base, months) {
+  const target = new Date(base.getFullYear(), base.getMonth() + months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(base.getDate(), lastDay));
+  return target;
+}
+
+/**
+ * Próxima data de vencimento/cobrança do recorrente (ISO) ou null se já
+ * encerrou. Manuais usam o vencimento corrente (ou o do mês seguinte, se o
+ * atual já foi pago); automáticos projetam a próxima ocorrência a partir da
+ * data de início, na mesma regra do backend.
+ */
+function nextDueDate(r, today) {
+  if (!r.auto_debit) {
+    if (!r.current_due_date) return null;
+    return r.paid_at ? toIso(addMonthsClamped(parseIso(r.current_due_date), 1)) : r.current_due_date;
+  }
+
+  const start = parseIso(r.start_date);
+  const todayDate = parseIso(today);
+  let next;
+  if (start >= todayDate) {
+    next = start;
+  } else if (r.frequency === 'weekly') {
+    const weeks = Math.ceil(Math.round((todayDate - start) / 86400000) / 7);
+    next = new Date(start.getFullYear(), start.getMonth(), start.getDate() + weeks * 7);
+  } else {
+    const step = r.frequency === 'yearly' ? 12 : 1;
+    const elapsed = (todayDate.getFullYear() - start.getFullYear()) * 12 + (todayDate.getMonth() - start.getMonth());
+    let k = Math.floor(elapsed / step) * step;
+    next = addMonthsClamped(start, k);
+    if (next < todayDate) next = addMonthsClamped(start, k + step);
+  }
+
+  const iso = toIso(next);
+  return r.end_date && iso > r.end_date ? null : iso;
+}
+
 export default function RecurringTransactions() {
   const { accounts } = useAccounts();
   const { categories } = useCategories();
@@ -39,10 +90,28 @@ export default function RecurringTransactions() {
   const totalCommittedExpense = activeExpenses.reduce((s, r) => s + r.amount, 0);
   const totalCommittedIncome = activeIncomes.reduce((s, r) => s + r.amount, 0);
 
-  const incomeList = recurringList.filter((r) => r.type === 'income');
-  const expenseList = recurringList.filter((r) => r.type !== 'income');
-
   const today = todayIso();
+
+  // Ordem de próximos: ativos primeiro (pelo próximo vencimento), pausados e
+  // encerrados no fim.
+  const sortedRecurring = useMemo(() => {
+    const withNext = recurringList.map((r) => ({ r, next: nextDueDate(r, today) }));
+    withNext.sort((a, b) => {
+      if (a.r.active !== b.r.active) return a.r.active ? -1 : 1;
+      if (a.next === b.next) return 0;
+      if (!a.next) return 1;
+      if (!b.next) return -1;
+      return a.next < b.next ? -1 : 1;
+    });
+    return withNext;
+  }, [recurringList, today]);
+
+  const nextById = useMemo(() => new Map(sortedRecurring.map(({ r, next }) => [r.id, next])), [sortedRecurring]);
+  const incomeList = sortedRecurring.filter(({ r }) => r.type === 'income').map(({ r }) => r);
+  const expenseList = sortedRecurring.filter(({ r }) => r.type !== 'income').map(({ r }) => r);
+  const manualExpenseList = expenseList.filter((r) => !r.auto_debit);
+  const autoExpenseList = expenseList.filter((r) => r.auto_debit);
+
   const manualActive = activeRecurring.filter((r) => !r.auto_debit);
   const overdue = manualActive.filter((r) => !r.paid_at && r.current_due_date <= today);
 
@@ -118,6 +187,15 @@ export default function RecurringTransactions() {
       </div>
 
       {(() => {
+        const subheadStyle = {
+          fontSize: 11.5,
+          fontWeight: 600,
+          letterSpacing: '0.04em',
+          textTransform: 'uppercase',
+          color: 'var(--ink-faint)',
+          margin: '4px 0 6px',
+        };
+
         const renderSkeletonRows = () =>
           [0, 1, 2].map((i) => (
             <div className="auto-row" key={i}>
@@ -215,7 +293,9 @@ export default function RecurringTransactions() {
                   </div>
                   <div className="auto-meta">
                     {category?.name} · {account?.name} {isCredit ? '(cartão)' : ''} ·{' '}
-                    {isManual ? `vence em ${fmtDateShort(r.current_due_date)}` : `todo dia ${r.day_of_month}`}
+                    {isManual
+                      ? `vence em ${fmtDateShort(r.current_due_date)}`
+                      : `todo dia ${r.day_of_month}${nextById.get(r.id) ? ` · próx. ${fmtDateShort(nextById.get(r.id))}` : ''}`}
                   </div>
                 </div>
               </div>
@@ -237,7 +317,18 @@ export default function RecurringTransactions() {
               {!recurringLoading && expenseList.length === 0 && (
                 <div className="empty-state">Nenhuma cobrança recorrente cadastrada.</div>
               )}
-              {!recurringLoading && expenseList.map(renderRow)}
+              {!recurringLoading && manualExpenseList.length > 0 && (
+                <>
+                  <div style={subheadStyle}>A pagar</div>
+                  {manualExpenseList.map(renderRow)}
+                </>
+              )}
+              {!recurringLoading && autoExpenseList.length > 0 && (
+                <>
+                  <div style={{ ...subheadStyle, marginTop: manualExpenseList.length > 0 ? 18 : 0 }}>Automáticas</div>
+                  {autoExpenseList.map(renderRow)}
+                </>
+              )}
             </div>
             <div className="card">
               <h3>Entradas</h3>
