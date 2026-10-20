@@ -8,6 +8,12 @@ function lastDayIso(year, month) {
   return new Date(year, month, 0).toISOString().slice(0, 10);
 }
 
+// Para gastos em moeda estrangeira, o valor da linha já vem convertido para
+// BRL; aqui mostramos o valor original ao lado, na linha de detalhe.
+function originalAmountLabel(amount, currency) {
+  return currency && currency !== 'BRL' ? ` · ${fmt(amount, currency)}` : '';
+}
+
 export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type, categoryId, categoryById = () => undefined }) {
   const isMonthlyExpenseCard = type === 'expense' && !categoryId;
   const { data, initialLoading } = useFetch(
@@ -38,8 +44,8 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
         date: t.date,
         icon: category?.icon || '📁',
         desc: t.description,
-        meta: `${t.account?.name} · ${fmtDateShort(t.date)}`,
-        amount: t.amount,
+        meta: `${t.account?.name} · ${fmtDateShort(t.date)}${originalAmountLabel(t.amount, t.currency)}`,
+        amount: t.amount_brl ?? t.amount,
         scheduled: false,
       };
     });
@@ -48,8 +54,8 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
       date: inv.closing_date,
       icon: '💳',
       desc: `${inv.bank_name} · cartão`,
-      meta: `fechou ${fmtDateShort(inv.closing_date)}`,
-      amount: inv.total_amount,
+      meta: `fechou ${fmtDateShort(inv.closing_date)}${originalAmountLabel(inv.total_amount, inv.currency)}`,
+      amount: inv.amount_brl ?? inv.total_amount,
       scheduled: false,
     }));
     const scheduledItems = (data?.scheduled || []).map((s) => ({
@@ -57,8 +63,8 @@ export default function TransactionsDrilldownModal({ open, onClose, title, year,
       date: s.due_date,
       icon: s.category?.icon || '📁',
       desc: s.description,
-      meta: `vence ${fmtDateShort(s.due_date)}`,
-      amount: s.amount,
+      meta: `vence ${fmtDateShort(s.due_date)}${originalAmountLabel(s.amount, s.currency)}`,
+      amount: s.amount_brl ?? s.amount,
       scheduled: true,
     }));
     items = [...txItems, ...invoiceItems, ...scheduledItems].sort((a, b) => (a.date < b.date ? 1 : -1));

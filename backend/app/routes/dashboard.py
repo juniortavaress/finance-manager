@@ -38,6 +38,23 @@ def _outstanding_invoices(user_id):
     return unpaid_invoices, card_by_id
 
 
+def _scheduled_recurring_expenses(user_id, start, end):
+    """Recorrentes manuais (sem debito automatico) ainda nao pagos que vencem no periodo."""
+    return (
+        RecurringTransaction.query.filter(
+            RecurringTransaction.user_id == user_id,
+            RecurringTransaction.type == "expense",
+            RecurringTransaction.active.is_(True),
+            RecurringTransaction.auto_debit.is_(False),
+            RecurringTransaction.paid_at.is_(None),
+            RecurringTransaction.current_due_date >= start,
+            RecurringTransaction.current_due_date <= end,
+        )
+        .order_by(RecurringTransaction.current_due_date.asc())
+        .all()
+    )
+
+
 @dashboard_bp.get("/summary")
 @login_required
 def summary():
@@ -57,7 +74,7 @@ def summary():
 
     def period_totals(d_start, d_end):
         rows = (
-            db.session.query(Transaction.type, db.func.coalesce(db.func.sum(Transaction.amount), 0))
+            db.session.query(Transaction.type, Account.currency, db.func.coalesce(db.func.sum(Transaction.amount), 0))
             .join(Account, Account.id == Transaction.account_id)
             .filter(
                 Transaction.user_id == g.current_user.id,
@@ -69,15 +86,16 @@ def summary():
                 Account.type == "checking",
                 Transaction.payment_method != "credit",
             )
-            .group_by(Transaction.type)
+            .group_by(Transaction.type, Account.currency)
             .all()
         )
         totals = {"income": Decimal("0"), "expense": Decimal("0")}
-        for t, v in rows:
-            totals[t] = v
+        for t, currency, v in rows:
+            totals[t] += convert_to_brl(v, currency, fx_rates)
 
-        credit_expense = (
-            db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
+        credit_rows = (
+            db.session.query(Account.currency, db.func.coalesce(db.func.sum(Transaction.amount), 0))
+            .join(Account, Account.id == Transaction.account_id)
             .join(CreditCardInvoice, CreditCardInvoice.id == Transaction.credit_card_invoice_id)
             .filter(
                 Transaction.user_id == g.current_user.id,
@@ -87,29 +105,25 @@ def summary():
                 CreditCardInvoice.closing_date >= d_start,
                 CreditCardInvoice.closing_date <= d_end,
             )
-            .scalar()
-        ) or Decimal("0")
-        totals["expense"] += credit_expense
+            .group_by(Account.currency)
+            .all()
+        )
+        for currency, v in credit_rows:
+            totals["expense"] += convert_to_brl(v, currency, fx_rates)
         return totals
 
     current = period_totals(start, end)
     previous = period_totals(prev_start, prev_end)
 
-    scheduled_expense = (
-        db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
-        .join(Account, Account.id == Transaction.account_id)
-        .filter(
-            Transaction.user_id == g.current_user.id,
-            Transaction.type == "expense",
-            Transaction.date >= start,
-            Transaction.date <= end,
-            Transaction.status == "scheduled",
-            Transaction.is_invoice_payment.is_(False),
-            Transaction.is_transfer.is_(False),
-            Account.type == "checking",
-        )
-        .scalar()
-    ) or Decimal("0")
+    # Mesma definicao de "programados" usada no detalhe do card (expense_breakdown),
+    # para o projetado do card bater com o total do modal.
+    scheduled_expense = sum(
+        (
+            convert_to_brl(r.amount, r.account.currency, fx_rates)
+            for r in _scheduled_recurring_expenses(g.current_user.id, start, end)
+        ),
+        Decimal("0"),
+    )
     despesas_projetado = current["expense"] + scheduled_expense
 
     income_count = (
@@ -186,6 +200,7 @@ def expense_breakdown():
     year = int(request.args.get("year", today.year))
     month = int(request.args.get("month", today.month))
     start, end = _month_bounds(year, month)
+    fx_rates, _ = get_brl_rates()
 
     debit_txs = (
         Transaction.query.join(Account, Account.id == Transaction.account_id)
@@ -228,36 +243,35 @@ def expense_breakdown():
                 "closing_date": invoice.closing_date.isoformat(),
                 "due_date": invoice.due_date.isoformat(),
                 "total_amount": float(invoice.total_amount),
+                "currency": card.account.currency,
+                "amount_brl": float(convert_to_brl(invoice.total_amount, card.account.currency, fx_rates)),
                 "status": invoice.status,
             }
         )
 
-    scheduled = (
-        RecurringTransaction.query.filter(
-            RecurringTransaction.user_id == g.current_user.id,
-            RecurringTransaction.type == "expense",
-            RecurringTransaction.active.is_(True),
-            RecurringTransaction.auto_debit.is_(False),
-            RecurringTransaction.paid_at.is_(None),
-            RecurringTransaction.current_due_date >= start,
-            RecurringTransaction.current_due_date <= end,
-        )
-        .order_by(RecurringTransaction.current_due_date.asc())
-        .all()
-    )
+    scheduled = _scheduled_recurring_expenses(g.current_user.id, start, end)
     scheduled_items = [
         {
             "id": str(r.id),
             "description": r.description,
             "amount": float(r.amount),
+            "currency": r.account.currency,
+            "amount_brl": float(convert_to_brl(r.amount, r.account.currency, fx_rates)),
             "due_date": r.current_due_date.isoformat(),
             "category": r.category.to_dict() if r.category else None,
         }
         for r in scheduled
     ]
 
+    transaction_items = []
+    for t in debit_txs:
+        data = t.to_dict()
+        data["currency"] = t.account.currency
+        data["amount_brl"] = float(convert_to_brl(t.amount, t.account.currency, fx_rates))
+        transaction_items.append(data)
+
     return {
-        "transactions": [t.to_dict() for t in debit_txs],
+        "transactions": transaction_items,
         "invoices": invoice_items,
         "scheduled": scheduled_items,
     }
