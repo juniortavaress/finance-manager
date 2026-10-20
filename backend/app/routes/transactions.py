@@ -487,6 +487,19 @@ def update_transfer(transaction_id):
         out_tx.date = new_date
         in_tx.date = new_date
 
+    # Editar só valor/data/descrição de uma transferência entre moedas diferentes
+    # não traz câmbio no payload: reaproveita o câmbio já gravado (e o valor de
+    # destino original, se o valor de origem não mudou) em vez de exigir de novo.
+    currencies_unchanged = (
+        new_from_account.currency == old_from_account.currency and new_to_account.currency == old_to_account.currency
+    )
+    has_new_rate = bool(data.get("exchange_rate") or data.get("amount_destination"))
+    if new_from_account.currency != new_to_account.currency and not has_new_rate and currencies_unchanged:
+        if new_amount == out_tx.amount:
+            data = {**data, "amount_destination": in_tx.amount}
+        elif out_tx.exchange_rate:
+            data = {**data, "exchange_rate": out_tx.exchange_rate}
+
     out_amount, in_amount, exchange_rate = _resolve_transfer_amounts(
         data, new_amount, new_from_account.currency, new_to_account.currency
     )
