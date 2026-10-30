@@ -958,6 +958,24 @@ def list_assets_light():
     )
 
     assets = Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids)).all()
+
+    # Taxa da ultima compra de cada ativo (sugestao no formulario de aporte).
+    last_rate_by_asset_id = {}
+    for asset_id, rate in (
+        db.session.query(AssetTransaction.asset_id, AssetTransaction.fixed_income_rate_pct)
+        .join(Asset, Asset.id == AssetTransaction.asset_id)
+        .filter(
+            Asset.investment_account_id.in_(inv_account_ids),
+            AssetTransaction.type == "buy",
+            AssetTransaction.fixed_income_rate_pct.isnot(None),
+        )
+        .order_by(AssetTransaction.date, AssetTransaction.created_at)
+        .all()
+    ):
+        last_rate_by_asset_id[asset_id] = float(rate)
+
+    # Os campos de renda fixa decidem qual formulario de compra/venda abrir
+    # (por valor ou por quantidade) - ver isValueBasedFixedIncome no frontend.
     return {
         "assets": [
             {
@@ -968,6 +986,11 @@ def list_assets_light():
                 "investment_account_id": str(a.investment_account_id),
                 "currency": currency_by_ia_id.get(a.investment_account_id),
                 "position": {"quantity": float(net_qty_by_asset_id.get(a.id, 0))},
+                "fixed_income_type": a.fixed_income_type,
+                "fixed_income_indexer": a.fixed_income_indexer,
+                "fixed_income_rate_pct": float(a.fixed_income_rate_pct) if a.fixed_income_rate_pct is not None else None,
+                "fixed_income_last_rate_pct": last_rate_by_asset_id.get(a.id),
+                "maturity_date": a.maturity_date.isoformat() if a.maturity_date else None,
             }
             for a in assets
         ]
