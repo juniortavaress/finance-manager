@@ -28,8 +28,16 @@ from app.services.crypto_service import (
     get_price_on_or_before as get_crypto_price_on_or_before,
     resolve_symbol,
 )
-from app.services.economic_index_service import get_daily_rates
-from app.services.fixed_income_service import pos_fixado_current_value, pre_fixado_current_value
+from app.services.economic_index_service import INDEXER_SGS_CODES, get_daily_rates
+from app.services.fixed_income_service import (
+    FixedIncomeEvent,
+    make_value_fn,
+    pos_fixado_current_value,
+    position_snapshot,
+    pre_fixado_current_value,
+    redemption_quantity,
+    replay_events,
+)
 from app.services.market_data_service import trigger_refresh_for_current_user
 from app.services.quotes_service import convert_to_brl, get_brl_rates
 from app.services.stock_service import YAHOO_CURRENCY_SUFFIX
@@ -527,6 +535,10 @@ def _asset_position(
         float(((base_value + dividends_total) / cost_basis - 1) * 100) if cost_basis > 0 else None
     )
 
+    realized_profit = None
+    if _is_value_based(asset) and any(tx.type == "sell" for tx in asset.asset_transactions):
+        realized_profit = sum(item["net_profit"] for item in _fixed_income_realized(asset).values())
+
     return {
         "quantity": float(quantity),
         "avg_unit_price": float(avg_price),
@@ -534,6 +546,7 @@ def _asset_position(
         "current_amount": float(current_value) if current_value is not None else None,
         "dividends_total": float(dividends_total),
         "total_return_pct": total_return_pct,
+        "realized_profit": realized_profit,
     }
 
 
@@ -576,6 +589,164 @@ def _fixed_income_avg_rate_pct(asset: Asset):
     if total_invested <= 0:
         return None
     return float(weighted_sum / total_invested)
+
+
+# --- Renda fixa "por valor" -------------------------------------------------
+# Pre-fixado e pos-fixado CDI/Selic sao lancados so' por valor (aporte e
+# resgate); ver fixed_income_service para o calculo do resgate proporcional.
+
+CURRENCY_SYMBOLS = {"BRL": "R$", "USD": "US$", "EUR": "€"}
+
+# Quantidades provisorias de um resgate recem-lancado, antes de
+# _sync_fixed_income_redemptions derivar a quantidade real: o minimo
+# representavel (resgate parcial) ou um valor acima de qualquer posicao
+# (resgate total). Numeric(18, 8) em asset_transactions.quantity.
+UNIT_QUANTITY_EPSILON = Decimal("0.00000001")
+PARTIAL_REDEMPTION_MARKER = UNIT_QUANTITY_EPSILON
+FULL_REDEMPTION_MARKER = Decimal("1000000000")
+
+
+def _is_value_based(asset: Asset) -> bool:
+    """True quando o ativo e' lancado por valor (sem quantidade/preco
+    unitario): so' os titulos cujo valor atual o app calcula sozinho."""
+    if asset.type != "renda_fixa":
+        return False
+    if asset.fixed_income_type == "pre_fixado":
+        return asset.maturity_date is not None
+    if asset.fixed_income_type == "pos_fixado":
+        return (asset.fixed_income_indexer or "").strip().upper() in INDEXER_SGS_CODES
+    return False
+
+
+def _format_money(value, currency):
+    text = f"{Decimal(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{CURRENCY_SYMBOLS.get(currency, currency)} {text}"
+
+
+def _money_float(value):
+    return float(Decimal(value).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+
+
+def _value_based_amount(data):
+    """Valor informado pelo usuario. Clientes antigos ainda mandam
+    quantity * unit_price - aceito como o mesmo valor."""
+    raw = data.get("amount")
+    if raw in (None, ""):
+        if data.get("quantity") and data.get("unit_price"):
+            raw = Decimal(str(data["quantity"])) * Decimal(str(data["unit_price"]))
+        else:
+            raise ApiError("Valor é obrigatório", 400)
+    amount = Decimal(str(raw)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if amount <= 0:
+        raise ApiError("Valor deve ser maior que zero", 400)
+    return amount
+
+
+def _value_based_quantity_and_price(kind, data):
+    """(quantidade, preco unitario) gravados para uma operacao por valor.
+    Aporte: 1 unidade pelo valor. Resgate: valores provisorios, trocados por
+    _sync_fixed_income_redemptions pela quantidade derivada da fracao
+    resgatada (`redeem_all` marca o resgate da posicao inteira)."""
+    amount = _value_based_amount(data)
+    if kind == "buy":
+        return Decimal("1"), amount
+    return (FULL_REDEMPTION_MARKER if data.get("redeem_all") else PARTIAL_REDEMPTION_MARKER), amount
+
+
+def _fixed_income_ordered_txs(asset, fresh=False):
+    """Operacoes do ativo em ordem cronologica (aportes antes de resgates no
+    mesmo dia). `fresh` le do banco (inclui o que acabou de ser flushado)."""
+    if fresh:
+        txs = AssetTransaction.query.filter(AssetTransaction.asset_id == asset.id).all()
+    else:
+        txs = list(asset.asset_transactions)
+    return sorted(
+        txs, key=lambda tx: (tx.date, 0 if tx.type == "buy" else 1, tx.created_at.timestamp() if tx.created_at else 0)
+    )
+
+
+def _fixed_income_ledger(asset, txs, as_of=None):
+    """Reproduz as operacoes `txs` (ja ordenadas) do ativo por valor.
+    Retorna (value_fn, lotes restantes, resultado de cada resgate)."""
+    events = []
+    open_quantity = Decimal("0")
+    for tx in txs:
+        if tx.type == "buy":
+            events.append(
+                FixedIncomeEvent(tx.id, "buy", tx.date, tx.quantity * tx.unit_price + tx.fee_amount, _lot_rate_pct(asset, tx))
+            )
+            open_quantity += tx.quantity
+        else:
+            # Um resgate que zera a quantidade em aberto e' o resgate total
+            # (marca gravada pelo proprio app, e tambem a unica forma de
+            # reconhecer os resgates totais antigos feitos pela tela de venda).
+            full = tx.quantity >= open_quantity - UNIT_QUANTITY_EPSILON
+            events.append(FixedIncomeEvent(tx.id, "sell", tx.date, tx.total_amount + tx.fee_amount, None, full))
+            open_quantity -= min(tx.quantity, open_quantity)
+
+    daily_rates = None
+    if asset.fixed_income_type == "pos_fixado" and txs:
+        end = max(dt.date.today(), as_of) if as_of else dt.date.today()
+        daily_rates = get_daily_rates(asset.fixed_income_indexer, min(tx.date for tx in txs), end)
+
+    value_fn = make_value_fn(asset.fixed_income_type, daily_rates, asset.maturity_date)
+    lots, results = replay_events(events, value_fn, as_of=as_of)
+    return value_fn, lots, results
+
+
+def _sync_fixed_income_redemptions(asset):
+    """Valida e normaliza os resgates de um ativo por valor, depois de uma
+    criacao/edicao/exclusao de operacao (ja flushada, ainda sem commit): cada
+    resgate guarda a quantidade derivada que corresponde a fracao do valor que
+    saiu, e nenhum resgate pode passar do saldo estimado da posicao na data.
+    Em caso de erro desfaz a transacao inteira."""
+    txs = _fixed_income_ordered_txs(asset, fresh=True)
+    _, _, results = _fixed_income_ledger(asset, txs)
+    results_by_key = {result.key: result for result in results}
+    currency = asset.investment_account.account.currency
+
+    open_quantity = Decimal("0")
+    for tx in txs:
+        if tx.type == "buy":
+            open_quantity += tx.quantity
+            continue
+
+        result = results_by_key[tx.id]
+        if result.exceeds or open_quantity <= 0:
+            if result.value_before <= 0 or open_quantity <= 0:
+                message = f"Não há saldo nesta posição em {tx.date:%d/%m/%Y} para resgatar"
+            else:
+                message = (
+                    f"O resgate de {_format_money(result.amount, currency)} em {tx.date:%d/%m/%Y} é maior que o "
+                    f"saldo estimado da posição nessa data ({_format_money(result.value_before, currency)})"
+                )
+            db.session.rollback()
+            raise ApiError(message, 400)
+
+        sold = redemption_quantity(open_quantity, result)
+        tx.quantity = sold
+        tx.unit_price = (result.amount / sold).quantize(UNIT_PRICE_PLACES, rounding=ROUND_HALF_UP)
+        open_quantity -= sold
+
+    db.session.flush()
+
+
+def _fixed_income_realized(asset):
+    """{id da operacao de resgate: lucro realizado} de um ativo por valor.
+    principal = custo da parte resgatada; lucro bruto = valor resgatado -
+    principal; lucro liquido desconta o imposto/taxa retido no resgate."""
+    txs = _fixed_income_ordered_txs(asset)
+    _, _, results = _fixed_income_ledger(asset, txs)
+    fee_by_key = {tx.id: tx.fee_amount for tx in txs if tx.type == "sell"}
+    return {
+        result.key: {
+            "principal": _money_float(result.principal_out),
+            "gross_profit": _money_float(result.yield_out),
+            "net_profit": _money_float(result.yield_out - fee_by_key[result.key]),
+            "full": result.full,
+        }
+        for result in results
+    }
 
 
 def _settle_matured_fixed_income(asset: Asset):
@@ -927,6 +1098,16 @@ def list_asset_transactions():
         combined.sort(key=lambda r: r["date"], reverse=True)
         return combined
 
+    realized_by_asset_id = {}
+
+    def _realized_for(tx):
+        asset = assets_by_id[tx.asset_id]
+        if tx.type != "sell" or not _is_value_based(asset):
+            return None
+        if asset.id not in realized_by_asset_id:
+            realized_by_asset_id[asset.id] = _fixed_income_realized(asset)
+        return realized_by_asset_id[asset.id].get(tx.id)
+
     legacy_limit = request.args.get("limit")
     if legacy_limit and "page" not in request.args:
         query = query.limit(int(legacy_limit))
@@ -935,6 +1116,7 @@ def list_asset_transactions():
             data = tx.to_dict()
             data["asset"] = assets_by_id[tx.asset_id].to_dict()
             data["inherited_from"] = None
+            data["realized"] = _realized_for(tx)
             result.append(data)
         result = _merge_sorted(result)
         return {"asset_transactions": result, "total": len(result), "page": 1, "page_size": len(result) or 15}
@@ -949,6 +1131,7 @@ def list_asset_transactions():
         data = tx.to_dict()
         data["asset"] = assets_by_id[tx.asset_id].to_dict()
         data["inherited_from"] = None
+        data["realized"] = _realized_for(tx)
         result.append(data)
     # inherited_rows so' e' populado quando asset_id e' um unico ativo (merge
     # target) - volume tipicamente pequeno, mesclado direto na pagina atual
@@ -1786,9 +1969,12 @@ def delete_asset(asset_id):
 
 
 def _create_asset_transaction(asset, kind, data):
+    value_based = _is_value_based(asset)
     date_raw = data.get("date")
     quantity = data.get("quantity")
     unit_price = data.get("unit_price")
+    if value_based:
+        quantity, unit_price = _value_based_quantity_and_price(kind, data)
     fee_amount = data.get("fee_amount") or 0
     note_id = (data.get("note_id") or "").strip() or None
     rate_raw = data.get("fixed_income_rate_pct")
@@ -1808,7 +1994,8 @@ def _create_asset_transaction(asset, kind, data):
     quantity = Decimal(str(quantity))
     unit_price = Decimal(str(unit_price))
     fee_amount = Decimal(str(fee_amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    base_amount = quantity * unit_price
+    # Por valor: unit_price e' o proprio valor informado (quantity e' provisoria).
+    base_amount = unit_price if value_based else quantity * unit_price
     trade_date = dt.date.fromisoformat(date_raw)
 
     if kind == "buy" and asset.type == "renda_fixa" and asset.maturity_date is not None:
@@ -1838,9 +2025,10 @@ def _create_asset_transaction(asset, kind, data):
         if fee_amount > base_amount:
             raise ApiError("Taxa não pode ser maior que o valor da venda", 400)
         total_amount = (base_amount - fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
-        if quantity > Decimal(str(position["quantity"])):
-            raise ApiError("Quantidade insuficiente do ativo para vender", 400)
+        if not value_based:
+            position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
+            if quantity > Decimal(str(position["quantity"])):
+                raise ApiError("Quantidade insuficiente do ativo para vender", 400)
         tx_type = "income"
         description = f"Venda {asset.code or asset.name}"
 
@@ -1873,6 +2061,9 @@ def _create_asset_transaction(asset, kind, data):
     )
     db.session.add(asset_tx)
     db.session.flush()
+
+    if value_based:
+        _sync_fixed_income_redemptions(asset)
 
     recalc_account_balance(account)
     db.session.commit()
@@ -1925,8 +2116,12 @@ def update_asset_transaction(asset_transaction_id):
     account = asset.investment_account.account
     tx = Transaction.query.get(asset_tx.transaction_id) if asset_tx.transaction_id else None
 
+    value_based = _is_value_based(asset)
     quantity = Decimal(str(data["quantity"])) if "quantity" in data else asset_tx.quantity
     unit_price = Decimal(str(data["unit_price"])) if "unit_price" in data else asset_tx.unit_price
+    amount_given = value_based and ("amount" in data or ("quantity" in data and "unit_price" in data))
+    if amount_given:
+        quantity, unit_price = _value_based_quantity_and_price(asset_tx.type, data)
     fee_amount = (
         Decimal(str(data["fee_amount"])).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         if "fee_amount" in data
@@ -1950,7 +2145,15 @@ def update_asset_transaction(asset_transaction_id):
         if trade_date > asset.maturity_date:
             raise ApiError("Data de compra não pode ser posterior ao vencimento do título", 400)
 
-    base_amount = quantity * unit_price
+    if amount_given:
+        base_amount = unit_price
+    elif value_based:
+        # sem novo valor: mantem o valor bruto ja gravado (a quantidade/preco
+        # de um resgate sao derivados e so' aproximam esse valor)
+        stored_fee = asset_tx.fee_amount if asset_tx.type == "buy" else -asset_tx.fee_amount
+        base_amount = asset_tx.total_amount - stored_fee
+    else:
+        base_amount = quantity * unit_price
 
     if asset_tx.type == "buy":
         total_amount = (base_amount + fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -1960,18 +2163,19 @@ def update_asset_transaction(asset_transaction_id):
         if fee_amount > base_amount:
             raise ApiError("Taxa não pode ser maior que o valor da venda", 400)
         total_amount = (base_amount - fee_amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_account(
-            asset.investment_account_id
-        )
-        effective_txs = _effective_transactions(
-            asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
-        )
-        other_quantity = sum(
-            (t.quantity if t.type == "buy" else -t.quantity for t in effective_txs if t.source_tx_id != asset_tx.id),
-            Decimal("0"),
-        )
-        if quantity > other_quantity:
-            raise ApiError("Quantidade insuficiente do ativo para vender", 400)
+        if not value_based:
+            splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_account(
+                asset.investment_account_id
+            )
+            effective_txs = _effective_transactions(
+                asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
+            )
+            other_quantity = sum(
+                (t.quantity if t.type == "buy" else -t.quantity for t in effective_txs if t.source_tx_id != asset_tx.id),
+                Decimal("0"),
+            )
+            if quantity > other_quantity:
+                raise ApiError("Quantidade insuficiente do ativo para vender", 400)
 
     asset_tx.quantity = quantity
     asset_tx.unit_price = unit_price
@@ -1987,6 +2191,8 @@ def update_asset_transaction(asset_transaction_id):
         tx.description = f"{'Compra' if asset_tx.type == 'buy' else 'Venda'} {asset.code or asset.name}"
 
     db.session.flush()
+    if value_based:
+        _sync_fixed_income_redemptions(asset)
     recalc_account_balance(account)
     db.session.commit()
     return {"asset_transaction": asset_tx.to_dict(), "asset": _asset_to_dict(asset)}
@@ -2007,6 +2213,7 @@ def delete_asset_transaction(asset_transaction_id):
 
     tx = Transaction.query.get(asset_tx.transaction_id) if asset_tx.transaction_id else None
     account = tx.account if tx else None
+    asset = asset_tx.asset
 
     db.session.delete(asset_tx)
     db.session.flush()
@@ -2014,7 +2221,36 @@ def delete_asset_transaction(asset_transaction_id):
         db.session.delete(tx)
         db.session.flush()
 
+    if _is_value_based(asset):
+        _sync_fixed_income_redemptions(asset)
+
     if account:
         recalc_account_balance(account)
     db.session.commit()
     return {"ok": True}
+
+
+@investments_bp.get("/assets/<uuid:asset_id>/redemption-preview")
+@login_required
+def redemption_preview(asset_id):
+    """Saldo estimado (valor e principal) da posicao de um ativo por valor em
+    uma data, para o formulario de resgate mostrar quanto da' pra resgatar e
+    quanto do resgate seria rendimento. `exclude` ignora uma operacao (a que
+    esta sendo editada)."""
+    asset = _owned_asset(asset_id)
+    if asset is None:
+        raise ApiError("Ativo não encontrado", 404)
+    if not _is_value_based(asset):
+        raise ApiError("Este ativo não é lançado por valor", 400)
+
+    date_raw = request.args.get("date")
+    try:
+        as_of = dt.date.fromisoformat(date_raw) if date_raw else dt.date.today()
+    except ValueError:
+        raise ApiError("Data inválida", 400)
+
+    exclude_id = request.args.get("exclude")
+    txs = [tx for tx in _fixed_income_ordered_txs(asset) if str(tx.id) != exclude_id]
+    value_fn, lots, _ = _fixed_income_ledger(asset, txs, as_of=as_of)
+    value, principal = position_snapshot(lots, as_of, value_fn)
+    return {"as_of": as_of.isoformat(), "value": float(value), "principal": float(principal)}

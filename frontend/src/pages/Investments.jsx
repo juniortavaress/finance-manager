@@ -7,6 +7,7 @@ import { useAccounts } from '../hooks/resources/useAccounts';
 import { investmentAccounts as filterInvestment } from '../utils/accounts';
 import { fmt, monthLabelFull } from '../utils/format';
 import { deriveBankSummary } from '../utils/investmentSummary';
+import { isValueBasedFixedIncome } from '../utils/fixedIncome';
 import Skeleton from '../components/Skeleton';
 import InvestmentRentabilityDrilldownModal from '../components/modals/InvestmentRentabilityDrilldownModal';
 import InvestmentBreakdownDrilldownModal from '../components/modals/InvestmentBreakdownDrilldownModal';
@@ -578,7 +579,8 @@ export default function Investments() {
                     )}
                   </div>
                   <div className="tx-meta">
-                    {asset.bank_name} · {pos.quantity} un. · preço médio {money(pos.avg_unit_price)}
+                    {asset.bank_name}
+                    {!isValueBasedFixedIncome(asset) && ` · ${pos.quantity} un. · preço médio ${money(pos.avg_unit_price)}`}
                   </div>
                 </div>
               </div>

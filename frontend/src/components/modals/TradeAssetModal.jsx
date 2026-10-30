@@ -3,7 +3,9 @@ import { investmentsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
 import { maskToNumber, numberToMasked, currencySymbol } from '../../utils/currency';
+import { isValueBasedFixedIncome } from '../../utils/fixedIncome';
 import ModalShell from './ModalShell';
+import FixedIncomeTradeModal from './FixedIncomeTradeModal';
 import CurrencyInput from '../CurrencyInput';
 import { IconTrash } from '../icons';
 
@@ -11,7 +13,7 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export default function TradeAssetModal({
+function UnitsTradeModal({
   open,
   onClose,
   onBack,
@@ -262,4 +264,11 @@ export default function TradeAssetModal({
       </div>
     </ModalShell>
   );
+}
+
+// Renda fixa pre-fixada/pos-fixada CDI-Selic e' lancada so' por valor; o resto
+// (acoes, FIIs, cripto, IPCA+...) continua por quantidade e preco unitario.
+export default function TradeAssetModal(props) {
+  const Modal = isValueBasedFixedIncome(props.asset || props.assetDraft) ? FixedIncomeTradeModal : UnitsTradeModal;
+  return <Modal {...props} />;
 }

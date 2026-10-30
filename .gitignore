@@ -29,3 +29,6 @@ Thumbs.db
 /*.xlsx
 /*.html
 backend/scripts/
+
+# Copias locais de dados (nunca commitar)
+backups/

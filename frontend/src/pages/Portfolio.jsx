@@ -7,6 +7,7 @@ import { investmentAccounts as filterInvestment } from '../utils/accounts';
 import { useToast } from '../context/ToastContext';
 import { fmt, fmtDateFull } from '../utils/format';
 import { maskToNumber, numberToMasked } from '../utils/currency';
+import { isValueBasedFixedIncome } from '../utils/fixedIncome';
 import { IconSearch, IconPencil, IconInfo } from '../components/icons';
 import CurrencyInput from '../components/CurrencyInput';
 import Skeleton from '../components/Skeleton';
@@ -400,7 +401,7 @@ export default function Portfolio() {
                   <span className="dot" style={{ background: a.bankColor }} />
                   {a.bankName}
                 </div>
-                <div className="a-num">{a.position.quantity}</div>
+                <div className="a-num">{isValueBasedFixedIncome(a) ? '—' : a.position.quantity}</div>
                 <div className="a-num">{fmt(a.position.invested_amount, a.currency)}</div>
                 {isAutoPrice ? (
                   <div
@@ -532,7 +533,7 @@ export default function Portfolio() {
                 <div className="asset-card-grid">
                   <div>
                     <div className="asset-card-label">Qtd.</div>
-                    <div className="a-num">{a.position.quantity}</div>
+                    <div className="a-num">{isValueBasedFixedIncome(a) ? '—' : a.position.quantity}</div>
                   </div>
                   <div>
                     <div className="asset-card-label">Investido</div>

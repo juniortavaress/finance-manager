@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { dividendsApi, investmentsApi } from '../../api/resources';
 import { useFetch } from '../../hooks/useFetch';
 import { fmt, fmtDateFull } from '../../utils/format';
+import { fixedIncomeRateLabel, isValueBasedFixedIncome } from '../../utils/fixedIncome';
 import InvestmentEvolutionChart from '../charts/InvestmentEvolutionChart';
 import UpcomingDividendsChart from '../charts/UpcomingDividendsChart';
 import ModalShell from './ModalShell';
@@ -67,7 +68,10 @@ export default function AssetDetailModal({ open, onClose, asset }) {
   const transactions = txData?.asset_transactions || [];
 
   const isFixedIncome = asset?.type === 'renda_fixa';
+  // Pre/pos-fixado CDI-Selic: lancado so' por valor, sem quantidade nem preco unitario.
+  const valueBased = isValueBasedFixedIncome(asset);
   const position = asset?.position;
+  const realizedProfit = valueBased ? position?.realized_profit : null;
   const currentAmount = position ? (position.current_amount != null ? position.current_amount : position.invested_amount) : null;
   const profit = position != null ? currentAmount + (position.dividends_total || 0) - position.invested_amount : null;
   const rent = position?.total_return_pct;
@@ -79,7 +83,7 @@ export default function AssetDetailModal({ open, onClose, asset }) {
       label: 'Preço atual',
       value: asset?.current_unit_price != null ? fmt(asset.current_unit_price, currency) : '—',
     },
-    isFixedIncome && { label: 'Qtd.', value: position?.quantity },
+    isFixedIncome && !valueBased && { label: 'Qtd.', value: position?.quantity },
     { label: 'Investido', value: position ? fmt(position.invested_amount, currency) : null },
     { label: 'Atual', value: currentAmount != null ? fmt(currentAmount, currency) : '—' },
     { label: 'Dividendos', value: position ? fmt(position.dividends_total, currency) : null },
@@ -88,12 +92,33 @@ export default function AssetDetailModal({ open, onClose, asset }) {
       value: profit != null ? `${profit >= 0 ? '+' : ''}${fmt(profit, currency)}` : null,
       color: profit != null ? (profit >= 0 ? 'var(--teal)' : 'var(--brick)') : undefined,
     },
+    realizedProfit != null && {
+      label: 'Lucro realizado',
+      value: `${realizedProfit >= 0 ? '+' : ''}${fmt(realizedProfit, currency)}`,
+      color: realizedProfit >= 0 ? 'var(--teal)' : 'var(--brick)',
+    },
     {
       label: 'Rentabilidade',
       value: rent != null ? `${rent >= 0 ? '+' : ''}${rent.toFixed(1)}%` : '—',
       color: rent != null ? (rent >= 0 ? 'var(--teal)' : 'var(--brick)') : undefined,
     },
   ].filter(Boolean);
+
+  function valueBasedLabel(tx) {
+    if (tx.type === 'buy') return 'Aporte';
+    return tx.realized?.full ? 'Resgate total' : 'Resgate';
+  }
+
+  function valueBasedMeta(tx) {
+    const parts = [fmtDateFull(tx.date)];
+    if (tx.type === 'buy' && tx.fixed_income_rate_pct != null) parts.push(fixedIncomeRateLabel(asset, tx.fixed_income_rate_pct));
+    if (tx.type === 'sell' && tx.realized) {
+      const profit = tx.realized.gross_profit;
+      parts.push(`rendimento ${profit >= 0 ? '+' : ''}${fmt(profit, currency)}`);
+    }
+    if (tx.type === 'sell' && tx.fee_amount > 0) parts.push(`imposto ${fmt(tx.fee_amount, currency)}`);
+    return parts.join(' · ');
+  }
 
   return (
     <ModalShell open={open} onClose={onClose}>
@@ -193,7 +218,7 @@ export default function AssetDetailModal({ open, onClose, asset }) {
                 <div className="tx-left">
                   <div>
                     <div className="tx-desc">
-                      {tx.type === 'buy' ? 'Compra' : 'Venda'} · {tx.quantity} un.
+                      {valueBased ? valueBasedLabel(tx) : `${tx.type === 'buy' ? 'Compra' : 'Venda'} · ${tx.quantity} un.`}
                       {tx.inherited_from && (
                         <span
                           style={{
@@ -211,8 +236,14 @@ export default function AssetDetailModal({ open, onClose, asset }) {
                       )}
                     </div>
                     <div className="tx-meta">
-                      {fmtDateFull(tx.date)} · preço unit. {fmt(tx.unit_price, currency)}
-                      {tx.fixed_income_rate_pct != null ? ` · ${tx.fixed_income_rate_pct}%` : ''}
+                      {valueBased ? (
+                        valueBasedMeta(tx)
+                      ) : (
+                        <>
+                          {fmtDateFull(tx.date)} · preço unit. {fmt(tx.unit_price, currency)}
+                          {tx.fixed_income_rate_pct != null ? ` · ${tx.fixed_income_rate_pct}%` : ''}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

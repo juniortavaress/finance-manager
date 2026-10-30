@@ -75,6 +75,11 @@ class AssetTransaction(BaseModel):
             "unit_price": float(self.unit_price),
             "total_amount": float(self.total_amount),
             "fee_amount": float(self.fee_amount),
+            # Valor bruto da operacao (sem a taxa): e' o que o usuario digita
+            # nos lancamentos de renda fixa por valor.
+            "gross_amount": float(
+                self.total_amount - self.fee_amount if self.type == "buy" else self.total_amount + self.fee_amount
+            ),
             "note_id": self.note_id,
             "fixed_income_rate_pct": float(self.fixed_income_rate_pct) if self.fixed_income_rate_pct is not None else None,
         }

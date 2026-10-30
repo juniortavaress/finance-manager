@@ -5,6 +5,7 @@ import { useBanks } from '../hooks/resources/useBanks';
 import { useAccounts } from '../hooks/resources/useAccounts';
 import { investmentAccounts as filterInvestment } from '../utils/accounts';
 import { fmt, fmtDateShort } from '../utils/format';
+import { fixedIncomeRateLabel, isValueBasedFixedIncome } from '../utils/fixedIncome';
 import { IconSearch, IconPencil, IconTrash } from '../components/icons';
 import PickAssetModal from '../components/modals/PickAssetModal';
 import NewAssetModal from '../components/modals/NewAssetModal';
@@ -18,6 +19,17 @@ const PAGE_SIZE = 15;
 function fmtDateShortYear(isoDate) {
   const d = new Date(`${isoDate}T00:00:00`);
   return `${fmtDateShort(isoDate)} ${d.getFullYear()}`;
+}
+
+// Linha de detalhe de uma operacao: quantidade x preco unitario, ou - na renda
+// fixa lancada so' por valor - a taxa do aporte / o rendimento do resgate.
+function tradeDetail(t, currency) {
+  if (!isValueBasedFixedIncome(t.asset)) return `${t.quantity} × ${fmt(t.unit_price, currency)}`;
+  if (t.type === 'buy') return fixedIncomeRateLabel(t.asset, t.fixed_income_rate_pct);
+  const parts = [];
+  if (t.realized) parts.push(`rendimento ${t.realized.gross_profit >= 0 ? '+' : ''}${fmt(t.realized.gross_profit, currency)}`);
+  if (t.fee_amount > 0) parts.push(`imposto ${fmt(t.fee_amount, currency)}`);
+  return parts.join(' · ');
 }
 
 function initials(text) {
@@ -271,9 +283,7 @@ export default function AssetTrades() {
             </div>
             <div className="compra-val">
               <div className="compra-total num">{fmt(t.total_amount, currencyFor(t.asset))}</div>
-              <div className="compra-unit">
-                {t.quantity} × {fmt(t.unit_price, currencyFor(t.asset))}
-              </div>
+              <div className="compra-unit">{tradeDetail(t, currencyFor(t.asset))}</div>
             </div>
           </div>
         ))}
@@ -328,9 +338,7 @@ export default function AssetTrades() {
             </div>
             <div className="compra-val">
               <div className="compra-total num">{fmt(t.total_amount, currencyFor(t.asset))}</div>
-              <div className="compra-unit">
-                {t.quantity} × {fmt(t.unit_price, currencyFor(t.asset))}
-              </div>
+              <div className="compra-unit">{tradeDetail(t, currencyFor(t.asset))}</div>
             </div>
           </div>
         ))}
