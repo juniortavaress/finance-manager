@@ -2,6 +2,7 @@ import { dashboardApi } from '../../api/resources';
 import { useFetch } from '../../hooks/useFetch';
 import { fmt, fmtDateShort } from '../../utils/format';
 import ModalShell from './ModalShell';
+import { localIsoDate } from '../../utils/date';
 
 export default function InvoicesDrilldownModal({ open, onClose }) {
   const { data, loading } = useFetch(() => dashboardApi.periodInvoices(), []);
@@ -19,7 +20,7 @@ export default function InvoicesDrilldownModal({ open, onClose }) {
         <div className="modal-body modal-body-scroll">
           {!loading && invoices.length === 0 && <div className="empty-state">Nenhuma fatura em aberto.</div>}
           {invoices.map((inv) => {
-            const isLate = inv.due_date < new Date().toISOString().slice(0, 10);
+            const isLate = inv.due_date < localIsoDate();
             return (
               <div className="fat-row" key={inv.id}>
                 <div>

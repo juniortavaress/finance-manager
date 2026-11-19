@@ -11,6 +11,7 @@ import DividendPeriodDetailModal from '../components/modals/DividendPeriodDetail
 import DividendsHistoryChart from '../components/charts/DividendsHistoryChart';
 import Skeleton from '../components/Skeleton';
 import LoadMoreButton from '../components/LoadMoreButton';
+import { localIsoDate } from '../utils/date';
 
 const PAGE_SIZE = 15;
 
@@ -31,12 +32,14 @@ const FREQUENCY_LABELS = {
 };
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 function initials(text) {
   return (text || '?').slice(0, 2).toUpperCase();
 }
+
+const EMPTY_LIST = [];
 
 export default function Dividends() {
   const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssetsLight(signal), []);
@@ -60,7 +63,7 @@ export default function Dividends() {
     () => dividendsApi.list({ limit: 100000 }),
     []
   );
-  const allDividends = dividendsData?.dividends || [];
+  const allDividends = dividendsData?.dividends || EMPTY_LIST;
 
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const dividendsAccumulated = useMemo(() => allDividends.slice(0, visibleCount), [allDividends, visibleCount]);
@@ -114,8 +117,8 @@ export default function Dividends() {
   const [dividendModalOpen, setDividendModalOpen] = useState(false);
   const [editingDividend, setEditingDividend] = useState(null);
 
-  const assets = assetsData?.assets || [];
-  const schedules = schedulesData?.dividend_schedules || [];
+  const assets = assetsData?.assets || EMPTY_LIST;
+  const schedules = schedulesData?.dividend_schedules || EMPTY_LIST;
   const dividends = dividendsAccumulated;
 
   function reload() {

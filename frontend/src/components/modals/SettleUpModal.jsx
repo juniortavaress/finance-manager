@@ -5,9 +5,10 @@ import { maskToNumber, numberToMasked } from '../../utils/currency';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
 import { planAllocations, totalOfOrigins } from '../../utils/settlement';
+import { localIsoDate } from '../../utils/date';
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 /**

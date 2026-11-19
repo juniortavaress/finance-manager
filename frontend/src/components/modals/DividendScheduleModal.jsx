@@ -23,10 +23,6 @@ const FREQUENCY_OPTIONS = [
   { value: 'yearly', label: 'Anual' },
 ];
 
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 /**
  * Provento recorrente: cadastra a regra (ativo + valor por cota ou fixo +
  * periodicidade). O backend materializa os recebimentos automaticamente na

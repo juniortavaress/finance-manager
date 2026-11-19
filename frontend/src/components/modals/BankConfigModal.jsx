@@ -6,6 +6,7 @@ import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
+import { localIsoDate } from '../../utils/date';
 
 const COLOR_OPTIONS = [
   '#0F5C5C',
@@ -19,7 +20,7 @@ const COLOR_OPTIONS = [
 ];
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 /**

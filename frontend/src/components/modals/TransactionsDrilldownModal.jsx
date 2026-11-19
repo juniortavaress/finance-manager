@@ -3,9 +3,10 @@ import { useFetch } from '../../hooks/useFetch';
 import { fmt, fmtDateShort } from '../../utils/format';
 import ModalShell from './ModalShell';
 import Skeleton from '../Skeleton';
+import { toLocalIso } from '../../utils/date';
 
 function lastDayIso(year, month) {
-  return new Date(year, month, 0).toISOString().slice(0, 10);
+  return toLocalIso(new Date(year, month, 0));
 }
 
 export default function TransactionsDrilldownModal({ open, onClose, title, year, month, type, categoryId, categoryById = () => undefined }) {

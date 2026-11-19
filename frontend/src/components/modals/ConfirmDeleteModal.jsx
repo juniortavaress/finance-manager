@@ -31,7 +31,7 @@ export default function ConfirmDeleteModal({
     try {
       await onConfirm();
     } catch (err) {
-      showError(errorFallback);
+      showError(err?.message || errorFallback);
     } finally {
       setSubmitting(false);
     }

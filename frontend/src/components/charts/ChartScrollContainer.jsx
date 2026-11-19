@@ -7,7 +7,7 @@ export default function ChartScrollContainer({ width, height, children }) {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollLeft = el.scrollWidth;
-  }, [width]);
+  }, [width, scrollRef]);
 
   return (
     <div className="chart-scroll" ref={scrollRef}>

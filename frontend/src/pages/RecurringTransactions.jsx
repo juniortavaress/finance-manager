@@ -11,9 +11,10 @@ import { IconPencil, IconBell, IconCheck } from '../components/icons';
 import RecurringModal from '../components/modals/RecurringModal';
 import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal';
 import Skeleton from '../components/Skeleton';
+import { localIsoDate } from '../utils/date';
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 function parseIso(iso) {
@@ -67,6 +68,8 @@ function nextDueDate(r, today) {
   return r.end_date && iso > r.end_date ? null : iso;
 }
 
+const EMPTY_LIST = [];
+
 export default function RecurringTransactions() {
   const { accounts } = useAccounts();
   const { categories } = useCategories();
@@ -83,7 +86,7 @@ export default function RecurringTransactions() {
   const [payingRecurring, setPayingRecurring] = useState(null);
 
   const { data: recurringData, reload: reloadRecurring, loading: recurringLoading } = useFetch(() => recurringApi.list(), []);
-  const recurringList = recurringData?.recurring_transactions || [];
+  const recurringList = recurringData?.recurring_transactions || EMPTY_LIST;
   const activeRecurring = recurringList.filter((r) => r.active);
   const activeExpenses = activeRecurring.filter((r) => r.type !== 'income');
   const activeIncomes = activeRecurring.filter((r) => r.type === 'income');

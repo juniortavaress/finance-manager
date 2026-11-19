@@ -8,9 +8,10 @@ import ModalShell from './ModalShell';
 import FixedIncomeTradeModal from './FixedIncomeTradeModal';
 import CurrencyInput from '../CurrencyInput';
 import { IconTrash } from '../icons';
+import { localIsoDate } from '../../utils/date';
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 function UnitsTradeModal({

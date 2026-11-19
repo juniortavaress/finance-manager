@@ -11,11 +11,12 @@ import TransferModal from '../components/modals/TransferModal';
 import InvoiceHistoryChart from '../components/charts/InvoiceHistoryChart';
 import Skeleton from '../components/Skeleton';
 import { IconPencil, IconSwap } from '../components/icons';
+import { localIsoDate } from '../utils/date';
 
 const FALLBACK_COLOR = '#0F5C5C';
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 export default function Accounts() {

@@ -15,11 +15,12 @@ import { IconSearch, IconPencil, IconChevronDown } from '../components/icons';
 import TransactionModal from '../components/modals/TransactionModal';
 import LoadMoreButton from '../components/LoadMoreButton';
 import Skeleton from '../components/Skeleton';
+import { localIsoDate } from '../utils/date';
 
 const PAGE_SIZE = 50;
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 function RowActionButton({ title, onClick, color, children }) {

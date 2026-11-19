@@ -21,6 +21,7 @@ import PeriodGranularitySelect from '../components/PeriodGranularitySelect';
 import Skeleton from '../components/Skeleton';
 import AnimatedNumber from '../components/AnimatedNumber';
 import { IconChevronDown } from '../components/icons';
+import { localIsoDate } from '../utils/date';
 
 function todayPeriod() {
   const now = new Date();
@@ -406,7 +407,7 @@ export default function Dashboard() {
           )}
           {!invLoading &&
             (invData?.invoices || []).map((inv) => {
-            const isLate = inv.due_date < new Date().toISOString().slice(0, 10);
+            const isLate = inv.due_date < localIsoDate();
             return (
               <div className="fat-row" key={inv.id}>
                 <div>

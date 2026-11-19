@@ -7,6 +7,7 @@ import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
 import BrokerAssetPicker from '../BrokerAssetPicker';
+import { localIsoDate } from '../../utils/date';
 
 const KIND_OPTIONS = [
   { value: 'dividendo', label: 'Dividendo' },
@@ -16,7 +17,7 @@ const KIND_OPTIONS = [
 ];
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 /**

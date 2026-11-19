@@ -6,9 +6,10 @@ import { maskToNumber, numberToMasked, currencySymbol } from '../../utils/curren
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
 import { IconTrash } from '../icons';
+import { localIsoDate } from '../../utils/date';
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 // Mesmas folgas do backend (fixed_income_service.py): resgate que deixa menos

@@ -54,20 +54,22 @@ const TYPE_COLORS = {
   internacional: '#4A5FBF',
 };
 
+const EMPTY_LIST = [];
+
 export default function Investments() {
   const navigate = useNavigate();
-  const { banks, reload: reloadBanks } = useBanks();
-  const { accounts, reload: reloadAccounts } = useAccounts();
+  const { banks } = useBanks();
+  const { accounts } = useAccounts();
   const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);
   const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
   const [bankFilter, setBankFilter] = useState('');
   // Busca sempre o consolidado ("todas as corretoras") uma única vez; o filtro
   // de corretora só recorta esses dados em memória, sem nova ida ao backend.
-  const { data: summaryAll, loading: summaryLoading, reload: reloadSummary } = useFetch(
+  const { data: summaryAll, loading: summaryLoading } = useFetch(
     (signal) => investmentsApi.summary(undefined, signal),
     []
   );
-  const { data: dividendsAll, loading: dividendsLoading, reload: reloadDividends } = useFetch(
+  const { data: dividendsAll, loading: dividendsLoading } = useFetch(
     (signal) => dividendsApi.summary(undefined, signal),
     []
   );
@@ -76,29 +78,19 @@ export default function Investments() {
     () => (bankFilter ? dividendsAll?.by_bank?.[bankFilter] || { has_dividends: false, by_month: [], by_year: [] } : dividendsAll),
     [dividendsAll, bankFilter]
   );
-  const { data: schedulesData, reload: reloadSchedules } = useFetch(() => dividendsApi.listSchedules(), []);
-  const { data: profitData, loading: profitLoading, reload: reloadProfit } = useFetch(
+  const { data: schedulesData } = useFetch(() => dividendsApi.listSchedules(), []);
+  const { data: profitData, loading: profitLoading } = useFetch(
     (signal) => investmentsApi.profitEvolution(signal),
     []
   );
   const [drilldown, setDrilldown] = useState(null);
 
-  const assets = summaryData?.assets || [];
+  const assets = summaryData?.assets || EMPTY_LIST;
   const unallocatedByBank = summaryData?.unallocated_by_bank || [];
   const totalUnallocated = summaryData?.total_unallocated || 0;
   const hasDividends = dividendsData?.has_dividends || false;
-  const schedules = schedulesData?.dividend_schedules || [];
+  const schedules = schedulesData?.dividend_schedules || EMPTY_LIST;
   const totalInvested = summaryData?.total_invested || 0;
-  const totalAllocatedCost = summaryData?.total_allocated_cost || 0;
-
-  function reload() {
-    reloadSummary();
-    reloadDividends();
-    reloadSchedules();
-    reloadBanks();
-    reloadAccounts();
-    reloadProfit();
-  }
 
   const activeAssets = useMemo(() => assets.filter((a) => a.position.quantity > 0), [assets]);
 

@@ -5,9 +5,10 @@ import { maskToNumber, currencySymbol } from '../../utils/currency';
 import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
+import { localIsoDate } from '../../utils/date';
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localIsoDate();
 }
 
 export default function TransferModal({ open, onClose, onCreated, checkingAccounts = [], investmentAccounts = [] }) {
