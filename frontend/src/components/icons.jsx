@@ -220,3 +220,11 @@ export const IconClose = (props) => (
     <line x1="19" y1="5" x2="5" y2="19" />
   </svg>
 );
+
+export const IconDownload = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <path d="M12 4v11" />
+    <path d="M7.5 11l4.5 4.5 4.5-4.5" />
+    <path d="M5 19h14" />
+  </svg>
+);

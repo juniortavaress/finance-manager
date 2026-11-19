@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { canInstall, isStandalone, onInstallAvailabilityChange, promptInstall } from '../pwa';
 import {
   IconDashboard,
   IconBank,
@@ -19,6 +20,7 @@ import {
   IconLogout,
   IconChevronDown,
   IconClose,
+  IconDownload,
 } from './icons';
 
 const NAV_GROUPS = [
@@ -80,6 +82,16 @@ export default function Sidebar({ onClose }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { showInfo } = useToast();
+  const [installable, setInstallable] = useState(canInstall());
+  useEffect(() => onInstallAvailabilityChange(setInstallable), []);
+
+  async function handleInstall() {
+    if (installable) {
+      await promptInstall();
+      return;
+    }
+    showInfo('No navegador: menu ⋮ → "Instalar aplicativo". No iPhone: Compartilhar → "Adicionar à Tela de Início".');
+  }
 
   function handleLogout() {
     logout();
@@ -131,6 +143,12 @@ export default function Sidebar({ onClose }) {
                   {label}
                 </NavLink>
               )
+            )}
+            {group.label === 'Outros' && !isStandalone() && (
+              <button type="button" className="navitem navitem-button" onClick={handleInstall}>
+                <IconDownload />
+                Baixar app
+              </button>
             )}
           </div>
         ))}

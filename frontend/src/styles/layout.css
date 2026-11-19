@@ -405,3 +405,11 @@ body {
     padding-bottom: calc(26px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+.navitem-button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+}
