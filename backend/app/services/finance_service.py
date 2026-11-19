@@ -54,7 +54,7 @@ def recalc_account_balance(account: Account):
         db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
         .filter(
             Transaction.account_id == account.id,
-            Transaction.payment_method == "debit",
+            Transaction.payment_method != "credit",
             Transaction.status == "confirmed",
             Transaction.type == "income",
         )
@@ -65,7 +65,7 @@ def recalc_account_balance(account: Account):
         db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
         .filter(
             Transaction.account_id == account.id,
-            Transaction.payment_method == "debit",
+            Transaction.payment_method != "credit",
             Transaction.status == "confirmed",
             Transaction.type == "expense",
         )
@@ -105,6 +105,22 @@ def invoice_month_for_date(credit_card, purchase_date: dt.date) -> dt.date:
     return purchase_date.replace(day=1)
 
 
+def refresh_invoice_status(invoice: CreditCardInvoice):
+    """Status coerente com os valores: paga quando o pago cobre o total
+    (nao fica "fechada" se o total voltou a bater com o pago depois de uma
+    edicao/exclusao de compra), senao aberta ate o fechamento e fechada depois."""
+    fully_paid = invoice.paid_amount >= invoice.total_amount and (
+        invoice.total_amount > 0 or invoice.status == "paid"
+    )
+    if fully_paid:
+        invoice.status = "paid"
+        if invoice.paid_at is None:
+            invoice.paid_at = dt.datetime.now(dt.timezone.utc)
+    else:
+        invoice.status = "closed" if dt.date.today() > invoice.closing_date else "open"
+        invoice.paid_at = None
+
+
 def recalc_invoice_total(invoice: CreditCardInvoice):
     total = (
         db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
@@ -112,11 +128,7 @@ def recalc_invoice_total(invoice: CreditCardInvoice):
         .scalar()
     ) or Decimal("0")
     invoice.total_amount = total
-    if invoice.status == "paid" and invoice.paid_amount < invoice.total_amount:
-        invoice.status = "closed" if dt.date.today() > invoice.closing_date else "open"
-        invoice.paid_at = None
-    if invoice.status == "open" and dt.date.today() > invoice.closing_date:
-        invoice.status = "closed"
+    refresh_invoice_status(invoice)
 
 
 def recalc_invoice_paid_amount(invoice: CreditCardInvoice):
@@ -131,14 +143,7 @@ def recalc_invoice_paid_amount(invoice: CreditCardInvoice):
     ) or Decimal("0")
 
     invoice.paid_amount = paid
-    if paid >= invoice.total_amount and invoice.total_amount > 0:
-        if invoice.status != "paid":
-            invoice.status = "paid"
-        if invoice.paid_at is None:
-            invoice.paid_at = dt.datetime.now(dt.timezone.utc)
-    else:
-        invoice.status = "closed" if dt.date.today() > invoice.closing_date else "open"
-        invoice.paid_at = None
+    refresh_invoice_status(invoice)
 
 
 def recalc_credit_card_used_amount(credit_card):

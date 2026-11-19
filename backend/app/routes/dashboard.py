@@ -100,7 +100,8 @@ def summary():
             .filter(
                 Transaction.user_id == g.current_user.id,
                 Transaction.type == "expense",
-                Transaction.status == "confirmed",
+                # Sem filtro de status: o valor da fatura (invoice.total_amount, usado no
+                # detalhe do card) inclui parcelas ainda agendadas dentro dela.
                 Transaction.payment_method == "credit",
                 CreditCardInvoice.closing_date >= d_start,
                 CreditCardInvoice.closing_date <= d_end,
@@ -462,22 +463,30 @@ def balance_evolution():
 
     fx_rates, _ = get_brl_rates()
     balance_by_end = {end: Decimal("0") for end in period_ends}
-    for account in accounts:
-        txs = (
-            Transaction.query.filter(
-                Transaction.account_id == account.id,
-                Transaction.payment_method == "debit",
+    # UMA query para todas as contas (so' as colunas necessarias), em vez de
+    # carregar as transacoes inteiras conta a conta.
+    txs_by_account = {}
+    if accounts:
+        for account_id, tx_date, tx_type, amount in (
+            db.session.query(Transaction.account_id, Transaction.date, Transaction.type, Transaction.amount)
+            .filter(
+                Transaction.account_id.in_([a.id for a in accounts]),
+                Transaction.payment_method != "credit",
                 Transaction.status == "confirmed",
             )
             .order_by(Transaction.date.asc())
             .all()
-        )
+        ):
+            txs_by_account.setdefault(account_id, []).append((tx_date, tx_type, amount))
+
+    for account in accounts:
+        txs = txs_by_account.get(account.id, [])
         running = account.opening_balance
         tx_idx = 0
         for end in period_ends:
-            while tx_idx < len(txs) and txs[tx_idx].date <= end:
-                tx = txs[tx_idx]
-                running += tx.amount if tx.type == "income" else -tx.amount
+            while tx_idx < len(txs) and txs[tx_idx][0] <= end:
+                _, tx_type, amount = txs[tx_idx]
+                running += amount if tx_type == "income" else -amount
                 tx_idx += 1
             balance_by_end[end] += convert_to_brl(running, account.currency, fx_rates)
 
