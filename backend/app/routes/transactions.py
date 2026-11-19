@@ -7,7 +7,16 @@ from sqlalchemy.orm import selectinload
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import Account, Category, Dividend, InstallmentPlan, SharedExpense, Settlement, Transaction
+from app.models import (
+    Account,
+    AssetTransaction,
+    Category,
+    Dividend,
+    InstallmentPlan,
+    SharedExpense,
+    Settlement,
+    Transaction,
+)
 from app.models.transaction import TRANSACTION_STATUSES
 from app.services.finance_service import (
     add_months,
@@ -617,6 +626,13 @@ def delete_transaction(transaction_id):
     tx = Transaction.query.filter_by(id=transaction_id, user_id=g.current_user.id).first()
     if tx is None:
         raise ApiError("Transação não encontrada", 404)
+
+    if db.session.query(AssetTransaction.id).filter(AssetTransaction.transaction_id == tx.id).first() is not None:
+        raise ApiError(
+            "Esta transação foi gerada por uma compra/venda de ativo. Exclua a operação em "
+            "Investimentos > Compras e vendas para remover o lançamento junto.",
+            400,
+        )
 
     account = tx.account
     invoice = tx.credit_card_invoice

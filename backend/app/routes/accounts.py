@@ -5,7 +5,20 @@ from flask import Blueprint, g, request
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import Account, Bank, CreditCard, InvestmentAccount, RecurringTransaction, Transaction
+from app.models import (
+    Account,
+    Asset,
+    AssetTransaction,
+    Bank,
+    CreditCard,
+    Dividend,
+    DividendSchedule,
+    InvestmentAccount,
+    RecurringTransaction,
+    Settlement,
+    SharedExpense,
+    Transaction,
+)
 
 accounts_bp = Blueprint("accounts", __name__)
 
@@ -20,8 +33,39 @@ def _account_usage_counts(user_id, account_id):
 
 
 def _delete_account_cascade(account):
-    Transaction.query.filter_by(user_id=account.user_id, account_id=account.id).delete()
-    RecurringTransaction.query.filter_by(user_id=account.user_id, account_id=account.id).delete()
+    account_tx_ids = db.session.query(Transaction.id).filter(Transaction.account_id == account.id)
+
+    # A contraparte de uma transferencia (em outra conta) aponta para a
+    # transacao que vai sumir: so' desfaz o vinculo, o lancamento dela fica.
+    Transaction.query.filter(
+        Transaction.transfer_pair_id.in_(account_tx_ids), Transaction.account_id != account.id
+    ).update({"transfer_pair_id": None}, synchronize_session=False)
+
+    # Compras/vendas e proventos guardam FK para as transacoes da conta de
+    # investimento: precisam sair antes (senao o banco recusa a exclusao).
+    if account.investment_account is not None:
+        asset_ids = db.session.query(Asset.id).filter(Asset.investment_account_id == account.investment_account.id)
+        Dividend.query.filter(Dividend.asset_id.in_(asset_ids)).delete(synchronize_session=False)
+        DividendSchedule.query.filter(DividendSchedule.asset_id.in_(asset_ids)).delete(synchronize_session=False)
+        AssetTransaction.query.filter(AssetTransaction.asset_id.in_(asset_ids)).delete(synchronize_session=False)
+
+    # Despesas/acertos entre amigos so' guardam a conta usada para pagar/receber:
+    # o acerto em si continua valendo, so' perde essa referencia.
+    SharedExpense.query.filter(SharedExpense.payer_account_id == account.id).update(
+        {"payer_account_id": None}, synchronize_session=False
+    )
+    Settlement.query.filter(Settlement.payer_account_id == account.id).update(
+        {"payer_account_id": None}, synchronize_session=False
+    )
+    Settlement.query.filter(Settlement.receiver_account_id == account.id).update(
+        {"receiver_account_id": None}, synchronize_session=False
+    )
+
+    Transaction.query.filter_by(user_id=account.user_id, account_id=account.id).delete(synchronize_session=False)
+    RecurringTransaction.query.filter_by(user_id=account.user_id, account_id=account.id).delete(
+        synchronize_session=False
+    )
+    db.session.expire_all()
     db.session.delete(account)
 
 
