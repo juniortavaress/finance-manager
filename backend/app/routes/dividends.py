@@ -14,7 +14,7 @@ from app.models import Account, Asset, Bank, Category, Dividend, DividendSchedul
 from app.models.investment import DIVIDEND_CALC_MODES, DIVIDEND_FREQUENCIES, DIVIDEND_KINDS
 from app.services.finance_service import add_months, recalc_account_balance, safe_day
 from app.services.quotes_service import convert_to_brl, get_brl_rates
-from app.routes.investments import _asset_position, _resolve_market_events_for_account
+from app.routes.investments import _asset_position, _quantity_as_of, _resolve_market_events_for_account
 
 dividends_bp = Blueprint("dividends", __name__)
 
@@ -101,6 +101,8 @@ def _materialize_schedule(schedule: DividendSchedule, user_id):
         return
 
     today = dt.date.today()
+    if schedule.next_due_date > today:
+        return
     asset = schedule.asset
     account = asset.investment_account.account
     category = _get_or_create_dividend_category(user_id)
@@ -119,8 +121,10 @@ def _materialize_schedule(schedule: DividendSchedule, user_id):
             schedule.next_due_date = add_months(schedule.next_due_date, months_step)
             continue
 
-        quantity = Decimal(
-            str(_asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)["quantity"])
+        # Posicao NA DATA do pagamento (nao a de hoje): compras/vendas posteriores
+        # a esta ocorrencia nao podem mudar o valor de um provento ja devido.
+        quantity = _quantity_as_of(
+            asset, due_date, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
         )
         amount = _amount_for_schedule(schedule, quantity)
 
@@ -174,7 +178,14 @@ def _sync_all_schedules(user_id):
         DividendSchedule.query.join(Asset, Asset.id == DividendSchedule.asset_id)
         .join(InvestmentAccount, InvestmentAccount.id == Asset.investment_account_id)
         .join(Account, Account.id == InvestmentAccount.account_id)
-        .filter(Account.user_id == user_id, DividendSchedule.active.is_(True))
+        # So' os que ja venceram: a imensa maioria das chamadas nao tem nada a
+        # materializar, e carregar a posicao de cada conta para nada era o
+        # custo dominante desta rotina.
+        .filter(
+            Account.user_id == user_id,
+            DividendSchedule.active.is_(True),
+            DividendSchedule.next_due_date <= dt.date.today(),
+        )
         .all()
     )
     for schedule in schedules:
@@ -231,7 +242,6 @@ def list_schedules():
             .contains_eager(Asset.investment_account)
             .contains_eager(InvestmentAccount.account),
             contains_eager(DividendSchedule.asset).selectinload(Asset.asset_transactions),
-            contains_eager(DividendSchedule.asset).selectinload(Asset.dividends),
         )
         .order_by(DividendSchedule.created_at.desc())
         .all()
@@ -244,7 +254,7 @@ def list_schedules():
         data = s.to_dict()
         account = s.asset.investment_account.account
         bank = banks_by_id.get(account.bank_id)
-        quantity = Decimal(str(_asset_position(s.asset)["quantity"]))
+        quantity = Decimal(str(_asset_position(s.asset, include_dividends=False)["quantity"]))
         data["asset"] = s.asset.to_dict()
         data["bank_id"] = str(account.bank_id)
         data["bank_name"] = bank.name if bank else None
@@ -563,8 +573,8 @@ def create_dividend():
     splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids = _resolve_market_events_for_account(
         asset.investment_account_id
     )
-    quantity = Decimal(
-        str(_asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids)["quantity"])
+    quantity = _quantity_as_of(
+        asset, received_date, splits_by_asset_id, merges_by_target_asset_id, merged_away_asset_ids
     )
     dividend = Dividend(
         asset_id=asset.id,

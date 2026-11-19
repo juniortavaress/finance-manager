@@ -560,6 +560,23 @@ def _asset_position(
     }
 
 
+def _quantity_as_of(
+    asset: Asset, as_of: dt.date, splits_by_asset_id=None, merges_by_target_asset_id=None, merge_cutoff_by_asset_id=None
+):
+    """Quantidade em carteira ao fim de `as_of` (inclusive), com os mesmos
+    ajustes de split/fusao de _asset_position. Usada para materializar
+    proventos recorrentes pela posicao que o ativo tinha NA DATA do
+    pagamento, nao pela posicao de hoje."""
+    quantity = Decimal("0")
+    for tx in _effective_transactions(
+        asset, splits_by_asset_id or {}, merges_by_target_asset_id or {}, merge_cutoff_by_asset_id or {}
+    ):
+        if tx.date > as_of:
+            break
+        quantity += tx.quantity if tx.type == "buy" else -tx.quantity
+    return max(quantity, Decimal("0"))
+
+
 def _asset_to_dict(
     asset: Asset, splits_by_asset_id=None, merges_by_target_asset_id=None, merge_cutoff_by_asset_id=None
 ):
