@@ -1,6 +1,7 @@
+import gzip
 import os
 
-from flask import Flask
+from flask import Flask, request
 from flask_cors import CORS
 
 from app.extensions import db, migrate
@@ -24,7 +25,31 @@ def create_app():
     migrate.init_app(app, db)
 
     origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
-    CORS(app, origins=origins or "*", supports_credentials=True)
+    # max_age: o navegador guarda o preflight (OPTIONS) por 2h em vez de fazer
+    # uma ida extra ao servidor antes de CADA chamada da API.
+    CORS(app, origins=origins or "*", supports_credentials=True, max_age=7200)
+
+    @app.after_request
+    def compress_json(response):
+        # gzip nas respostas JSON (o /investments/summary passa de 50 KB):
+        # 5-8x menos bytes, o que pesa no celular/rede movel.
+        if (
+            response.status_code < 200
+            or response.status_code >= 300
+            or response.direct_passthrough
+            or "Content-Encoding" in response.headers
+            or response.mimetype != "application/json"
+            or "gzip" not in request.headers.get("Accept-Encoding", "")
+        ):
+            return response
+        data = response.get_data()
+        if len(data) < 1024:
+            return response
+        response.set_data(gzip.compress(data, compresslevel=5))
+        response.headers["Content-Encoding"] = "gzip"
+        response.headers["Content-Length"] = str(len(response.get_data()))
+        response.headers.add("Vary", "Accept-Encoding")
+        return response
 
     register_error_handlers(app)
 
