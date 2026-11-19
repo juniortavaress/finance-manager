@@ -4,6 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import { maskToNumber, numberToMasked } from '../../utils/currency';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
+import { planAllocations, totalOfOrigins } from '../../utils/settlement';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -45,9 +46,12 @@ export default function SettleUpModal({
 
   useEffect(() => {
     if (!open) return;
-    setAmount(suggestedAmount ? numberToMasked(Math.abs(suggestedAmount)) : '');
+    // Em Amigos o valor sugerido quita TODAS as origens em que eu devo (cada
+    // grupo tem saldo isolado), que pode diferir do saldo liquido mostrado.
+    const owedTotal = !groupId && breakdown?.length ? totalOfOrigins(breakdown, -1) : Math.abs(suggestedAmount || 0);
+    setAmount(owedTotal ? numberToMasked(owedTotal) : '');
     setDate(todayIso());
-    setAccountId(checkingAccounts?.[0]?.id || '');
+    setAccountId(checkingAccounts?.[0]?.id || creditCardAccounts?.[0]?.id || '');
     setCategoryId('');
     setError('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -66,33 +70,30 @@ export default function SettleUpModal({
 
     setSubmitting(true);
     try {
-      if (!groupId && breakdown && breakdown.length > 1) {
-        // Quitar em Amigos: um settlement por origem com saldo negativo (o que eu
-        // devo), cada um pelo valor exato daquela origem -- nunca mistura grupos.
-        const owedByOrigin = breakdown.filter((b) => b.amount < 0);
-        await Promise.all(
-          owedByOrigin.map((b) =>
-            settlementsApi.create({
-              receiver_id: friendUserId,
-              friend_user_id: b.group_id ? undefined : friendUserId,
-              group_id: b.group_id || undefined,
-              amount: Math.abs(b.amount),
-              date,
-              payer_account_id: accountId,
-              category_id: categoryId || undefined,
-            })
-          )
-        );
-      } else {
-        await settlementsApi.create({
-          receiver_id: friendUserId,
-          friend_user_id: groupId ? undefined : friendUserId,
-          group_id: groupId,
-          amount: numericAmount,
-          date,
-          payer_account_id: accountId,
-          category_id: categoryId || undefined,
-        });
+      // Um acerto por origem (avulso/grupo), em sequencia: cada um mexe no saldo
+      // da mesma conta/fatura, entao nao podem correr em paralelo.
+      const plan = groupId ? [{ group_id: groupId, amount: numericAmount }] : planAllocations(breakdown, -1, numericAmount);
+      let registered = 0;
+      try {
+        for (const part of plan) {
+          await settlementsApi.create({
+            receiver_id: friendUserId,
+            friend_user_id: part.group_id ? undefined : friendUserId,
+            group_id: part.group_id || undefined,
+            amount: part.amount,
+            date,
+            payer_account_id: accountId,
+            category_id: categoryId,
+          });
+          registered += 1;
+        }
+      } catch (err) {
+        if (registered > 0) {
+          showError(`${registered} de ${plan.length} acertos foram registrados antes do erro: ${err.message}`);
+          onSaved?.();
+          return;
+        }
+        throw err;
       }
       showSuccess('Pagamento registrado com sucesso.');
       onSaved?.();

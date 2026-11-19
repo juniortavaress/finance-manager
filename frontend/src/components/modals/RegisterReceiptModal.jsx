@@ -4,6 +4,7 @@ import { useToast } from '../../context/ToastContext';
 import { maskToNumber, numberToMasked } from '../../utils/currency';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
+import { planAllocations, totalOfOrigins } from '../../utils/settlement';
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
@@ -43,7 +44,8 @@ export default function RegisterReceiptModal({
 
   useEffect(() => {
     if (!open) return;
-    setAmount(suggestedAmount ? numberToMasked(Math.abs(suggestedAmount)) : '');
+    const owedTotal = !groupId && breakdown?.length ? totalOfOrigins(breakdown, 1) : Math.abs(suggestedAmount || 0);
+    setAmount(owedTotal ? numberToMasked(owedTotal) : '');
     setDate(todayIso());
     setAccountId(checkingAccounts?.[0]?.id || '');
     setCategoryId('');
@@ -64,33 +66,30 @@ export default function RegisterReceiptModal({
 
     setSubmitting(true);
     try {
-      if (!groupId && breakdown && breakdown.length > 1) {
-        // Quitar em Amigos: um settlement por origem com saldo positivo (o que ele
-        // me deve), cada um pelo valor exato daquela origem -- nunca mistura grupos.
-        const owedToMeByOrigin = breakdown.filter((b) => b.amount > 0);
-        await Promise.all(
-          owedToMeByOrigin.map((b) =>
-            settlementsApi.receive({
-              payer_id: friendUserId,
-              friend_user_id: b.group_id ? undefined : friendUserId,
-              group_id: b.group_id || undefined,
-              amount: b.amount,
-              date,
-              receiver_account_id: accountId,
-              category_id: categoryId || undefined,
-            })
-          )
-        );
-      } else {
-        await settlementsApi.receive({
-          payer_id: friendUserId,
-          friend_user_id: groupId ? undefined : friendUserId,
-          group_id: groupId,
-          amount: numericAmount,
-          date,
-          receiver_account_id: accountId,
-          category_id: categoryId || undefined,
-        });
+      // Um recebimento por origem (avulso/grupo), em sequencia - todos entram na
+      // mesma conta, entao nao podem correr em paralelo.
+      const plan = groupId ? [{ group_id: groupId, amount: numericAmount }] : planAllocations(breakdown, 1, numericAmount);
+      let registered = 0;
+      try {
+        for (const part of plan) {
+          await settlementsApi.receive({
+            payer_id: friendUserId,
+            friend_user_id: part.group_id ? undefined : friendUserId,
+            group_id: part.group_id || undefined,
+            amount: part.amount,
+            date,
+            receiver_account_id: accountId,
+            category_id: categoryId,
+          });
+          registered += 1;
+        }
+      } catch (err) {
+        if (registered > 0) {
+          showError(`${registered} de ${plan.length} recebimentos foram registrados antes do erro: ${err.message}`);
+          onSaved?.();
+          return;
+        }
+        throw err;
       }
       showSuccess('Recebimento registrado com sucesso.');
       onSaved?.();
