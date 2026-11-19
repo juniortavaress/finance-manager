@@ -1,13 +1,30 @@
+import time
 from functools import wraps
 
 import jwt
 from flask import g, request
 
 from app.errors import ApiError
-from app.extensions import db
+from app.extensions import commit_if_dirty
 from app.models import User
 from app.services.auth_service import decode_token
 from app.services.finance_service import sync_due_installments
+
+
+# A confirmacao de parcelas vencidas so' muda quando o dia vira - nao precisa
+# de uma query extra em TODA requisicao. No maximo uma checagem por usuario
+# por minuto (por processo).
+_SYNC_INTERVAL_SECONDS = 60
+_last_sync_by_user = {}
+
+
+def _sync_installments_throttled(user_id):
+    now = time.monotonic()
+    last = _last_sync_by_user.get(user_id)
+    if last is not None and now - last < _SYNC_INTERVAL_SECONDS:
+        return
+    _last_sync_by_user[user_id] = now
+    sync_due_installments(user_id)
 
 
 def login_required(fn):
@@ -30,8 +47,8 @@ def login_required(fn):
             raise ApiError("Usuário não encontrado", 401)
 
         g.current_user = user
-        sync_due_installments(user.id)
-        db.session.commit()
+        _sync_installments_throttled(user.id)
+        commit_if_dirty()
         return fn(*args, **kwargs)
 
     return wrapper

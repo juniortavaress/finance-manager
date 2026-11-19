@@ -4,10 +4,11 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, g, request
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import set_committed_value
 
 from app.auth_decorator import login_required
 from app.errors import ApiError
-from app.extensions import db
+from app.extensions import commit_if_dirty, db
 from app.models import (
     Account,
     Asset,
@@ -101,7 +102,7 @@ def _resolve_market_events_for_account(investment_account_id):
         .all()
     )
     result = _resolve_market_events_for_assets(account_assets)
-    db.session.commit()
+    commit_if_dirty()
     return result
 
 
@@ -822,7 +823,7 @@ def _settle_all_matured_fixed_income(user_id):
     for asset in assets:
         _settle_matured_fixed_income(asset)
     if assets:
-        db.session.commit()
+        commit_if_dirty()
 
 
 def _apply_cached_crypto_prices(assets, currency_by_ia_id):
@@ -846,7 +847,9 @@ def _apply_cached_crypto_prices(assets, currency_by_ia_id):
     prices = get_current_prices(assets_by_key.keys())
     for (symbol, currency), price in prices.items():
         for asset in assets_by_key[(symbol, currency)]:
-            asset.current_unit_price = price
+            # So' em memoria: set_committed_value nao marca o ativo como
+            # alterado (evita UPDATE assets a cada leitura).
+            set_committed_value(asset, "current_unit_price", price)
 
 
 def _apply_cached_stock_prices(assets, currency_by_ia_id):
@@ -869,7 +872,9 @@ def _apply_cached_stock_prices(assets, currency_by_ia_id):
     prices = get_current_stock_prices(assets_by_key.keys())
     for (symbol, currency), price in prices.items():
         for asset in assets_by_key[(symbol, currency)]:
-            asset.current_unit_price = price
+            # So' em memoria: set_committed_value nao marca o ativo como
+            # alterado (evita UPDATE assets a cada leitura).
+            set_committed_value(asset, "current_unit_price", price)
 
 
 @investments_bp.get("/assets")
@@ -904,7 +909,7 @@ def list_assets():
             .all()
         )
         all_assets.extend(new_targets)
-        db.session.commit()
+        commit_if_dirty()
     else:
         db.session.flush()
 
@@ -1069,7 +1074,7 @@ def list_asset_transactions():
             splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
                 all_account_assets
             )
-            db.session.commit()
+            commit_if_dirty()
             for event, source_asset in merges_by_target_asset_id.get(target_asset.id, []):
                 source_effective = _effective_transactions(
                     source_asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
@@ -1450,7 +1455,7 @@ def asset_evolution(asset_id):
     splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
         all_assets
     )
-    db.session.commit()
+    commit_if_dirty()
 
     effective_txs = _effective_transactions(
         asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
@@ -1557,7 +1562,7 @@ def investments_summary():
             .all()
         )
         all_assets.extend(new_targets)
-        db.session.commit()
+        commit_if_dirty()
     else:
         db.session.flush()
 
@@ -1743,7 +1748,7 @@ def investments_profit_evolution():
     splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
         all_assets
     )
-    db.session.commit()
+    commit_if_dirty()
 
     currency_by_ia_id_all = {ia.id: accounts_by_ia_id[ia.id].currency for ia in inv_accounts}
     _apply_cached_crypto_prices(all_assets, currency_by_ia_id_all)

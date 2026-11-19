@@ -115,21 +115,23 @@ def get_current_prices(symbol_currency_pairs):
         return {}
 
     earliest = dt.date.today() - dt.timedelta(days=MAX_HISTORY_DAYS)
-    result = {}
-    for symbol, currency in pairs:
-        row = (
-            CryptoPrice.query.filter(
-                CryptoPrice.symbol == symbol,
-                CryptoPrice.currency == currency,
-                CryptoPrice.date >= earliest,
-            )
-            .order_by(CryptoPrice.date.desc())
-            .first()
-        )
-        if row is not None:
-            result[(symbol, currency)] = row.price
-
-    return result
+    # UMA query com LATERAL (um index lookup por par) - ver stock_service.
+    pairs = list(pairs)
+    rows = db.session.execute(
+        db.text(
+            """
+            SELECT cp.symbol, cp.currency, cp.price
+            FROM unnest(CAST(:symbols AS text[]), CAST(:currencies AS text[])) AS v(symbol, currency)
+            CROSS JOIN LATERAL (
+                SELECT symbol, currency, price FROM crypto_prices
+                WHERE symbol = v.symbol AND currency = v.currency AND date >= :earliest
+                ORDER BY date DESC LIMIT 1
+            ) cp
+            """
+        ),
+        {"symbols": [p[0] for p in pairs], "currencies": [p[1] for p in pairs], "earliest": earliest},
+    ).all()
+    return {(row.symbol, row.currency): row.price for row in rows}
 
 
 def get_price_on_or_before(symbol, currency, date):

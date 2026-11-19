@@ -1,6 +1,9 @@
+import bisect
 import datetime as dt
 import json
 import logging
+import threading
+import time
 import urllib.request
 from decimal import Decimal
 
@@ -82,6 +85,7 @@ def _ensure_rates_cached(indexer, start_date, end_date):
             db.session.merge(EconomicIndexRate(indexer=indexer, date=date, rate_pct=rate))
         if fetched:
             db.session.commit()
+            invalidate_series_cache()
 
 
 def refresh_daily_rates(indexer, start_date, end_date):
@@ -107,11 +111,40 @@ def get_daily_rates(indexer, start_date, end_date):
     if not indexer or end_date <= start_date:
         return {}
 
-    rows = EconomicIndexRate.query.filter(
-        EconomicIndexRate.indexer == indexer,
-        EconomicIndexRate.date > start_date,
-        EconomicIndexRate.date <= end_date,
-    ).all()
-    return {row.date: row.rate_pct for row in rows}
+    dates, rates = _load_series(indexer)
+    lo = bisect.bisect_right(dates, start_date)
+    hi = bisect.bisect_right(dates, end_date)
+    return dict(zip(dates[lo:hi], rates[lo:hi]))
 
 
+# Serie inteira de cada indexador em memoria (~1000 linhas por indexador): a
+# serie so' cresce no fim e nunca e' reescrita, entao ler uma vez e fatiar por
+# bisect poupa uma ida ao banco por ativo pos-fixado em cada requisicao.
+_SERIES_TTL_SECONDS = 600
+_series_cache = {}
+_series_lock = threading.Lock()
+
+
+def _load_series(indexer):
+    now = time.monotonic()
+    with _series_lock:
+        cached = _series_cache.get(indexer)
+        if cached and now - cached[0] < _SERIES_TTL_SECONDS:
+            return cached[1], cached[2]
+
+    rows = (
+        db.session.query(EconomicIndexRate.date, EconomicIndexRate.rate_pct)
+        .filter(EconomicIndexRate.indexer == indexer)
+        .order_by(EconomicIndexRate.date)
+        .all()
+    )
+    dates = [row[0] for row in rows]
+    rates = [row[1] for row in rows]
+    with _series_lock:
+        _series_cache[indexer] = (now, dates, rates)
+    return dates, rates
+
+
+def invalidate_series_cache():
+    with _series_lock:
+        _series_cache.clear()

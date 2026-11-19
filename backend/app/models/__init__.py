@@ -10,6 +10,7 @@ from app.models.budget import Budget
 from app.models.friends import Friendship, Group, GroupMember, SharedExpense, ExpenseParticipant, Settlement
 from app.models.crypto_price import CryptoPrice
 from app.models.stock_price import StockPrice
+from app.models.stock_price_monthly import StockPriceMonthly
 from app.models.economic_index_rate import EconomicIndexRate
 from app.models.fx_rate import FxRate
 
@@ -40,6 +41,7 @@ __all__ = [
     "Settlement",
     "CryptoPrice",
     "StockPrice",
+    "StockPriceMonthly",
     "EconomicIndexRate",
     "FxRate",
 ]

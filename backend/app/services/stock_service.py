@@ -4,8 +4,11 @@ import logging
 import urllib.request
 from decimal import Decimal
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 from app.extensions import db
 from app.models import StockPrice
+from app.models.base import utcnow
 from app.services.finance_service import add_months
 
 logger = logging.getLogger(__name__)
@@ -120,16 +123,44 @@ def refresh_prices(symbol_currency_earliest):
         if not closes:
             continue
 
-        for date, price in closes:
-            row = StockPrice.query.get((symbol, currency, date))
-            if row is None:
-                db.session.add(StockPrice(symbol=symbol, currency=currency, date=date, price=price))
-            else:
-                row.price = price
-            changed = True
+        # Upsert em lote (uma ida ao banco por bloco, nao uma por dia).
+        for start in range(0, len(closes), 3000):
+            stmt = pg_insert(StockPrice).values(
+                [
+                    {"symbol": symbol, "currency": currency, "date": date, "price": price, "updated_at": utcnow()}
+                    for date, price in closes[start : start + 3000]
+                ]
+            )
+            db.session.execute(
+                stmt.on_conflict_do_update(
+                    index_elements=["symbol", "currency", "date"],
+                    set_={"price": stmt.excluded.price, "updated_at": stmt.excluded.updated_at},
+                )
+            )
+        _refresh_monthly_closes(symbol, currency, closes[0][0].replace(day=1))
+        changed = True
 
     if changed:
         db.session.commit()
+
+
+def _refresh_monthly_closes(symbol, currency, from_month):
+    """Recalcula em stock_price_monthly o fechamento (ultimo preco diario) de
+    cada mes a partir de `from_month`, para um (symbol, currency)."""
+    db.session.execute(
+        db.text(
+            """
+            INSERT INTO stock_price_monthly (symbol, currency, month, price)
+            SELECT DISTINCT ON (date_trunc('month', date))
+                symbol, currency, date_trunc('month', date)::date, price
+            FROM stock_prices
+            WHERE symbol = :symbol AND currency = :currency AND date >= :from_month
+            ORDER BY date_trunc('month', date), date DESC
+            ON CONFLICT (symbol, currency, month) DO UPDATE SET price = EXCLUDED.price
+            """
+        ),
+        {"symbol": symbol, "currency": currency, "from_month": from_month},
+    )
 
 
 def get_current_prices(symbol_currency_pairs):
@@ -143,20 +174,25 @@ def get_current_prices(symbol_currency_pairs):
     if not pairs:
         return {}
 
-    result = {}
-    for symbol, currency in pairs:
-        row = (
-            StockPrice.query.filter(
-                StockPrice.symbol == symbol,
-                StockPrice.currency == currency,
-            )
-            .order_by(StockPrice.date.desc())
-            .first()
-        )
-        if row is not None:
-            result[(symbol, currency)] = row.price
-
-    return result
+    # UMA query com LATERAL: para cada par, um index lookup (PK symbol,
+    # currency, date) pega so' a linha mais recente. Um DISTINCT ON com IN
+    # faria seq scan + sort na tabela inteira de historico diario.
+    pairs = list(pairs)
+    rows = db.session.execute(
+        db.text(
+            """
+            SELECT sp.symbol, sp.currency, sp.price
+            FROM unnest(CAST(:symbols AS text[]), CAST(:currencies AS text[])) AS v(symbol, currency)
+            CROSS JOIN LATERAL (
+                SELECT symbol, currency, price FROM stock_prices
+                WHERE symbol = v.symbol AND currency = v.currency
+                ORDER BY date DESC LIMIT 1
+            ) sp
+            """
+        ),
+        {"symbols": [p[0] for p in pairs], "currencies": [p[1] for p in pairs]},
+    ).all()
+    return {(row.symbol, row.currency): row.price for row in rows}
 
 
 def get_price_on_or_before(symbol, currency, date):
@@ -211,36 +247,42 @@ def get_monthly_prices_bulk(symbol_currency_pairs, months, earliest_date):
     if not months or earliest_date is None or not symbol_currency_pairs:
         return {}
 
-    symbols = {s for s, _ in symbol_currency_pairs}
-    currencies = {c for _, c in symbol_currency_pairs}
-    rows = (
-        StockPrice.query.filter(
-            StockPrice.symbol.in_(symbols),
-            StockPrice.currency.in_(currencies),
-            StockPrice.date >= earliest_date,
-        )
-        .order_by(StockPrice.symbol, StockPrice.currency, StockPrice.date)
-        .all()
-    )
+    # Fechamentos mensais ja pre-calculados (stock_price_monthly) - poucas
+    # centenas de linhas em vez da serie diaria inteira. Core, sem ORM.
+    pairs = list(symbol_currency_pairs)
+    rows = db.session.execute(
+        db.text(
+            """
+            SELECT m.symbol, m.currency, m.month, m.price
+            FROM unnest(CAST(:symbols AS text[]), CAST(:currencies AS text[])) AS v(symbol, currency)
+            JOIN stock_price_monthly m ON m.symbol = v.symbol AND m.currency = v.currency
+            WHERE m.month >= :first_month
+            ORDER BY m.symbol, m.currency, m.month
+            """
+        ),
+        {
+            "symbols": [p[0] for p in pairs],
+            "currencies": [p[1] for p in pairs],
+            "first_month": earliest_date.replace(day=1),
+        },
+    ).all()
 
-    daily_prices_by_key = {}
-    for row in rows:
-        key = (row.symbol, row.currency)
-        daily_prices_by_key.setdefault(key, []).append((row.date, row.price))
+    monthly_rows_by_key = {}
+    for symbol, currency, month, price in rows:
+        monthly_rows_by_key.setdefault((symbol, currency), []).append((month, price))
 
     result = {}
-    for key in symbol_currency_pairs:
-        daily_prices = daily_prices_by_key.get(key)
-        if not daily_prices:
+    for key in pairs:
+        month_rows = monthly_rows_by_key.get(key)
+        if not month_rows:
             continue
         monthly = {}
-        price_idx = 0
+        idx = 0
         last_price = None
         for month_start in months:
-            month_end = add_months(month_start, 1)
-            while price_idx < len(daily_prices) and daily_prices[price_idx][0] < month_end:
-                last_price = daily_prices[price_idx][1]
-                price_idx += 1
+            while idx < len(month_rows) and month_rows[idx][0] <= month_start:
+                last_price = month_rows[idx][1]
+                idx += 1
             if last_price is not None:
                 monthly[month_start] = last_price
         if monthly:
