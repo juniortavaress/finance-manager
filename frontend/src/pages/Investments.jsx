@@ -67,21 +67,26 @@ export default function Investments() {
   // de corretora só recorta esses dados em memória, sem nova ida ao backend.
   const { data: summaryAll, loading: summaryLoading } = useFetch(
     (signal) => investmentsApi.summary(undefined, signal),
-    []
+    [],
+    { cacheKey: 'investments.summary' }
   );
   const { data: dividendsAll, loading: dividendsLoading } = useFetch(
     (signal) => dividendsApi.summary(undefined, signal),
-    []
+    [],
+    { cacheKey: 'dividends.summary' }
   );
   const summaryData = useMemo(() => deriveBankSummary(summaryAll, bankFilter), [summaryAll, bankFilter]);
   const dividendsData = useMemo(
     () => (bankFilter ? dividendsAll?.by_bank?.[bankFilter] || { has_dividends: false, by_month: [], by_year: [] } : dividendsAll),
     [dividendsAll, bankFilter]
   );
-  const { data: schedulesData } = useFetch(() => dividendsApi.listSchedules(), []);
+  const { data: schedulesData } = useFetch(() => dividendsApi.listSchedules(), [], {
+    cacheKey: 'dividends.schedules',
+  });
   const { data: profitData, loading: profitLoading } = useFetch(
     (signal) => investmentsApi.profitEvolution(signal),
-    []
+    [],
+    { cacheKey: 'investments.profit' }
   );
   const [drilldown, setDrilldown] = useState(null);
 

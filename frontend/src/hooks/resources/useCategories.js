@@ -4,7 +4,8 @@ import { categoriesApi } from '../../api/resources';
 export function useCategories() {
   const { data, loading, initialLoading, error, reload } = useFetch(
     (signal) => categoriesApi.list(undefined, signal),
-    []
+    [],
+    { cacheKey: 'categories' }
   );
   return { categories: data?.categories || [], loading, initialLoading, error, reload };
 }

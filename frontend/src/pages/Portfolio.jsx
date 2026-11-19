@@ -99,7 +99,9 @@ function profitAmount(a) {
 
 export default function Portfolio() {
   const [showArchived, setShowArchived] = useState(false);
-  const { data: assetsData, setData: setAssetsData, loading: assetsLoading, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), []);
+  const { data: assetsData, setData: setAssetsData, loading: assetsLoading, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssets(false, signal), [], {
+    cacheKey: 'investments.assets',
+  });
   const { banks, reload: reloadBanks } = useBanks();
   const { accounts, reload: reloadAccounts } = useAccounts();
   const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);

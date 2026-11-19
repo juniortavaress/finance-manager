@@ -45,17 +45,29 @@ export default function Dashboard() {
 
   const { data: summary, initialLoading: summaryLoading, reload: reloadSummary } = useFetch(
     () => dashboardApi.summary(period.year, period.month),
-    [period.year, period.month]
+    [period.year, period.month],
+    { cacheKey: 'dash.summary' }
   );
   const { data: catData, initialLoading: catsLoading, reload: reloadCats } = useFetch(
     () => dashboardApi.spendingByCategory(period.year, period.month),
-    [period.year, period.month]
+    [period.year, period.month],
+    { cacheKey: 'dash.categories' }
   );
-  const { data: bankData, initialLoading: banksLoading, reload: reloadBanks } = useFetch(() => dashboardApi.balanceByBank(), []);
-  const { data: rdData, initialLoading: rdLoading } = useFetch(() => dashboardApi.incomeVsExpense(rdGranularity), [rdGranularity]);
-  const { data: evoData, initialLoading: evoLoading } = useFetch(() => dashboardApi.balanceEvolution(evoGranularity), [evoGranularity]);
-  const { data: txData, initialLoading: txLoading, reload: reloadTx } = useFetch(() => dashboardApi.recentTransactions(5), []);
-  const { data: invData, initialLoading: invLoading, reload: reloadInvoices } = useFetch(() => dashboardApi.upcomingInvoices(), []);
+  const { data: bankData, initialLoading: banksLoading, reload: reloadBanks } = useFetch(() => dashboardApi.balanceByBank(), [], {
+    cacheKey: 'dash.banks',
+  });
+  const { data: rdData, initialLoading: rdLoading } = useFetch(() => dashboardApi.incomeVsExpense(rdGranularity), [rdGranularity], {
+    cacheKey: 'dash.rd',
+  });
+  const { data: evoData, initialLoading: evoLoading } = useFetch(() => dashboardApi.balanceEvolution(evoGranularity), [evoGranularity], {
+    cacheKey: 'dash.evo',
+  });
+  const { data: txData, initialLoading: txLoading, reload: reloadTx } = useFetch(() => dashboardApi.recentTransactions(5), [], {
+    cacheKey: 'dash.recent',
+  });
+  const { data: invData, initialLoading: invLoading, reload: reloadInvoices } = useFetch(() => dashboardApi.upcomingInvoices(), [], {
+    cacheKey: 'dash.invoices',
+  });
 
   const latestPeriod = todayPeriod();
   const atLatestPeriod = period.year === latestPeriod.year && period.month === latestPeriod.month;

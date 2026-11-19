@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import { getToken, setToken } from '../api/client';
 import { authApi } from '../api/resources';
 import { setDefaultCurrency } from '../state/currentUserCurrency';
+import { clearFetchCache } from '../hooks/useFetch';
 
 const AuthContext = createContext(null);
 
@@ -29,6 +30,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const data = await authApi.login(email, password);
+    clearFetchCache();
     setToken(data.token);
     applyUser(data.user);
     return data.user;
@@ -36,6 +38,7 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(async ({ name, email, password }) => {
     const data = await authApi.register({ name, email, password });
+    clearFetchCache();
     setToken(data.token);
     applyUser(data.user);
     return data.user;
@@ -48,6 +51,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    clearFetchCache();
     setToken(null);
     setUser(null);
     setDefaultCurrency('BRL');
