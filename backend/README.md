@@ -61,6 +61,19 @@ migrations/      Alembic (Flask-Migrate)
 wsgi.py          entrypoint da aplicacao
 ```
 
+## Testes
+
+```bash
+python -m unittest discover -s tests
+```
+
+## Performance
+
+- Preços de ações/FIIs: `stock_prices` guarda o diário; `stock_price_monthly` guarda o fechamento de cada mês (mantida em `stock_service.refresh_prices`) e alimenta os gráficos de evolução.
+- `computed_cache`: resultados pesados por usuário (ex.: série de lucro dos investimentos), validados por uma impressão digital dos dados de entrada — se qualquer operação/cotação mudar, recalcula sozinho.
+- Séries CDI/Selic ficam em memória por processo (TTL de 10 min) e são fatiadas por bisect.
+- Respostas JSON são comprimidas (gzip) e o preflight CORS é cacheado por 2h.
+
 ## Autenticação
 
 Login real com bcrypt + JWT (`POST /api/auth/login`). Todas as rotas de dados exigem header:

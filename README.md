@@ -18,8 +18,16 @@ App pessoal de gestão financeira: contas em múltiplos bancos, cartões de cré
    senha: 123456
    ```
 
+## App instalável (PWA)
+
+O frontend é um PWA: `manifest.webmanifest` + `sw.js` + ícones em `frontend/public`. Em produção (HTTPS) o navegador oferece **Instalar aplicativo** (Chrome/Edge/Android) ou **Compartilhar → Adicionar à Tela de Início** (iPhone); também há o botão em *Configurações → Aplicativo*. O service worker só guarda o shell e os arquivos estáticos — dados da API nunca ficam em cache offline.
+
+## Backups
+
+`backups/` (ignorada pelo git) guarda cópias locais do banco de produção em JSON, uma por tabela (`prod-completo-AAAA-MM-DD.json`).
+
 ## Deploy
 
 - **Frontend** → Vercel (root directory `frontend/`).
 - **Backend** → qualquer host que rode Flask/WSGI (Render, Railway, Fly.io etc.), apontando `DATABASE_URL` para o Postgres do Supabase.
-- **Banco** → Supabase (Postgres gerenciado).
+- **Banco** → Supabase (Postgres gerenciado). **Rode `flask db upgrade` no banco de produção ANTES de subir o backend novo** — há migrations que criam tabelas usadas pelo código (`stock_price_monthly`, `computed_cache`).
