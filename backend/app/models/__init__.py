@@ -13,6 +13,7 @@ from app.models.stock_price import StockPrice
 from app.models.stock_price_monthly import StockPriceMonthly
 from app.models.economic_index_rate import EconomicIndexRate
 from app.models.fx_rate import FxRate
+from app.models.computed_cache import ComputedCache
 
 __all__ = [
     "User",
@@ -44,4 +45,5 @@ __all__ = [
     "StockPriceMonthly",
     "EconomicIndexRate",
     "FxRate",
+    "ComputedCache",
 ]

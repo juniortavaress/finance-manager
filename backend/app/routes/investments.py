@@ -29,6 +29,7 @@ from app.services.crypto_service import (
     get_price_on_or_before as get_crypto_price_on_or_before,
     resolve_symbol,
 )
+from app.services.computed_cache_service import fingerprint_of, get_or_compute
 from app.services.economic_index_service import INDEXER_SGS_CODES, get_daily_rates
 from app.services.fixed_income_service import (
     FixedIncomeEvent,
@@ -483,7 +484,11 @@ def _fixed_income_month_value(asset: Asset, as_of: dt.date, daily_rates):
 
 
 def _asset_position(
-    asset: Asset, splits_by_asset_id=None, merges_by_target_asset_id=None, merge_cutoff_by_asset_id=None
+    asset: Asset,
+    splits_by_asset_id=None,
+    merges_by_target_asset_id=None,
+    merge_cutoff_by_asset_id=None,
+    include_dividends=True,
 ):
     """Quantidade, custo total e preco medio a partir do historico de compras/vendas.
     Vendas reduzem a quantidade mas nao alteram o preco medio das compras restantes
@@ -525,11 +530,15 @@ def _asset_position(
             current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
     else:
         current_value = (quantity * asset.current_unit_price) if asset.current_unit_price is not None else None
-    effective_dividends = _effective_dividends(asset, merges_by_target_asset_id, merge_cutoff_by_asset_id)
-    zeroed_cutoff = _last_zeroed_date(txs)
-    if zeroed_cutoff is not None:
-        effective_dividends = [(date, amount) for date, amount in effective_dividends if date > zeroed_cutoff]
-    dividends_total = sum((amount for _, amount in effective_dividends), Decimal("0"))
+    # include_dividends=False: quem so' precisa de valor atual/custo (ex: serie de
+    # lucro) nao carrega nem soma proventos.
+    dividends_total = Decimal("0")
+    if include_dividends:
+        effective_dividends = _effective_dividends(asset, merges_by_target_asset_id, merge_cutoff_by_asset_id)
+        zeroed_cutoff = _last_zeroed_date(txs)
+        if zeroed_cutoff is not None:
+            effective_dividends = [(date, amount) for date, amount in effective_dividends if date > zeroed_cutoff]
+        dividends_total = sum((amount for _, amount in effective_dividends), Decimal("0"))
 
     base_value = current_value if current_value is not None else cost_basis
     total_return_pct = (
@@ -1730,10 +1739,56 @@ def investments_profit_evolution():
     _settle_all_matured_fixed_income(g.current_user.id)
 
     inv_accounts = _owned_investment_accounts()
-    inv_account_ids = [ia.id for ia in inv_accounts]
-    if not inv_account_ids:
+    if not inv_accounts:
         return {"evolution": []}
 
+    # Resultado pre-calculado (tabela computed_cache) enquanto os dados de
+    # entrada nao mudarem: reconstruir o historico mensal inteiro e' a conta
+    # mais pesada do app, e so' muda com uma operacao/cotacao nova.
+    fingerprint = _profit_evolution_fingerprint(inv_accounts)
+    return get_or_compute(
+        g.current_user.id,
+        "investments.profit_evolution",
+        fingerprint,
+        lambda: _build_profit_evolution(inv_accounts),
+    )
+
+
+PROFIT_EVOLUTION_CACHE_VERSION = "v1"
+
+
+def _profit_evolution_fingerprint(inv_accounts):
+    """Impressao digital dos dados que alimentam a serie de lucro: contagem e
+    ultima alteracao de cada tabela envolvida (uma query so'), mais o dia
+    atual (o ultimo ponto da serie depende de hoje)."""
+    account_ids = [ia.account_id for ia in inv_accounts]
+    inv_account_ids = [ia.id for ia in inv_accounts]
+    row = db.session.execute(
+        db.text(
+            """
+            SELECT
+              (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM assets
+                 WHERE investment_account_id = ANY(:inv_ids)),
+              (SELECT count(*) || ':' || coalesce(max(t.updated_at)::text, '') FROM asset_transactions t
+                 JOIN assets a ON a.id = t.asset_id WHERE a.investment_account_id = ANY(:inv_ids)),
+              (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') || ':' || coalesce(sum(amount)::text, '')
+                 FROM transactions WHERE account_id = ANY(:acc_ids)),
+              (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') || ':' || coalesce(sum(opening_balance)::text, '')
+                 FROM accounts WHERE id = ANY(:acc_ids)),
+              (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM market_corporate_events),
+              (SELECT count(*) || ':' || coalesce(sum(price)::text, '') FROM stock_price_monthly),
+              (SELECT count(*) || ':' || coalesce(max(updated_at)::text, '') FROM crypto_prices),
+              (SELECT coalesce(string_agg(currency || rate::text, ',' ORDER BY currency), '') FROM fx_rates),
+              (SELECT count(*) || ':' || coalesce(max(date)::text, '') FROM economic_index_rates)
+            """
+        ),
+        {"inv_ids": inv_account_ids, "acc_ids": account_ids},
+    ).one()
+    return fingerprint_of(PROFIT_EVOLUTION_CACHE_VERSION, dt.date.today().isoformat(), tuple(row))
+
+
+def _build_profit_evolution(inv_accounts):
+    inv_account_ids = [ia.id for ia in inv_accounts]
     account_ids = [ia.account_id for ia in inv_accounts]
     accounts_by_id = {a.id: a for a in Account.query.filter(Account.id.in_(account_ids)).all()}
     accounts_by_ia_id = {ia.id: accounts_by_id[ia.account_id] for ia in inv_accounts}
@@ -1742,7 +1797,7 @@ def investments_profit_evolution():
 
     all_assets = (
         Asset.query.filter(Asset.investment_account_id.in_(inv_account_ids))
-        .options(selectinload(Asset.asset_transactions), selectinload(Asset.dividends))
+        .options(selectinload(Asset.asset_transactions))
         .all()
     )
     splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
@@ -1757,12 +1812,26 @@ def investments_profit_evolution():
     today = dt.date.today()
 
     all_tx_dates = [tx.date for asset in all_assets for tx in asset.asset_transactions]
+    # So' as colunas usadas (nao a entidade inteira): sao milhares de linhas.
+    AccountTx = namedtuple("AccountTx", ["account_id", "date", "type", "amount", "is_transfer", "description"])
     account_txs = (
-        Transaction.query.filter(
-            Transaction.account_id.in_(account_ids),
-            Transaction.status == "confirmed",
-            Transaction.payment_method != "credit",
-        ).all()
+        [
+            AccountTx(*row)
+            for row in db.session.query(
+                Transaction.account_id,
+                Transaction.date,
+                Transaction.type,
+                Transaction.amount,
+                Transaction.is_transfer,
+                Transaction.description,
+            )
+            .filter(
+                Transaction.account_id.in_(account_ids),
+                Transaction.status == "confirmed",
+                Transaction.payment_method != "credit",
+            )
+            .all()
+        ]
         if account_ids
         else []
     )
@@ -1780,7 +1849,9 @@ def investments_profit_evolution():
 
     current_amount_by_asset_id = {}
     for asset in all_assets:
-        position = _asset_position(asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id)
+        position = _asset_position(
+            asset, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id, include_dividends=False
+        )
         currency = currency_by_ia_id_all.get(asset.investment_account_id)
         current_value = position["current_amount"]
         if currency and currency != "BRL" and current_value is not None:
