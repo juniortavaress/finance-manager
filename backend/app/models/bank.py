@@ -40,9 +40,11 @@ class Account(BaseModel):
     opening_balance_date = db.Column(db.Date, nullable=False)
     archived = db.Column(db.Boolean, nullable=False, default=False)
 
-    credit_card = db.relationship("CreditCard", backref="account", uselist=False, cascade="all, delete-orphan")
+    credit_card = db.relationship(
+        "CreditCard", backref="account", uselist=False, cascade="all, delete-orphan", lazy="joined"
+    )
     investment_account = db.relationship(
-        "InvestmentAccount", backref="account", uselist=False, cascade="all, delete-orphan"
+        "InvestmentAccount", backref="account", uselist=False, cascade="all, delete-orphan", lazy="joined"
     )
 
     def to_dict(self):

@@ -96,7 +96,9 @@ class SharedExpense(BaseModel):
     )
     notes = db.Column(db.Text, nullable=True)
 
-    participants = db.relationship("ExpenseParticipant", backref="shared_expense", cascade="all, delete-orphan")
+    participants = db.relationship(
+        "ExpenseParticipant", backref="shared_expense", cascade="all, delete-orphan", lazy="selectin"
+    )
     paid_by = db.relationship("User", foreign_keys=[paid_by_id])
     group = db.relationship("Group")
 
