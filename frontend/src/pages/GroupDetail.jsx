@@ -73,9 +73,13 @@ export default function GroupDetail() {
   }
 
   const load = useCallback(async () => {
-    const groupRes = await groupsApi.get(groupId);
-    setGroup(groupRes.group);
-  }, [groupId]);
+    try {
+      const groupRes = await groupsApi.get(groupId);
+      setGroup(groupRes.group);
+    } catch (err) {
+      showError(err.message || 'Não foi possível carregar o grupo.');
+    }
+  }, [groupId, showError]);
 
   useEffect(() => {
     load();

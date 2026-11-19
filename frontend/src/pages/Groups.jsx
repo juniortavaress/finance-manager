@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { groupsApi } from '../api/resources';
+import { useToast } from '../context/ToastContext';
 import { useFriends } from '../hooks/resources/useFriends';
 import { fmt } from '../utils/format';
 import { IconPencil } from '../components/icons';
@@ -8,14 +9,19 @@ import NewGroupModal from '../components/modals/NewGroupModal';
 
 export default function Groups() {
   const { friends } = useFriends();
+  const { showError } = useToast();
   const [groups, setGroups] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
 
   const load = useCallback(async () => {
-    const res = await groupsApi.list();
-    setGroups(res.groups);
-  }, []);
+    try {
+      const res = await groupsApi.list();
+      setGroups(res.groups);
+    } catch (err) {
+      showError(err.message || 'Não foi possível carregar os grupos.');
+    }
+  }, [showError]);
 
   useEffect(() => {
     load();

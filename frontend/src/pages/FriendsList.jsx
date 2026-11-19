@@ -51,9 +51,13 @@ export default function FriendsList() {
   const [requestsModalOpen, setRequestsModalOpen] = useState(false);
 
   const loadRequests = useCallback(async () => {
-    const res = await friendsApi.requests();
-    setRequests(res);
-  }, []);
+    try {
+      const res = await friendsApi.requests();
+      setRequests(res);
+    } catch (err) {
+      showError(err.message || 'Não foi possível carregar as solicitações.');
+    }
+  }, [showError]);
 
   useEffect(() => {
     loadRequests();

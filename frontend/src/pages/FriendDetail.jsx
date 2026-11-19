@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { friendsApi } from '../api/resources';
 import { useFriends } from '../hooks/resources/useFriends';
 import { useAccounts } from '../hooks/resources/useAccounts';
@@ -40,6 +41,7 @@ export default function FriendDetail() {
   const { friendUserId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { showError } = useToast();
   const { friends, reload: reloadFriends } = useFriends();
   const { accounts, reload: reloadAccounts } = useAccounts();
   const { categories, reload: reloadCategories } = useCategories();
@@ -63,14 +65,18 @@ export default function FriendDetail() {
 
   const load = useCallback(async () => {
     if (!friendUserId) return;
-    const [histRes, balRes] = await Promise.all([
-      friendsApi.history(friendUserId),
-      friendsApi.balance(friendUserId),
-    ]);
-    setHistory(histRes.history);
-    setBalance(balRes.total);
-    setBreakdown(balRes.breakdown || []);
-  }, [friendUserId]);
+    try {
+      const [histRes, balRes] = await Promise.all([
+        friendsApi.history(friendUserId),
+        friendsApi.balance(friendUserId),
+      ]);
+      setHistory(histRes.history);
+      setBalance(balRes.total);
+      setBreakdown(balRes.breakdown || []);
+    } catch (err) {
+      showError(err.message || 'Não foi possível carregar o histórico com esse amigo.');
+    }
+  }, [friendUserId, showError]);
 
   const timeline = useMemo(() => {
     const groupSummaries = new Map();
