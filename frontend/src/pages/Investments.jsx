@@ -99,7 +99,7 @@ export default function Investments() {
 
   const activeAssets = useMemo(() => assets.filter((a) => a.position.quantity > 0), [assets]);
 
-  const profitEvolution = profitData?.evolution || [];
+  const profitEvolutionRaw = profitData?.evolution || EMPTY_LIST;
 
   const dividendsByMonth = useMemo(
     () => (dividendsData?.by_month || []).map((p) => ({ label: `${monthLabelFull(p.month)} ${p.year}`, value: p.total })),
@@ -135,6 +135,25 @@ export default function Investments() {
     (s, a) => s + (a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount),
     0
   );
+  // O grafico de lucro vem de outra chamada (e de um cache no servidor), buscada
+  // em outro instante que os cards - com as cotacoes mudando, os dois podiam
+  // mostrar valores diferentes. O ultimo ponto (mes atual) e' sempre derivado
+  // dos proprios cards: valor atual + caixa - aportes.
+  const profitEvolution = useMemo(() => {
+    if (bankFilter || !summaryAll || profitEvolutionRaw.length === 0) return profitEvolutionRaw;
+    const last = profitEvolutionRaw[profitEvolutionRaw.length - 1];
+    const now = new Date();
+    if (last.year !== now.getFullYear() || last.month !== now.getMonth() + 1) return profitEvolutionRaw;
+    const patched = {
+      ...last,
+      current: totalCurrent,
+      cash: totalUnallocated,
+      contributed: totalInvested,
+      profit: totalCurrent + totalUnallocated - totalInvested,
+    };
+    return [...profitEvolutionRaw.slice(0, -1), patched];
+  }, [profitEvolutionRaw, summaryAll, bankFilter, totalCurrent, totalUnallocated, totalInvested]);
+
   const totalDividends = activeAssets.reduce((s, a) => s + (a.position.dividends_total || 0), 0);
   const totalDividendsAllTime = assets.reduce((s, a) => s + (a.position.dividends_total || 0), 0);
   const allocatedCostBasis =
