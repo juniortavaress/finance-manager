@@ -64,6 +64,8 @@ class AssetTransaction(BaseModel):
     note_id = db.Column(db.Text, nullable=True)
     fixed_income_rate_pct = db.Column(db.Numeric(7, 3), nullable=True)
 
+    __table_args__ = (db.Index("ix_asset_transactions_asset_date", "asset_id", "date"),)
+
     def to_dict(self):
         return {
             "id": str(self.id),

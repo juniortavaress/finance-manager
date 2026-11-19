@@ -41,6 +41,11 @@ class Transaction(BaseModel):
     transfer_pair_id = db.Column(UUID(as_uuid=True), db.ForeignKey("transactions.id"), nullable=True, index=True)
     exchange_rate = db.Column(db.Numeric(18, 8), nullable=True)
 
+    __table_args__ = (
+        db.Index("ix_transactions_user_date", "user_id", "date"),
+        db.Index("ix_transactions_account_date", "account_id", "date"),
+    )
+
     account = db.relationship("Account", backref="transactions")
     category = db.relationship("Category", backref="transactions")
     invoice_payment_for = db.relationship(
