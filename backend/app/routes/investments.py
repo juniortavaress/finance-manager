@@ -1771,7 +1771,7 @@ def investments_profit_evolution():
     )
 
 
-PROFIT_EVOLUTION_CACHE_VERSION = "v1"
+PROFIT_EVOLUTION_CACHE_VERSION = "v2"
 
 
 def _profit_evolution_fingerprint(inv_accounts):
@@ -1830,7 +1830,7 @@ def _build_profit_evolution(inv_accounts):
 
     all_tx_dates = [tx.date for asset in all_assets for tx in asset.asset_transactions]
     # So' as colunas usadas (nao a entidade inteira): sao milhares de linhas.
-    AccountTx = namedtuple("AccountTx", ["account_id", "date", "type", "amount", "is_transfer", "description"])
+    AccountTx = namedtuple("AccountTx", ["account_id", "date", "type", "amount", "is_transfer", "description", "exchange_rate"])
     account_txs = (
         [
             AccountTx(*row)
@@ -1841,6 +1841,7 @@ def _build_profit_evolution(inv_accounts):
                 Transaction.amount,
                 Transaction.is_transfer,
                 Transaction.description,
+                Transaction.exchange_rate,
             )
             .filter(
                 Transaction.account_id.in_(account_ids),
@@ -1929,7 +1930,15 @@ def _build_profit_evolution(inv_accounts):
                 signed = tx.amount if tx.type == "income" else -tx.amount
                 cash += signed
                 if _is_investment_transfer(tx):
-                    contributed += signed
+                    # Aporte em BRL pelo cambio gravado na propria transferencia (custo real
+                    # de aquisicao da moeda) - mesmo criterio do card "investido" do resumo.
+                    # exchange_rate = unidades da moeda por 1 BRL; sem ele, cambio atual.
+                    if account.currency == "BRL":
+                        contributed += signed
+                    elif tx.exchange_rate:
+                        contributed += signed / tx.exchange_rate
+                    else:
+                        contributed += signed * Decimal(str(fx_rates.get(account.currency, 1)))
                 idx += 1
             state["idx"] = idx
             state["cash"] = cash
@@ -1940,7 +1949,7 @@ def _build_profit_evolution(inv_accounts):
                 Decimal(str(fx_rates.get(currency, 1))) if currency != "BRL" else Decimal("1")
             )
             month_cash_total += max(cash, Decimal("0")) * fx_factor
-            month_contributed_total += contributed * fx_factor
+            month_contributed_total += contributed  # ja em BRL
         cash_by_month.append(month_cash_total)
         contributed_by_month.append(month_contributed_total)
 
