@@ -12,10 +12,14 @@ const ASSET_CACHE = `${VERSION}-assets`;
 const FONT_CACHE = `${VERSION}-fonts`;
 
 self.addEventListener('install', (event) => {
+  // Pre-cache best-effort: um arquivo que falhe nao pode derrubar a instalacao
+  // do service worker (sem SW ativo o navegador nao trata o site como app).
   event.waitUntil(
     caches
       .open(SHELL_CACHE)
-      .then((cache) => cache.addAll(['/', '/favicon.svg', '/manifest.webmanifest', '/icons/icon-192.png']))
+      .then((cache) =>
+        Promise.all(['/', '/favicon.svg', '/icons/icon-192.png'].map((url) => cache.add(url).catch(() => {})))
+      )
       .then(() => self.skipWaiting())
   );
 });
