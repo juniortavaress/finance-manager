@@ -1,34 +1,37 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/AppLayout';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Accounts from './pages/Accounts';
-import Transactions from './pages/Transactions';
-import RecurringTransactions from './pages/RecurringTransactions';
-import Installments from './pages/Installments';
-import Categories from './pages/Categories';
-import Investments from './pages/Investments';
-import Portfolio from './pages/Portfolio';
-import AssetTrades from './pages/AssetTrades';
-import Dividends from './pages/Dividends';
-import Reports from './pages/Reports';
-import Quotes from './pages/Quotes';
-import Settings from './pages/Settings';
-import Friends from './pages/Friends';
-import FriendsList from './pages/FriendsList';
-import FriendDetail from './pages/FriendDetail';
-import Groups from './pages/Groups';
-import GroupDetail from './pages/GroupDetail';
+import LoadingScreen from './components/LoadingScreen';
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Accounts = lazy(() => import('./pages/Accounts'));
+const Transactions = lazy(() => import('./pages/Transactions'));
+const RecurringTransactions = lazy(() => import('./pages/RecurringTransactions'));
+const Installments = lazy(() => import('./pages/Installments'));
+const Categories = lazy(() => import('./pages/Categories'));
+const Investments = lazy(() => import('./pages/Investments'));
+const Portfolio = lazy(() => import('./pages/Portfolio'));
+const AssetTrades = lazy(() => import('./pages/AssetTrades'));
+const Dividends = lazy(() => import('./pages/Dividends'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Quotes = lazy(() => import('./pages/Quotes'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Friends = lazy(() => import('./pages/Friends'));
+const FriendsList = lazy(() => import('./pages/FriendsList'));
+const FriendDetail = lazy(() => import('./pages/FriendDetail'));
+const Groups = lazy(() => import('./pages/Groups'));
+const GroupDetail = lazy(() => import('./pages/GroupDetail'));
 
 export default function App() {
   return (
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
+          <Suspense fallback={<LoadingScreen />}>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -61,6 +64,7 @@ export default function App() {
               <Route path="configuracoes" element={<Settings />} />
             </Route>
           </Routes>
+          </Suspense>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

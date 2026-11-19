@@ -373,3 +373,35 @@ main {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- APP INSTALADO (PWA) ---------- */
+body {
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+@supports (height: 100dvh) {
+  .app-shell {
+    min-height: 100dvh;
+  }
+  .sidebar {
+    height: 100dvh;
+  }
+}
+@media (max-width: 720px) {
+  /* Respeita o notch / barra de gestos quando aberto como app (viewport-fit=cover). */
+  main {
+    padding-top: calc(68px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    padding-left: calc(20px + env(safe-area-inset-left, 0px));
+    padding-right: calc(20px + env(safe-area-inset-right, 0px));
+  }
+  .mobile-nav-toggle {
+    top: calc(14px + env(safe-area-inset-top, 0px));
+    left: calc(14px + env(safe-area-inset-left, 0px));
+  }
+  .sidebar {
+    padding-top: calc(26px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(26px + env(safe-area-inset-bottom, 0px));
+  }
+}

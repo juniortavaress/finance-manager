@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useBanks } from '../hooks/resources/useBanks';
 import { useAccounts } from '../hooks/resources/useAccounts';
@@ -8,6 +8,7 @@ import { marketDataApi } from '../api/resources';
 import { IconPencil, IconTrash } from '../components/icons';
 import EditProfileModal from '../components/modals/EditProfileModal';
 import MarketCorporateEventModal from '../components/modals/MarketCorporateEventModal';
+import { canInstall, isStandalone, onInstallAvailabilityChange, promptInstall } from '../pwa';
 
 const EVENT_TYPE_LABELS = {
   split: 'Desdobramento/Grupamento',
@@ -21,6 +22,9 @@ export default function Settings() {
   const { showSuccess, showError } = useToast();
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [eventModalOpen, setEventModalOpen] = useState(false);
+
+  const [installable, setInstallable] = useState(canInstall());
+  useEffect(() => onInstallAvailabilityChange(setInstallable), []);
 
   const cardAccounts = accounts.filter((a) => a.type === 'credit_card');
 
@@ -98,6 +102,29 @@ export default function Settings() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="grid grid-2" style={{ marginTop: 20 }}>
+        <div className="card">
+          <h3>Aplicativo</h3>
+          {isStandalone() ? (
+            <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>Você já está usando o Atmos como aplicativo instalado.</p>
+          ) : installable ? (
+            <>
+              <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 10 }}>
+                Instale o Atmos no seu dispositivo para abrir em tela cheia, direto da tela inicial.
+              </p>
+              <button type="button" className="btn btn-primary" onClick={promptInstall}>
+                Instalar aplicativo
+              </button>
+            </>
+          ) : (
+            <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+              Para instalar, use o menu do navegador: <b>Instalar aplicativo</b> (Chrome/Edge) ou{' '}
+              <b>Compartilhar → Adicionar à Tela de Início</b> (iPhone).
+            </p>
+          )}
         </div>
       </div>
 

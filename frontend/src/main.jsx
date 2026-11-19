@@ -11,6 +11,9 @@ import './styles/toast.css';
 import './styles/friends.css';
 import './styles/investments.css';
 import App from './App.jsx';
+import { registerPwa } from './pwa';
+
+registerPwa();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
