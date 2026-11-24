@@ -11,15 +11,13 @@ import { expenseCategories as filterExpense, incomeCategories as filterIncome } 
 import { notifyDataChanged } from '../utils/dataChanged';
 import { IconPlus } from './icons';
 import TransactionModal from './modals/TransactionModal';
-import TransferModal from './modals/TransferModal';
 
 function isTypingTarget(element) {
   return element instanceof HTMLElement && (element.isContentEditable || ['INPUT', 'SELECT', 'TEXTAREA'].includes(element.tagName));
 }
 
 export default function QuickAddTransaction() {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [modal, setModal] = useState(null);
+  const [open, setOpen] = useState(false);
   const { pathname, search } = useLocation();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
@@ -41,66 +39,41 @@ export default function QuickAddTransaction() {
 
   useEffect(() => {
     function handleKeyDown(e) {
-      if (e.key === 'Escape') setMenuOpen(false);
       if (e.key.toLowerCase() !== 'n' || e.ctrlKey || e.metaKey || e.altKey) return;
       if (isTypingTarget(document.activeElement) || document.querySelector('.modal-overlay.active')) return;
       e.preventDefault();
-      setMenuOpen(false);
-      setModal('transaction');
+      setOpen(true);
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  function openModal(kind) {
-    setMenuOpen(false);
-    setModal(kind);
-  }
-
   function handleCreated() {
-    setModal(null);
+    setOpen(false);
     notifyDataChanged();
   }
 
   return (
     <>
-      {menuOpen && <div className="quick-add-scrim" onClick={() => setMenuOpen(false)} />}
-      <div className={`quick-add${menuOpen ? ' open' : ''}`}>
-        <div className="quick-add-menu">
-          <button type="button" onClick={() => openModal('transaction')}>
-            Nova transação <kbd>N</kbd>
-          </button>
-          <button type="button" onClick={() => openModal('transfer')}>
-            Transferir
-          </button>
-        </div>
-        <button
-          type="button"
-          className="quick-add-fab"
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-label="Ações rápidas"
-          aria-expanded={menuOpen}
-        >
-          <IconPlus />
-        </button>
-      </div>
+      <button
+        type="button"
+        className="quick-add-fab"
+        onClick={() => setOpen(true)}
+        title="Nova transação (N)"
+        aria-label="Nova transação"
+      >
+        <IconPlus />
+      </button>
 
       <TransactionModal
-        open={modal === 'transaction'}
+        open={open}
         defaultAccountRef={defaultAccountRef}
         checkingAccounts={checkingAccounts}
         creditCardAccounts={creditCardAccounts}
         investmentAccounts={investmentAccounts}
         expenseCategories={expenseCategories}
         incomeCategories={incomeCategories}
-        onClose={() => setModal(null)}
-        onCreated={handleCreated}
-      />
-      <TransferModal
-        open={modal === 'transfer'}
-        checkingAccounts={checkingAccounts}
-        investmentAccounts={investmentAccounts}
-        onClose={() => setModal(null)}
+        onClose={() => setOpen(false)}
         onCreated={handleCreated}
       />
     </>
