@@ -5,7 +5,7 @@ import './styles/layout.css';
 import './styles/cards.css';
 import './styles/lists.css';
 import './styles/modal.css';
-import './styles/drawer.css';
+import './styles/bank.css';
 import './styles/login.css';
 import './styles/loading.css';
 import './styles/toast.css';

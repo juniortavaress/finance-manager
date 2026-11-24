@@ -9,6 +9,7 @@ const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Accounts = lazy(() => import('./pages/Accounts'));
+const BankDetail = lazy(() => import('./pages/BankDetail'));
 const Transactions = lazy(() => import('./pages/Transactions'));
 const RecurringTransactions = lazy(() => import('./pages/RecurringTransactions'));
 const Installments = lazy(() => import('./pages/Installments'));
@@ -45,6 +46,7 @@ export default function App() {
             >
               <Route index element={<Dashboard />} />
               <Route path="contas" element={<Accounts />} />
+              <Route path="contas/:bankId" element={<BankDetail />} />
               <Route path="transacoes" element={<Transactions />} />
               <Route path="recorrentes" element={<RecurringTransactions />} />
               <Route path="parcelas" element={<Installments />} />

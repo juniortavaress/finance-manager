@@ -57,6 +57,7 @@ export const installmentsApi = {
 
 export const creditCardsApi = {
   invoices: (cardId, limit) => api.get(`/credit-cards/${cardId}/invoices`, { limit }),
+  invoice: (cardId, invoiceId, signal) => api.get(`/credit-cards/${cardId}/invoices/${invoiceId}`, undefined, signal),
   payInvoice: (cardId, invoiceId, data) => api.post(`/credit-cards/${cardId}/invoices/${invoiceId}/pay`, data),
 };
 

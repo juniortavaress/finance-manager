@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAccounts } from '../hooks/resources/useAccounts';
 import { useCategories } from '../hooks/resources/useCategories';
 import {
@@ -19,6 +20,7 @@ function isTypingTarget(element) {
 export default function QuickAddTransaction() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [modal, setModal] = useState(null);
+  const { pathname, search } = useLocation();
   const { accounts } = useAccounts();
   const { categories } = useCategories();
   const checkingAccounts = useMemo(() => filterChecking(accounts), [accounts]);
@@ -26,6 +28,16 @@ export default function QuickAddTransaction() {
   const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
   const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
   const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
+
+  const defaultAccountRef = useMemo(() => {
+    const bankId = pathname.match(/^\/contas\/([^/]+)/)?.[1];
+    if (!bankId) return '';
+    const checking = checkingAccounts.find((a) => a.bank_id === bankId);
+    const card = creditCardAccounts.find((a) => a.bank_id === bankId);
+    if (card && new URLSearchParams(search).get('tab') === 'cartao') return `credit:${card.id}`;
+    if (checking) return `checking:${checking.id}`;
+    return card ? `credit:${card.id}` : '';
+  }, [pathname, search, checkingAccounts, creditCardAccounts]);
 
   useEffect(() => {
     function handleKeyDown(e) {
@@ -75,6 +87,7 @@ export default function QuickAddTransaction() {
 
       <TransactionModal
         open={modal === 'transaction'}
+        defaultAccountRef={defaultAccountRef}
         checkingAccounts={checkingAccounts}
         creditCardAccounts={creditCardAccounts}
         investmentAccounts={investmentAccounts}

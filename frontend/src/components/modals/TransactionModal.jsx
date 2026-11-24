@@ -23,6 +23,7 @@ export default function TransactionModal({
   onDeleted,
   transaction,
   installmentOnly = false,
+  defaultAccountRef = '',
   checkingAccounts = [],
   creditCardAccounts = [],
   investmentAccounts = [],
@@ -86,17 +87,18 @@ export default function TransactionModal({
       setAutoDebit(true);
       setEndDate('');
       setAccountRef(
-        installmentOnly
-          ? creditCardAccounts[0]
-            ? `credit:${creditCardAccounts[0].id}`
-            : ''
-          : checkingAccounts[0]
-          ? `checking:${checkingAccounts[0].id}`
-          : ''
+        defaultAccountRef ||
+          (installmentOnly
+            ? creditCardAccounts[0]
+              ? `credit:${creditCardAccounts[0].id}`
+              : ''
+            : checkingAccounts[0]
+            ? `checking:${checkingAccounts[0].id}`
+            : '')
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isEditing, transaction, installmentOnly]);
+  }, [open, isEditing, transaction, installmentOnly, defaultAccountRef]);
 
   useEffect(() => {
     if (isEditing) return;
