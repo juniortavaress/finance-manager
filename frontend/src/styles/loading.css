@@ -16,7 +16,7 @@
   position: fixed;
   inset: 0;
   z-index: 999;
-  background: var(--ink);
+  background: var(--dark);
   display: flex;
   flex-direction: column;
   align-items: center;

@@ -11,6 +11,7 @@
   --brick: #a6432c;
   --brick-soft: #f5e4df;
   --line: #dde3dc;
+  --dark: #1c2b29;
   --radius: 10px;
 }
 
@@ -28,6 +29,7 @@
   --brick: #d9705a;
   --brick-soft: rgba(217, 112, 90, 0.15);
   --line: #26332f;
+  --dark: #1c2b29;
 }
 
 * {

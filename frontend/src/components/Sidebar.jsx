@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -7,6 +7,7 @@ import { useAccounts } from '../hooks/resources/useAccounts';
 import { checkingAccounts, sortBanks } from '../utils/accounts';
 import { fmt } from '../utils/format';
 import BankLogo from './BankLogo';
+import { setValuesHidden, subscribePrivacy, valuesHidden } from '../utils/privacy';
 import { canInstall, isStandalone, onInstallAvailabilityChange, promptInstall } from '../pwa';
 import {
   IconDashboard,
@@ -25,6 +26,8 @@ import {
   IconChevronDown,
   IconClose,
   IconDownload,
+  IconEye,
+  IconEyeOff,
 } from './icons';
 
 const NAV_GROUPS = [
@@ -83,6 +86,7 @@ function initials(name) {
 
 export default function Sidebar({ onClose }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const hidden = useSyncExternalStore(subscribePrivacy, valuesHidden);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -155,8 +159,35 @@ export default function Sidebar({ onClose }) {
                     end={end}
                     className={({ isActive }) => `navitem${isActive ? ' active' : ''}`}
                   >
-                    <Icon />
-                    {label}
+                    {({ isActive }) => (
+                      <>
+                        <Icon />
+                        {label}
+                        {isActive && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            className={`navitem-eye${hidden ? ' on' : ''}`}
+                            title={hidden ? 'Mostrar valores' : 'Ocultar valores'}
+                            aria-label={hidden ? 'Mostrar valores' : 'Ocultar valores'}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setValuesHidden(!hidden);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setValuesHidden(!hidden);
+                              }
+                            }}
+                          >
+                            {hidden ? <IconEyeOff /> : <IconEye />}
+                          </span>
+                        )}
+                      </>
+                    )}
                   </NavLink>
                   {hasBanks &&
                     showBanks &&
