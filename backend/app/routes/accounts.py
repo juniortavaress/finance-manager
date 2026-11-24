@@ -24,12 +24,16 @@ accounts_bp = Blueprint("accounts", __name__)
 
 
 def _account_usage_counts(user_id, account_id):
-    return {
+    counts = {
         "transactions": Transaction.query.filter_by(user_id=user_id, account_id=account_id).count(),
         "recurring_transactions": RecurringTransaction.query.filter_by(
             user_id=user_id, account_id=account_id
         ).count(),
     }
+    investment_account = InvestmentAccount.query.filter_by(account_id=account_id).first()
+    if investment_account is not None:
+        counts["assets"] = Asset.query.filter_by(investment_account_id=investment_account.id).count()
+    return counts
 
 
 def _delete_account_cascade(account):
@@ -69,6 +73,17 @@ def _delete_account_cascade(account):
     db.session.delete(account)
 
 
+def _validate_card_days(card):
+    try:
+        closing_day, due_day = int(card.get("closing_day")), int(card.get("due_day"))
+    except (TypeError, ValueError):
+        raise ApiError("Informe dia de fechamento e vencimento do cartão", 400)
+    if not (1 <= closing_day <= 31 and 1 <= due_day <= 31):
+        raise ApiError("Os dias de fechamento e vencimento devem ficar entre 1 e 31", 400)
+    if closing_day == due_day:
+        raise ApiError("Dia de fechamento e vencimento devem ser diferentes", 400)
+
+
 @accounts_bp.get("/")
 @login_required
 def list_accounts():
@@ -101,6 +116,12 @@ def create_account():
     if not name:
         raise ApiError("Nome da conta é obrigatório", 400)
 
+    if Account.query.filter_by(bank_id=bank.id, type=acc_type).first() is not None:
+        raise ApiError("Este banco já tem uma conta deste tipo", 409)
+
+    if acc_type == "credit_card":
+        _validate_card_days(data.get("credit_card") or {})
+
     opening_balance = data.get("opening_balance", 0) or 0
     opening_date_raw = data.get("opening_balance_date")
     opening_date = dt.date.fromisoformat(opening_date_raw) if opening_date_raw else dt.date.today()
@@ -120,8 +141,6 @@ def create_account():
 
     if acc_type == "credit_card":
         cc = data.get("credit_card") or {}
-        if not cc.get("closing_day") or not cc.get("due_day"):
-            raise ApiError("Informe dia de fechamento e vencimento do cartão", 400)
         credit_card = CreditCard(
             account_id=account.id,
             credit_limit=cc.get("credit_limit", 0) or 0,
@@ -154,6 +173,12 @@ def update_account(account_id):
 
     if account.type == "credit_card" and "credit_card" in data and account.credit_card:
         cc = data["credit_card"]
+        _validate_card_days(
+            {
+                "closing_day": cc.get("closing_day", account.credit_card.closing_day),
+                "due_day": cc.get("due_day", account.credit_card.due_day),
+            }
+        )
         for field in ("credit_limit", "closing_day", "due_day"):
             if field in cc:
                 setattr(account.credit_card, field, cc[field])
@@ -180,6 +205,9 @@ def delete_account(account_id):
     account = Account.query.filter_by(id=account_id, user_id=g.current_user.id).first()
     if account is None:
         raise ApiError("Conta não encontrada", 404)
+
+    if sum(_account_usage_counts(g.current_user.id, account.id).values()) > 0:
+        raise ApiError("Esta conta tem movimentações e não pode ser removida", 409)
 
     _delete_account_cascade(account)
     db.session.commit()
