@@ -13,13 +13,17 @@ function signedAmount(tx) {
   return tx.type === 'income' ? tx.amount : -tx.amount;
 }
 
-export default function BankTransactionsTab({ account, categories, refreshKey, onEdit }) {
+function monthRange(ym) {
+  const last = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0).getDate();
+  return { from: `${ym}-01`, to: `${ym}-${String(last).padStart(2, '0')}` };
+}
+
+export default function BankTransactionsTab({ account, categories, month, isCurrentMonth, refreshKey, onEdit }) {
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const { from: dateFrom, to: dateTo } = monthRange(month);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [accumulated, setAccumulated] = useState([]);
@@ -58,7 +62,8 @@ export default function BankTransactionsTab({ account, categories, refreshKey, o
     setAccumulated((prev) => (page === 1 ? data.transactions : [...prev, ...data.transactions]));
   }, [data, page]);
 
-  const hasFilters = !!(debouncedSearch || categoryFilter || typeFilter || dateFrom || dateTo);
+  // O saldo corrido so e conhecido a partir de hoje; meses passados nao tem como calcular.
+  const hasFilters = !!(debouncedSearch || categoryFilter || typeFilter || !isCurrentMonth);
 
   const rows = useMemo(() => {
     let running = account.balance;
@@ -106,8 +111,6 @@ export default function BankTransactionsTab({ account, categories, refreshKey, o
                 <option value="expense">Só despesas</option>
               </select>
             </div>
-            <input type="date" className="filter-date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            <input type="date" className="filter-date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
         )}
       </div>

@@ -51,6 +51,7 @@ export default function BankDetail() {
   const tab = tabs.includes(requestedTab) ? requestedTab : tabs[0];
 
   const [invoiceIndex, setInvoiceIndex] = useState(null);
+  const [month, setMonth] = useState(() => localIsoDate().slice(0, 7));
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingTx, setEditingTx] = useState(null);
   const [payingInvoice, setPayingInvoice] = useState(false);
@@ -180,6 +181,19 @@ export default function BankDetail() {
             {TAB_LABELS[key]}
           </button>
         ))}
+        {tab === 'extrato' && (
+          <div className="bank-tab-extra period-nav">
+            <button type="button" className="period-nav-btn" onClick={() => setMonth(shiftMonth(month, -1))}>
+              ◀
+            </button>
+            <span>
+              {monthLabelFull(Number(month.slice(5, 7)))} {month.slice(0, 4)}
+            </span>
+            <button type="button" className="period-nav-btn" onClick={() => setMonth(shiftMonth(month, 1))}>
+              ▶
+            </button>
+          </div>
+        )}
         {tab === 'cartao' && invoices.length > 0 && (
           <div className="bank-tab-extra period-nav">
             <button
@@ -219,7 +233,14 @@ export default function BankDetail() {
       </div>
 
       {tab === 'extrato' && (
-        <BankTransactionsTab account={checking} categories={categories} refreshKey={refreshKey} onEdit={setEditingTx} />
+        <BankTransactionsTab
+          account={checking}
+          categories={categories}
+          month={month}
+          isCurrentMonth={month === localIsoDate().slice(0, 7)}
+          refreshKey={refreshKey}
+          onEdit={setEditingTx}
+        />
       )}
       {tab === 'cartao' && (
         <BankCardTab
@@ -284,6 +305,11 @@ export default function BankDetail() {
       />
     </div>
   );
+}
+
+function shiftMonth(ym, delta) {
+  const d = new Date(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)) - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function fmtDay(isoDate) {
