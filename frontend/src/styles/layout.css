@@ -413,3 +413,51 @@ body {
   font-family: inherit;
   text-align: left;
 }
+
+.quick-add-fab {
+  position: fixed;
+  right: 26px;
+  bottom: 24px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: var(--gold);
+  color: #241b08;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(192, 145, 47, 0.45);
+  z-index: 30;
+}
+.quick-add-fab:hover {
+  background: #cfa13f;
+}
+.quick-add-hint {
+  position: absolute;
+  right: 62px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--ink);
+  color: #fff;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 11.5px;
+  border-radius: 6px;
+  padding: 5px 9px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.quick-add-fab:hover .quick-add-hint {
+  opacity: 1;
+}
+@media (max-width: 720px) {
+  .quick-add-fab {
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .quick-add-hint {
+    display: none;
+  }
+}

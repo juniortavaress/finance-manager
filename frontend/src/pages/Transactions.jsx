@@ -16,6 +16,7 @@ import TransactionModal from '../components/modals/TransactionModal';
 import LoadMoreButton from '../components/LoadMoreButton';
 import Skeleton from '../components/Skeleton';
 import { localIsoDate } from '../utils/date';
+import { onDataChanged } from '../utils/dataChanged';
 
 const PAGE_SIZE = 50;
 
@@ -118,6 +119,8 @@ export default function Transactions() {
     if (page === 1) reloadTx();
     else setPage(1);
   }
+
+  useEffect(() => onDataChanged(reloadFromStart));
 
   const transactions = accumulated;
   const total = txData?.total || 0;

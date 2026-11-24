@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { onDataChanged } from '../utils/dataChanged';
 
 // Cache em memoria (stale-while-revalidate): com `cacheKey`, ao voltar para uma
 // tela o ultimo resultado aparece na hora e a atualizacao roda em segundo
@@ -72,6 +73,15 @@ export function useFetch(fetcher, deps = [], { cacheKey } = {}) {
     reload();
     return () => controllerRef.current?.abort();
   }, [reload]);
+
+  const cacheable = Boolean(cacheKey);
+  useEffect(() => {
+    if (!cacheable) return;
+    return onDataChanged(() => {
+      silentNext.current = true;
+      reload();
+    });
+  }, [cacheable, reload]);
 
   const initialLoading = loading && !hasLoadedOnce.current;
 
