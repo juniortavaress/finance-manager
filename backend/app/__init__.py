@@ -8,6 +8,26 @@ from app.extensions import db, migrate
 from app.errors import register_error_handlers
 
 
+def _is_debug():
+    return os.environ.get("FLASK_DEBUG") == "1"
+
+
+def _jwt_secret():
+    secret = os.environ.get("JWT_SECRET")
+    if secret:
+        return secret
+    if _is_debug():
+        return "dev-secret"
+    raise RuntimeError("JWT_SECRET não definido")
+
+
+def _cors_origins():
+    origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+    if origins or not _is_debug():
+        return origins
+    return ["http://localhost:5173"]
+
+
 def create_app():
     app = Flask(__name__)
 
@@ -18,16 +38,15 @@ def create_app():
         "max_overflow": 8,
         "connect_args": {"prepare_threshold": None},
     }
-    app.config["JWT_SECRET"] = os.environ.get("JWT_SECRET", "dev-secret")
+    app.config["JWT_SECRET"] = _jwt_secret()
     app.config["JWT_EXPIRES_MINUTES"] = int(os.environ.get("JWT_EXPIRES_MINUTES", "10080"))
 
     db.init_app(app)
     migrate.init_app(app, db)
 
-    origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
     # max_age: o navegador guarda o preflight (OPTIONS) por 2h em vez de fazer
     # uma ida extra ao servidor antes de CADA chamada da API.
-    CORS(app, origins=origins or "*", supports_credentials=True, max_age=7200)
+    CORS(app, origins=_cors_origins(), max_age=7200)
 
     @app.after_request
     def compress_json(response):
