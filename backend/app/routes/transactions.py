@@ -35,6 +35,7 @@ from app.services.finance_service import (
 transactions_bp = Blueprint("transactions", __name__)
 
 TRANSFER_CATEGORY_NAME = "Transferência entre contas"
+MAX_INSTALLMENTS = 120
 
 
 def _get_or_create_transfer_category(user_id):
@@ -200,6 +201,8 @@ def create_transaction():
 
     if not description:
         raise ApiError("Descrição é obrigatória", 400)
+    if not 1 <= installments_count <= MAX_INSTALLMENTS:
+        raise ApiError(f"Parcelas devem ficar entre 1 e {MAX_INSTALLMENTS}", 400)
     if tx_type not in ("income", "expense"):
         raise ApiError("Tipo inválido", 400)
     if payment_method not in ("debit", "credit", "pix", "other"):
