@@ -76,7 +76,6 @@ export default function Transactions() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [txModalOpen, setTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState(null);
   const [page, setPage] = useState(1);
   const [accumulated, setAccumulated] = useState([]);
@@ -131,13 +130,6 @@ export default function Transactions() {
     <div className="screen active">
       <div className="topbar">
         <h1>Transações</h1>
-        <div
-          className="period"
-          style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
-          onClick={() => setTxModalOpen(true)}
-        >
-          + nova transação
-        </div>
       </div>
 
       <div className="card" style={{ marginBottom: 16, padding: 6 }}>
@@ -314,7 +306,7 @@ export default function Transactions() {
       </div>
 
       <TransactionModal
-        open={txModalOpen || !!editingTx}
+        open={!!editingTx}
         transaction={editingTx}
         checkingAccounts={checkingAccounts}
         creditCardAccounts={creditCardAccounts}
@@ -322,11 +314,9 @@ export default function Transactions() {
         expenseCategories={expenseCategories}
         incomeCategories={incomeCategories}
         onClose={() => {
-          setTxModalOpen(false);
           setEditingTx(null);
         }}
         onCreated={() => {
-          setTxModalOpen(false);
           setEditingTx(null);
           reloadFromStart();
         }}
