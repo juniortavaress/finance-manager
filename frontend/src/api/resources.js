@@ -6,8 +6,15 @@ export const authApi = {
   me: () => api.get('/auth/me'),
   updateMe: (data) => api.patch('/auth/me', data),
   deleteAccount: (password) => api.delete('/auth/me', { password }),
+  logout: () => api.post('/auth/logout'),
+  sessions: (signal) => api.get('/auth/sessions', undefined, signal),
+  revokeSession: (id) => api.delete(`/auth/sessions/${id}`),
   logoutAll: () => api.post('/auth/logout-all'),
   changePassword: (data) => api.patch('/auth/password', data),
+};
+
+export const dataApi = {
+  exportAll: () => downloadFile('/export/'),
 };
 
 export const banksApi = {
@@ -36,7 +43,6 @@ export const categoriesApi = {
 
 export const transactionsApi = {
   list: (params, signal) => api.get('/transactions/', params, signal),
-  exportCsv: (params) => downloadFile('/transactions/export', params),
   create: (data) => api.post('/transactions/', data),
   update: (id, data) => api.patch(`/transactions/${id}`, data),
   remove: (id) => api.delete(`/transactions/${id}`),

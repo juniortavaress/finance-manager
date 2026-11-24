@@ -1,9 +1,7 @@
-import csv
 import datetime as dt
-import io
 from decimal import Decimal, ROUND_HALF_UP
 
-from flask import Blueprint, Response, g, request
+from flask import Blueprint, g, request
 from sqlalchemy.orm import selectinload
 
 from app.auth_decorator import login_required
@@ -185,57 +183,6 @@ def _transactions_with_group(items):
             data["group_color_hex"] = group.color_hex
         result.append(data)
     return result
-
-
-_STATUS_LABELS = {"confirmed": "Confirmada", "pending": "Pendente", "scheduled": "Agendada"}
-_TYPE_LABELS = {"income": "Receita", "expense": "Despesa"}
-
-
-def _csv_text(value):
-    """Evita que uma celula vire formula ao abrir no Excel/Sheets."""
-    text = "" if value is None else str(value)
-    return "'" + text if text[:1] in ("=", "+", "-", "@") else text
-
-
-@transactions_bp.get("/export")
-@login_required
-def export_transactions():
-    filters = _parse_filters()
-    rows = (
-        Transaction.query.filter(Transaction.user_id == g.current_user.id, *filters)
-        .options(selectinload(Transaction.category), selectinload(Transaction.account))
-        .order_by(Transaction.date.desc(), Transaction.created_at.desc())
-        .all()
-    )
-
-    out = io.StringIO()
-    writer = csv.writer(out, delimiter=";")
-    writer.writerow(["Data", "Descrição", "Tipo", "Valor", "Moeda", "Categoria", "Conta", "Pagamento", "Status", "Transferência", "Observações"])
-    for t in rows:
-        writer.writerow(
-            [
-                t.date.strftime("%d/%m/%Y"),
-                _csv_text(t.description),
-                _TYPE_LABELS.get(t.type, t.type),
-                f"{t.amount:.2f}".replace(".", ","),
-                t.account.currency if t.account else "",
-                _csv_text(t.category.name if t.category else ""),
-                _csv_text(t.account.name if t.account else ""),
-                t.payment_method,
-                _STATUS_LABELS.get(t.status, t.status),
-                "Sim" if t.is_transfer else "Não",
-                _csv_text(t.notes),
-            ]
-        )
-
-    # BOM para o Excel abrir os acentos corretamente.
-    body = "\ufeff" + out.getvalue()
-    filename = f"atmos-transacoes-{dt.date.today().isoformat()}.csv"
-    return Response(
-        body,
-        mimetype="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 @transactions_bp.post("/")

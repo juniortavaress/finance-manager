@@ -83,7 +83,7 @@ export async function downloadFile(path, params) {
     }
     throw new ApiError(data?.error || 'Não foi possível gerar o arquivo.', res.status);
   }
-  const filename = /filename="?([^"]+)"?/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'atmos.csv';
+  const filename = /filename="?([^"]+)"?/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'meus-dados-financeiros.xlsx';
   const href = URL.createObjectURL(await res.blob());
   const link = document.createElement('a');
   link.href = href;

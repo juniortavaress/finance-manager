@@ -100,6 +100,7 @@ def create_app():
     from app.routes.groups import groups_bp
     from app.routes.shared_expenses import shared_expenses_bp
     from app.routes.settlements import settlements_bp
+    from app.routes.export import export_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(banks_bp, url_prefix="/api/banks")
@@ -119,6 +120,7 @@ def create_app():
     app.register_blueprint(groups_bp, url_prefix="/api/groups")
     app.register_blueprint(shared_expenses_bp, url_prefix="/api/shared-expenses")
     app.register_blueprint(settlements_bp, url_prefix="/api/settlements")
+    app.register_blueprint(export_bp, url_prefix="/api/export")
 
     @app.get("/api/health")
     def health():
