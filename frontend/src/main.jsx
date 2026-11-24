@@ -14,8 +14,11 @@ import './styles/investments.css';
 import './styles/settings.css';
 import App from './App.jsx';
 import { registerPwa } from './pwa';
+import { applyTheme, watchSystemTheme } from './utils/theme';
 
 registerPwa();
+applyTheme();
+watchSystemTheme();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

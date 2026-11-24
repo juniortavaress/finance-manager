@@ -142,7 +142,8 @@
   cursor: pointer;
 }
 .bank-tab-action:hover {
-  background: #d6e7e4;
+  background: var(--teal);
+  color: #fff;
 }
 
 .bank-filters {

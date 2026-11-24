@@ -236,6 +236,54 @@
 .set-form .form-error-banner {
   margin-top: 14px;
 }
+.set-choices {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 16px 0;
+}
+.set-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.set-choice:hover {
+  border-color: var(--ink-faint);
+}
+.set-choice.active {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.set-choice-preview {
+  height: 54px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 22% 1fr;
+  overflow: hidden;
+}
+.set-choice-preview i {
+  background: #1c2b29;
+}
+.set-choice-preview b {
+  background: #f1f3ef;
+}
+.set-choice-preview.dark b {
+  background: #0f1716;
+}
+.set-choice-preview.auto b {
+  background: linear-gradient(105deg, #f1f3ef 50%, #0f1716 50%);
+}
 .set-subtitle {
   font-size: 12px;
   text-transform: uppercase;

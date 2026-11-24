@@ -373,7 +373,7 @@
 }
 .bank-cfg-row.on {
   border-color: var(--teal);
-  background: #f8fbfa;
+  background: var(--bg);
 }
 .bank-cfg-head {
   display: flex;

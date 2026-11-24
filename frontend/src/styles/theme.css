@@ -14,6 +14,22 @@
   --radius: 10px;
 }
 
+:root[data-theme='escuro'] {
+  color-scheme: dark;
+  --bg: #0f1716;
+  --surface: #172220;
+  --ink: #e4ebe8;
+  --ink-soft: #a3b3af;
+  --ink-faint: #74847f;
+  --teal: #229088;
+  --teal-soft: rgba(34, 144, 136, 0.18);
+  --gold: #d0a23e;
+  --gold-soft: rgba(208, 162, 62, 0.16);
+  --brick: #d9705a;
+  --brick-soft: rgba(217, 112, 90, 0.15);
+  --line: #26332f;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

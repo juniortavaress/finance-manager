@@ -13,6 +13,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Atmos" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <script>
+      (function () {
+        var p = localStorage.getItem('atmos_theme');
+        var dark = p === 'escuro' || ((p === 'auto' || !p) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.dataset.theme = dark ? 'escuro' : 'claro';
+      })();
+    </script>
     <title>Atmos | A Sua Gestão Financeira</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
