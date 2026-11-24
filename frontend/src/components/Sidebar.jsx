@@ -30,19 +30,19 @@ import {
 
 const NAV_GROUPS = [
   {
-    label: 'Visão geral',
+    label: 'Início',
     items: [
       { to: '/', label: 'Dashboard', icon: IconDashboard, end: true },
-      { to: '/contas', label: 'Contas & Bancos', icon: IconBank, end: true, banks: true },
+      { to: '/relatorios', label: 'Relatórios', icon: IconChart, disabled: true },
     ],
   },
   {
-    label: 'Movimentação',
+    label: 'Dinheiro',
     items: [
+      { to: '/contas', label: 'Contas & Bancos', icon: IconBank, end: true, banks: true },
       { to: '/transacoes', label: 'Transações', icon: IconSwap },
       { to: '/recorrentes', label: 'Recorrentes', icon: IconRepeat },
       { to: '/parcelas', label: 'Parcelas', icon: IconInstallments },
-      { to: '/categorias', label: 'Categorias', icon: IconGrid },
     ],
   },
   {
@@ -52,21 +52,22 @@ const NAV_GROUPS = [
       { to: '/investimentos/carteira', label: 'Carteira', icon: IconWallet, disabled: false },
       { to: '/investimentos/compras-vendas', label: 'Compras e vendas', icon: IconSwap, disabled: false },
       { to: '/investimentos/dividendos', label: 'Dividendos', icon: IconCoin, disabled: false },
+      { to: '/cotacoes', label: 'Cotações', icon: IconChart },
     ],
   },
   {
     label: 'Amigos',
     items: [
-      { to: '/amigos', label: 'Visão geral', icon: IconUser, end: true },
-      { to: '/amigos/lista', label: 'Amigos', icon: IconUsers },
-      { to: '/amigos/grupos', label: 'Grupos', icon: IconGrid },
+      { to: '/amigos', label: 'Visão geral', icon: IconDashboard, end: true },
+      { to: '/amigos/lista', label: 'Amigos', icon: IconUser },
+      { to: '/amigos/grupos', label: 'Grupos', icon: IconUsers },
     ],
   },
   {
-    label: 'Outros',
+    label: 'Ajustes',
     items: [
-      { to: '/relatorios', label: 'Relatórios', icon: IconChart, disabled: true },
-      { to: '/cotacoes', label: 'Cotações', icon: IconCoin },
+      { to: '/categorias', label: 'Categorias', icon: IconGrid },
+      { install: true },
       { to: '/configuracoes', label: 'Configurações', icon: IconGear },
     ],
   },
@@ -131,8 +132,15 @@ export default function Sidebar({ onClose }) {
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
             <div className="navgroup-label">{group.label}</div>
-            {group.items.map(({ to, label, icon: Icon, end, disabled, banks: hasBanks }) =>
-              disabled ? (
+            {group.items.map(({ to, label, icon: Icon, end, disabled, banks: hasBanks, install }) =>
+              install ? (
+                !isStandalone() && (
+                  <button key="install" type="button" className="navitem navitem-button" onClick={handleInstall}>
+                    <IconDownload />
+                    Baixar app
+                  </button>
+                )
+              ) : disabled ? (
                 <div
                   key={to}
                   className="navitem disabled"
@@ -170,12 +178,6 @@ export default function Sidebar({ onClose }) {
                     })}
                 </Fragment>
               )
-            )}
-            {group.label === 'Outros' && !isStandalone() && (
-              <button type="button" className="navitem navitem-button" onClick={handleInstall}>
-                <IconDownload />
-                Baixar app
-              </button>
             )}
           </div>
         ))}
