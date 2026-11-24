@@ -3,11 +3,15 @@ import { creditCardsApi, investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useBanks } from '../hooks/resources/useBanks';
 import { useAccounts } from '../hooks/resources/useAccounts';
+import { useCategories } from '../hooks/resources/useCategories';
 import { checkingAccounts as filterChecking } from '../utils/accounts';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
 import { fmt, monthLabel } from '../utils/format';
 import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
 import TransferModal from '../components/modals/TransferModal';
+import TransactionModal from '../components/modals/TransactionModal';
+import AccountLedgerDrawer from '../components/AccountLedgerDrawer';
 import InvoiceHistoryChart from '../components/charts/InvoiceHistoryChart';
 import Skeleton from '../components/Skeleton';
 import { IconPencil, IconSwap } from '../components/icons';
@@ -28,6 +32,15 @@ export default function Accounts() {
   const [payingCard, setPayingCard] = useState(null);
   const [highlightedCardId, setHighlightedCardId] = useState(null);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [ledgerBankId, setLedgerBankId] = useState(null);
+  const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0);
+  const [editingTx, setEditingTx] = useState(null);
+  const { categories } = useCategories();
+  const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
+  const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
+  const ledgerBank = banks.find((b) => b.id === ledgerBankId) || null;
+  const ledgerChecking = ledgerBank ? accounts.find((a) => a.bank_id === ledgerBank.id && a.type === 'checking') : null;
+  const ledgerCreditCard = ledgerBank ? accounts.find((a) => a.bank_id === ledgerBank.id && a.type === 'credit_card') : null;
 
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
   const investmentAccounts = useMemo(() => accounts.filter((a) => !!a.investment_account), [accounts]);
@@ -267,6 +280,12 @@ export default function Accounts() {
                   </div>
                 )}
               </div>
+              <div className="acct-bank-actions">
+              {(checking || creditCard) && (
+                <button type="button" className="acct-action" onClick={() => setLedgerBankId(bank.id)}>
+                  Extrato e lançamentos
+                </button>
+              )}
               <button
                 title="Editar banco"
                 onClick={() => openEditBank(bank)}
@@ -293,6 +312,7 @@ export default function Accounts() {
               >
                 <IconPencil style={{ width: 15, height: 15 }} />
               </button>
+              </div>
             </div>
             <div className="acct-types">
               <div className="acct-type-card">
@@ -381,6 +401,45 @@ export default function Accounts() {
           </div>
         );
       })}
+
+      <AccountLedgerDrawer
+        open={!!ledgerBank}
+        bank={ledgerBank}
+        checking={ledgerChecking}
+        creditCard={ledgerCreditCard}
+        expenseCategories={expenseCategories}
+        incomeCategories={incomeCategories}
+        refreshKey={ledgerRefreshKey}
+        onClose={() => setLedgerBankId(null)}
+        onChanged={() => {
+          reloadBanks();
+          reloadAccounts();
+        }}
+        onEdit={setEditingTx}
+      />
+
+      <TransactionModal
+        open={!!editingTx}
+        transaction={editingTx}
+        checkingAccounts={checkingAccountsList}
+        creditCardAccounts={creditCardAccounts}
+        investmentAccounts={investmentAccounts}
+        expenseCategories={expenseCategories}
+        incomeCategories={incomeCategories}
+        onClose={() => setEditingTx(null)}
+        onCreated={() => {
+          setEditingTx(null);
+          setLedgerRefreshKey((k) => k + 1);
+          reloadBanks();
+          reloadAccounts();
+        }}
+        onDeleted={() => {
+          setEditingTx(null);
+          setLedgerRefreshKey((k) => k + 1);
+          reloadBanks();
+          reloadAccounts();
+        }}
+      />
 
       <BankConfigModal
         open={modalOpen}

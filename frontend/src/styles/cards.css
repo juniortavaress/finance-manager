@@ -483,3 +483,22 @@
     display: block;
   }
 }
+
+.acct-bank-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.acct-action {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.acct-action:hover {
+  border-color: var(--teal);
+}
