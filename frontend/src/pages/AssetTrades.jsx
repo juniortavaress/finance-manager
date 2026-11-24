@@ -7,8 +7,7 @@ import { investmentAccounts as filterInvestment } from '../utils/accounts';
 import { fmt, fmtDateShort } from '../utils/format';
 import { fixedIncomeRateLabel, isValueBasedFixedIncome } from '../utils/fixedIncome';
 import { IconSearch, IconPencil, IconTrash } from '../components/icons';
-import PickAssetModal from '../components/modals/PickAssetModal';
-import NewAssetModal from '../components/modals/NewAssetModal';
+import AssetTradeFlow from '../components/AssetTradeFlow';
 import TradeAssetModal from '../components/modals/TradeAssetModal';
 import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal';
 import LoadMoreButton from '../components/LoadMoreButton';
@@ -85,7 +84,7 @@ export default function AssetTrades() {
   const [buyPage, setBuyPage] = useState(1);
   const [sellPage, setSellPage] = useState(1);
 
-  const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssetsLight(signal), []);
+  const { reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssetsLight(signal), []);
 
   const [purchasesAccumulated, setPurchasesAccumulated] = useState([]);
   const [salesAccumulated, setSalesAccumulated] = useState([]);
@@ -139,16 +138,10 @@ export default function AssetTrades() {
     setSalesAccumulated((prev) => mergeById(sellPage === 1 ? [] : prev, sellData.asset_transactions));
   }, [sellData, sellPage]);
 
-  const [pickModalOpen, setPickModalOpen] = useState(false);
-  const [pickKind, setPickKind] = useState('buy');
-  const [newAssetModalOpen, setNewAssetModalOpen] = useState(false);
-  const [newAssetPreset, setNewAssetPreset] = useState({ investmentAccountId: '', name: '' });
-  const [lastInvestmentAccountId, setLastInvestmentAccountId] = useState('');
-  const [tradeState, setTradeState] = useState(null);
+  const [flowKind, setFlowKind] = useState(null);
   const [editTrade, setEditTrade] = useState(null);
   const [deletingTrade, setDeletingTrade] = useState(null);
 
-  const assets = assetsData?.assets || [];
   const purchases = purchasesAccumulated;
   const sales = salesAccumulated;
 
@@ -160,11 +153,6 @@ export default function AssetTrades() {
     else setBuyPage(1);
     if (sellPage === 1) reloadSells();
     else setSellPage(1);
-  }
-
-  function openPick(kind) {
-    setPickKind(kind);
-    setPickModalOpen(true);
   }
 
   function accountFor(assetSnapshot) {
@@ -203,13 +191,13 @@ export default function AssetTrades() {
       <div className="topbar">
         <h1>Compras e vendas</h1>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div className="period" onClick={() => openPick('sell')}>
+          <div className="period" onClick={() => setFlowKind('sell')}>
             + nova venda
           </div>
           <div
             className="period"
             style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
-            onClick={() => openPick('buy')}
+            onClick={() => setFlowKind('buy')}
           >
             + nova compra
           </div>
@@ -350,69 +338,7 @@ export default function AssetTrades() {
         />
       </div>
 
-      <PickAssetModal
-        open={pickModalOpen}
-        kind={pickKind}
-        assets={assets}
-        investmentAccounts={investmentAccounts}
-        bankById={bankById}
-        initialInvestmentAccountId={lastInvestmentAccountId}
-        onClose={() => setPickModalOpen(false)}
-        onPick={(asset, investmentAccountId) => {
-          setPickModalOpen(false);
-          setLastInvestmentAccountId(investmentAccountId);
-          setTradeState({ asset, kind: pickKind });
-        }}
-        onNewAsset={(investmentAccountId, name) => {
-          setPickModalOpen(false);
-          setLastInvestmentAccountId(investmentAccountId);
-          setNewAssetPreset({ investmentAccountId, name });
-          setNewAssetModalOpen(true);
-        }}
-      />
-
-      <NewAssetModal
-        open={newAssetModalOpen}
-        deferCreate
-        banks={banks}
-        investmentAccounts={investmentAccounts}
-        presetInvestmentAccountId={newAssetPreset.investmentAccountId}
-        presetName={newAssetPreset.name}
-        onClose={() => setNewAssetModalOpen(false)}
-        onDraftReady={(draft) => {
-          setNewAssetModalOpen(false);
-          setTradeState({ assetDraft: draft, kind: 'buy' });
-        }}
-      />
-
-      <TradeAssetModal
-        open={!!tradeState}
-        asset={tradeState?.asset}
-        assetDraft={tradeState?.assetDraft}
-        kind={tradeState?.kind}
-        accountBalance={
-          tradeState?.asset || tradeState?.assetDraft ? accountBalanceFor(tradeState.asset || tradeState.assetDraft) : null
-        }
-        accountCurrency={
-          tradeState?.asset || tradeState?.assetDraft ? currencyFor(tradeState.asset || tradeState.assetDraft) : undefined
-        }
-        onClose={() => setTradeState(null)}
-        onBack={() => {
-          setPickKind(tradeState.kind);
-          if (tradeState.assetDraft) {
-            setNewAssetPreset({ investmentAccountId: tradeState.assetDraft.investment_account_id, name: tradeState.assetDraft.name });
-            setTradeState(null);
-            setNewAssetModalOpen(true);
-          } else {
-            setTradeState(null);
-            setPickModalOpen(true);
-          }
-        }}
-        onSaved={() => {
-          setTradeState(null);
-          reload();
-        }}
-      />
+      <AssetTradeFlow kind={flowKind} onClose={() => setFlowKind(null)} onSaved={reload} />
 
       <TradeAssetModal
         open={!!editTrade}
