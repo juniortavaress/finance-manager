@@ -318,6 +318,41 @@
 .set-switch.on span {
   transform: translateX(18px);
 }
+.set-btn-danger {
+  background: var(--brick);
+  border-color: var(--brick);
+  color: #fff;
+}
+.set-btn-danger:hover {
+  color: #fff;
+  opacity: 0.9;
+}
+.set-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.set-danger {
+  border-color: var(--brick);
+}
+.set-danger-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 16px;
+}
+.set-danger-form input {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+}
+.set-danger-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .set-subtitle {
   font-size: 12px;
   text-transform: uppercase;

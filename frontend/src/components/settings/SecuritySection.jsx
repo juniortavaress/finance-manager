@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 import { authApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 
@@ -73,6 +75,76 @@ function PasswordCard() {
   );
 }
 
+function DeleteAccountCard() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const { showError } = useToast();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmText, setConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete(e) {
+    e.preventDefault();
+    setDeleting(true);
+    try {
+      await authApi.deleteAccount(password);
+      logout();
+      navigate('/login', { replace: true });
+    } catch (err) {
+      showError(err.message || 'Não foi possível excluir a conta.');
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div className="set-card set-danger">
+      <div className="set-row">
+        <div>
+          <div className="set-row-title">Excluir minha conta</div>
+          <div className="set-row-sub">
+            Você perde o acesso ao Atmos e não consegue mais entrar. Essa ação não pode ser desfeita por aqui.
+          </div>
+        </div>
+        {!open && (
+          <button type="button" className="set-btn set-btn-danger" onClick={() => setOpen(true)}>
+            Excluir conta
+          </button>
+        )}
+      </div>
+      {open && (
+        <form className="set-danger-form" onSubmit={handleDelete}>
+          <input
+            type="password"
+            placeholder="Sua senha"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <input
+            type="text"
+            placeholder='Digite "EXCLUIR" para confirmar'
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+          />
+          <div className="set-danger-actions">
+            <button type="button" className="set-btn" onClick={() => setOpen(false)} disabled={deleting}>
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="set-btn set-btn-danger"
+              disabled={!password || confirmText.trim().toUpperCase() !== 'EXCLUIR' || deleting}
+            >
+              {deleting ? 'Excluindo...' : 'Excluir definitivamente'}
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function SecuritySection() {
   return (
     <>
@@ -85,6 +157,9 @@ export default function SecuritySection() {
 
       <h3 className="set-subtitle">Senha</h3>
       <PasswordCard />
+
+      <h3 className="set-subtitle">Zona de perigo</h3>
+      <DeleteAccountCard />
     </>
   );
 }

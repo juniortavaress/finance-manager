@@ -1,3 +1,5 @@
+import datetime as dt
+
 from flask import Blueprint, g, request
 
 from app.auth_decorator import login_required
@@ -117,3 +119,21 @@ def change_password():
     db.session.commit()
     reset(f"password:{user.id}")
     return {"ok": True}
+
+
+@auth_bp.delete("/me")
+@login_required
+def delete_me():
+    """Encerra a conta (exclusao logica). O email e' liberado para um novo cadastro."""
+    data = request.get_json(silent=True) or {}
+    user = g.current_user
+
+    hit(f"delete-account:{user.id}", LOGIN_MAX_ATTEMPTS, RATE_WINDOW_SECONDS)
+    if not verify_password(data.get("password") or "", user.password_hash):
+        raise ApiError("Senha incorreta", 400)
+
+    user.deleted_at = dt.datetime.now(dt.timezone.utc)
+    user.email = f"excluido-{user.id}@atmos.invalid"
+    db.session.commit()
+    return {"ok": True}
+
