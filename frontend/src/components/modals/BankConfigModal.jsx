@@ -19,13 +19,26 @@ const COLOR_OPTIONS = [
   '#1C2B29',
 ];
 
-function todayIso() {
-  return localIsoDate();
+const ACCOUNT_KINDS = [
+  { key: 'checking', title: 'Conta corrente', hint: 'Saldo e extrato' },
+  { key: 'credit_card', title: 'Cartão de crédito', hint: 'Faturas e limite' },
+  { key: 'investment', title: 'Investimento', hint: 'Caixa e ativos' },
+];
+
+const ACCOUNT_NAME_PREFIX = {
+  checking: 'Conta corrente',
+  credit_card: 'Cartão',
+  investment: 'Investimentos',
+};
+
+function clampDay(raw) {
+  const digits = raw.replace(/\D/g, '');
+  return digits === '' ? '' : String(Math.min(31, Number(digits)));
 }
 
 /**
  * Modal unico para criar OU editar um banco.
- * Se `bank` for passado, edita (e permite excluir); senao, cria um banco novo com contas checking/credit_card/investment.
+ * Cada banco tem apenas as contas ligadas aqui (corrente, cartao e/ou investimento).
  */
 export default function BankConfigModal({
   open,
@@ -38,16 +51,19 @@ export default function BankConfigModal({
 }) {
   const isEditing = !!bank;
   const { showSuccess, showError } = useToast();
+  const existing = { checking: checkingAccount, credit_card: creditCardAccount, investment: investmentAccount };
 
   const [name, setName] = useState('');
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
   const [currency, setCurrency] = useState('BRL');
+  const [enabled, setEnabled] = useState({ checking: true, credit_card: false, investment: false });
   const [openingBalance, setOpeningBalance] = useState('');
   const [creditLimit, setCreditLimit] = useState('');
-  const [closingDay, setClosingDay] = useState(5);
-  const [dueDay, setDueDay] = useState(15);
+  const [closingDay, setClosingDay] = useState('5');
+  const [dueDay, setDueDay] = useState('15');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [verifyingKind, setVerifyingKind] = useState(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [checkingUsage, setCheckingUsage] = useState(false);
   const [usage, setUsage] = useState(null);
@@ -56,55 +72,107 @@ export default function BankConfigModal({
     if (!open) return;
     setError('');
     setUsage(null);
+    setOpeningBalance('');
     if (isEditing) {
       setName(bank.name);
       setColor(bank.color_hex);
-      setCurrency(checkingAccount?.currency || 'BRL');
-      setCreditLimit(
-        creditCardAccount?.credit_card ? numberToMasked(creditCardAccount.credit_card.credit_limit) : ''
-      );
-      setClosingDay(creditCardAccount?.credit_card?.closing_day ?? 5);
-      setDueDay(creditCardAccount?.credit_card?.due_day ?? 15);
-      setOpeningBalance('');
+      setCurrency((checkingAccount || creditCardAccount || investmentAccount)?.currency || 'BRL');
+      setEnabled({ checking: !!checkingAccount, credit_card: !!creditCardAccount, investment: !!investmentAccount });
+      setCreditLimit(creditCardAccount?.credit_card ? numberToMasked(creditCardAccount.credit_card.credit_limit) : '');
+      setClosingDay(String(creditCardAccount?.credit_card?.closing_day ?? 5));
+      setDueDay(String(creditCardAccount?.credit_card?.due_day ?? 15));
     } else {
       setName('');
       setColor(COLOR_OPTIONS[0]);
       setCurrency('BRL');
-      setOpeningBalance('');
+      setEnabled({ checking: true, credit_card: false, investment: false });
       setCreditLimit('');
-      setClosingDay(5);
-      setDueDay(15);
+      setClosingDay('5');
+      setDueDay('15');
     }
-  }, [open, isEditing, bank, creditCardAccount, checkingAccount]);
+  }, [open, isEditing, bank, creditCardAccount, checkingAccount, investmentAccount]);
 
   if (!open) return null;
 
+  async function toggleKind(kind) {
+    if (!enabled[kind]) {
+      setEnabled((prev) => ({ ...prev, [kind]: true }));
+      return;
+    }
+    const account = existing[kind];
+    if (account) {
+      setVerifyingKind(kind);
+      try {
+        const { total } = await accountsApi.usage(account.id);
+        if (total > 0) {
+          showError('Esta conta tem movimentações e não pode ser removida.');
+          return;
+        }
+      } catch (err) {
+        showError(err.message || 'Não foi possível verificar o uso da conta.');
+        return;
+      } finally {
+        setVerifyingKind(null);
+      }
+    }
+    setEnabled((prev) => ({ ...prev, [kind]: false }));
+  }
+
+  function validate() {
+    if (!name.trim()) return 'Informe o nome do banco.';
+    if (!ACCOUNT_KINDS.some(({ key }) => enabled[key])) return 'Escolha pelo menos um tipo de conta.';
+    if (enabled.credit_card) {
+      if (!closingDay || !dueDay) return 'Informe os dias de fechamento e vencimento.';
+      if (Number(closingDay) === Number(dueDay)) return 'Dia de fechamento e vencimento devem ser diferentes.';
+    }
+    return '';
+  }
+
+  async function createAccount(bankId, bankName, kind) {
+    const base = { bank_id: bankId, type: kind, name: `${ACCOUNT_NAME_PREFIX[kind]} ${bankName}`, currency };
+    if (kind === 'checking') {
+      return accountsApi.create({
+        ...base,
+        opening_balance: maskToNumber(openingBalance),
+        opening_balance_date: localIsoDate(),
+      });
+    }
+    if (kind === 'credit_card') {
+      return accountsApi.create({
+        ...base,
+        credit_card: {
+          credit_limit: maskToNumber(creditLimit),
+          closing_day: Number(closingDay),
+          due_day: Number(dueDay),
+        },
+      });
+    }
+    return accountsApi.create(base);
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
+    const problem = validate();
+    if (problem) return setError(problem);
+
     setError('');
-
-    if (!name.trim()) return setError('Informe o nome do banco.');
-    if (!closingDay || !dueDay) return setError('Informe os dias de fechamento e vencimento.');
-    if (Number(closingDay) === Number(dueDay)) {
-      return setError('Dia de fechamento e vencimento devem ser diferentes.');
-    }
-
     setSubmitting(true);
     try {
       if (isEditing) {
         await banksApi.update(bank.id, { name: name.trim(), color_hex: color });
-        const currencyChanged = currency !== (checkingAccount?.currency || 'BRL');
+        const currencyChanged = currency !== (checkingAccount || creditCardAccount || investmentAccount)?.currency;
 
-        if (checkingAccount && currencyChanged) {
-          await accountsApi.update(checkingAccount.id, { currency });
+        for (const { key } of ACCOUNT_KINDS) {
+          const account = existing[key];
+          if (account && !enabled[key]) {
+            await accountsApi.archive(account.id);
+          } else if (!account && enabled[key]) {
+            await createAccount(bank.id, name.trim(), key);
+          } else if (account && currencyChanged) {
+            await accountsApi.update(account.id, { currency });
+          }
         }
-        if (currencyChanged && creditCardAccount) {
-          await accountsApi.update(creditCardAccount.id, { currency });
-        }
-        if (currencyChanged && investmentAccount) {
-          await accountsApi.update(investmentAccount.id, { currency });
-        }
-        if (creditCardAccount) {
+        if (creditCardAccount && enabled.credit_card) {
           await accountsApi.update(creditCardAccount.id, {
             credit_card: {
               credit_limit: maskToNumber(creditLimit),
@@ -115,33 +183,9 @@ export default function BankConfigModal({
         }
       } else {
         const { bank: newBank } = await banksApi.create({ name: name.trim(), color_hex: color });
-
-        const balance = maskToNumber(openingBalance);
-        const limit = maskToNumber(creditLimit);
-
-        await accountsApi.create({
-          bank_id: newBank.id,
-          type: 'checking',
-          name: `Conta corrente ${newBank.name}`,
-          currency,
-          opening_balance: balance,
-          opening_balance_date: todayIso(),
-        });
-
-        await accountsApi.create({
-          bank_id: newBank.id,
-          type: 'credit_card',
-          name: `Cartão ${newBank.name}`,
-          currency,
-          credit_card: { credit_limit: limit, closing_day: Number(closingDay), due_day: Number(dueDay) },
-        });
-
-        await accountsApi.create({
-          bank_id: newBank.id,
-          type: 'investment',
-          name: `Investimentos ${newBank.name}`,
-          currency,
-        });
+        for (const { key } of ACCOUNT_KINDS) {
+          if (enabled[key]) await createAccount(newBank.id, newBank.name, key);
+        }
       }
 
       showSuccess(isEditing ? 'Banco atualizado com sucesso.' : 'Banco criado com sucesso.');
@@ -176,11 +220,56 @@ export default function BankConfigModal({
     onSaved?.();
   }
 
+  function renderFields(kind) {
+    if (!enabled[kind]) return null;
+    if (kind === 'checking' && !checkingAccount) {
+      return (
+        <div className="bank-cfg-fields">
+          <div className="field">
+            <label>Saldo inicial</label>
+            <CurrencyInput value={openingBalance} onChange={setOpeningBalance} />
+          </div>
+        </div>
+      );
+    }
+    if (kind === 'credit_card') {
+      return (
+        <div className="bank-cfg-fields">
+          <div className="field">
+            <label>Limite</label>
+            <CurrencyInput value={creditLimit} onChange={setCreditLimit} />
+          </div>
+          <div className="field">
+            <label>Fecha dia</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={closingDay}
+              onChange={(e) => setClosingDay(clampDay(e.target.value))}
+            />
+          </div>
+          <div className="field">
+            <label>Vence dia</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={dueDay}
+              onChange={(e) => setDueDay(clampDay(e.target.value))}
+            />
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }
+
   return (
     <ModalShell open={open} onClose={onClose}>
-      <div className="modal">
+      <div className="modal modal-wide">
         <div className="modal-head">
-          <h2>{isEditing ? 'Editar banco' : 'Novo banco'}</h2>
+          <h2>{isEditing ? 'Configurar banco' : 'Novo banco'}</h2>
           <div className="modal-head-actions">
             {isEditing && (
               <button type="button" className="modal-delete-trigger" title="Excluir" onClick={openDeleteModal}>
@@ -195,84 +284,59 @@ export default function BankConfigModal({
         <form className="modal-body" onSubmit={handleSubmit}>
           {error && <div className="form-error-banner">{error}</div>}
 
-          <div className="field">
-            <label>Nome do banco</label>
-            <input type="text" placeholder="Ex.: Itaú, Nubank..." value={name} onChange={(e) => setName(e.target.value)} />
+          <div className="bank-cfg-top">
+            <div className="field">
+              <label>Nome do banco</label>
+              <input type="text" placeholder="Ex.: Itaú, Nubank..." value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Moeda</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                {CURRENCY_OPTIONS.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="field">
             <label>Cor de identificação</label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div className="bank-cfg-swatches">
               {COLOR_OPTIONS.map((c) => (
-                <div
+                <button
                   key={c}
+                  type="button"
+                  aria-label={c}
+                  className={color === c ? 'on' : ''}
+                  style={{ background: c }}
                   onClick={() => setColor(c)}
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 8,
-                    background: c,
-                    cursor: 'pointer',
-                    border: color === c ? '2px solid var(--ink)' : '2px solid transparent',
-                    boxShadow: color === c ? '0 0 0 2px var(--surface)' : 'none',
-                  }}
                 />
               ))}
             </div>
           </div>
 
-          <div className="field">
-            <label>Moeda da conta</label>
-            <select value={currency} onChange={(e) => setCurrency(e.target.value)}>
-              {CURRENCY_OPTIONS.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {!isEditing && (
-            <div className="field">
-              <label>Saldo inicial da conta corrente</label>
-              <CurrencyInput value={openingBalance} onChange={setOpeningBalance} />
+          <div className="bank-cfg-section">O que este banco tem</div>
+          {ACCOUNT_KINDS.map(({ key, title, hint }) => (
+            <div key={key} className={`bank-cfg-row${enabled[key] ? ' on' : ''}`}>
+              <div className="bank-cfg-head">
+                <div className="bank-cfg-title">
+                  <b>{title}</b>
+                  <small>{hint}</small>
+                </div>
+                {renderFields(key)}
+                <button
+                  type="button"
+                  className={`bank-cfg-switch${enabled[key] ? ' on' : ''}`}
+                  aria-label={title}
+                  aria-pressed={enabled[key]}
+                  disabled={verifyingKind === key}
+                  onClick={() => toggleKind(key)}
+                />
+              </div>
             </div>
-          )}
-
-          <div className="field-row">
-            <div className="field">
-              <label>Limite do cartão</label>
-              <CurrencyInput value={creditLimit} onChange={setCreditLimit} />
-            </div>
-          </div>
-          <div className="field-row">
-            <div className="field">
-              <label>Fechamento da fatura (dia)</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={closingDay}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/\D/g, '');
-                  setClosingDay(v === '' ? '' : String(Math.min(31, Number(v))));
-                }}
-              />
-            </div>
-            <div className="field">
-              <label>Vencimento da fatura (dia)</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9]*"
-                value={dueDay}
-                onChange={(e) => {
-                  const v = e.target.value.replace(/\D/g, '');
-                  setDueDay(v === '' ? '' : String(Math.min(31, Number(v))));
-                }}
-              />
-            </div>
-          </div>
+          ))}
 
           <div className="modal-actions">
             <div className="btn btn-ghost" onClick={onClose}>

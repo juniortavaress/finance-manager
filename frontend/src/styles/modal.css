@@ -332,3 +332,126 @@
   font-size: 12.5px;
   margin-bottom: 16px;
 }
+
+.modal.modal-wide {
+  max-width: 640px;
+}
+.bank-cfg-top {
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  gap: 12px;
+}
+.bank-cfg-swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.bank-cfg-swatches button {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+.bank-cfg-swatches button.on {
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.bank-cfg-section {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 4px 0 8px;
+}
+.bank-cfg-row {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 6px;
+}
+.bank-cfg-row.on {
+  border-color: var(--teal);
+  background: #f8fbfa;
+}
+.bank-cfg-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.bank-cfg-title {
+  flex: 1;
+  min-width: 0;
+}
+.bank-cfg-title b {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.bank-cfg-title small {
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+.bank-cfg-fields {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.bank-cfg-fields .field {
+  margin: 0;
+  width: 96px;
+}
+.bank-cfg-fields .field label {
+  font-size: 10.5px;
+  margin-bottom: 3px;
+}
+.bank-cfg-fields .field input {
+  padding: 6px 8px;
+  font-size: 12.5px;
+}
+.bank-cfg-switch {
+  width: 34px;
+  height: 20px;
+  border-radius: 20px;
+  border: none;
+  background: var(--line);
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.bank-cfg-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: left 0.15s ease;
+}
+.bank-cfg-switch.on {
+  background: var(--teal);
+}
+.bank-cfg-switch.on::after {
+  left: 17px;
+}
+.bank-cfg-switch:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+@media (max-width: 720px) {
+  .bank-cfg-top {
+    grid-template-columns: 1fr;
+  }
+  .bank-cfg-head {
+    flex-wrap: wrap;
+  }
+  .bank-cfg-fields {
+    order: 3;
+    width: 100%;
+  }
+}
