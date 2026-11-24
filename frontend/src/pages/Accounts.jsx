@@ -8,11 +8,9 @@ import { checkingAccounts as filterChecking, sortBanks } from '../utils/accounts
 import { fmt, monthLabel } from '../utils/format';
 import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
-import TransferModal from '../components/modals/TransferModal';
 import Skeleton from '../components/Skeleton';
-import { IconPencil, IconSwap } from '../components/icons';
+import { IconPencil } from '../components/icons';
 import { localIsoDate } from '../utils/date';
-import { notifyDataChanged } from '../utils/dataChanged';
 
 function todayIso() {
   return localIsoDate();
@@ -26,7 +24,6 @@ export default function Accounts() {
   const [editingBank, setEditingBank] = useState(null);
   const [payingCard, setPayingCard] = useState(null);
   const navigate = useNavigate();
-  const [transferModalOpen, setTransferModalOpen] = useState(false);
 
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
   const investmentAccounts = useMemo(() => accounts.filter((a) => !!a.investment_account), [accounts]);
@@ -123,14 +120,8 @@ export default function Accounts() {
     <div className="screen active">
       <div className="topbar">
         <h1>Contas &amp; Bancos</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div className="period" onClick={() => setTransferModalOpen(true)}>
-            <IconSwap style={{ width: 13, height: 13, marginRight: 5, verticalAlign: -2 }} />
-            transferir
-          </div>
-          <div className="period" onClick={openNewBank}>
-            + novo banco
-          </div>
+        <div className="period" onClick={openNewBank}>
+          + novo banco
         </div>
       </div>
 
@@ -359,17 +350,6 @@ export default function Accounts() {
           setPayingCard(null);
           reloadBanks();
           reloadAccounts();
-        }}
-      />
-
-      <TransferModal
-        open={transferModalOpen}
-        checkingAccounts={checkingAccountsList}
-        investmentAccounts={investmentAccounts}
-        onClose={() => setTransferModalOpen(false)}
-        onCreated={() => {
-          setTransferModalOpen(false);
-          notifyDataChanged();
         }}
       />
 
