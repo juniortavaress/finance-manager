@@ -484,28 +484,22 @@
   }
 }
 
-.acct-bank-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.acct-action {
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--teal-soft);
-  color: var(--teal);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-.acct-action:hover {
-  border-color: var(--teal);
-}
-
 .acct-types.n1 {
   grid-template-columns: 1fr;
 }
 .acct-types.n2 {
   grid-template-columns: repeat(2, 1fr);
+}
+
+.acct-bank-link {
+  cursor: pointer;
+}
+.acct-bank-link:hover {
+  color: var(--teal);
+}
+.acct-type-card.clickable {
+  cursor: pointer;
+}
+.acct-type-card.clickable:hover {
+  border-color: var(--teal);
 }

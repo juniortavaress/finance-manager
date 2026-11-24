@@ -1,16 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { creditCardsApi, investmentsApi } from '../api/resources';
 import { useFetch } from '../hooks/useFetch';
 import { useBanks } from '../hooks/resources/useBanks';
 import { useAccounts } from '../hooks/resources/useAccounts';
-import { useCategories } from '../hooks/resources/useCategories';
-import { checkingAccounts as filterChecking } from '../utils/accounts';
-import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
+import { checkingAccounts as filterChecking, sortBanks } from '../utils/accounts';
 import { fmt, monthLabel } from '../utils/format';
 import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
-import TransactionModal from '../components/modals/TransactionModal';
-import AccountLedgerDrawer from '../components/AccountLedgerDrawer';
 import Skeleton from '../components/Skeleton';
 import { IconPencil } from '../components/icons';
 import { localIsoDate } from '../utils/date';
@@ -26,15 +23,7 @@ export default function Accounts() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState(null);
   const [payingCard, setPayingCard] = useState(null);
-  const [ledgerBankId, setLedgerBankId] = useState(null);
-  const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0);
-  const [editingTx, setEditingTx] = useState(null);
-  const { categories } = useCategories();
-  const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
-  const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
-  const ledgerBank = banks.find((b) => b.id === ledgerBankId) || null;
-  const ledgerChecking = ledgerBank ? accounts.find((a) => a.bank_id === ledgerBank.id && a.type === 'checking') : null;
-  const ledgerCreditCard = ledgerBank ? accounts.find((a) => a.bank_id === ledgerBank.id && a.type === 'credit_card') : null;
+  const navigate = useNavigate();
 
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
   const investmentAccounts = useMemo(() => accounts.filter((a) => !!a.investment_account), [accounts]);
@@ -55,10 +44,7 @@ export default function Accounts() {
     return map;
   }, [assetsData, investmentAccounts]);
 
-  const sortedBanks = useMemo(() => {
-    const typeCount = (bankId) => accounts.filter((a) => a.bank_id === bankId).length;
-    return [...banks].sort((a, b) => typeCount(a.id) - typeCount(b.id) || a.name.localeCompare(b.name, 'pt-BR'));
-  }, [banks, accounts]);
+  const sortedBanks = useMemo(() => sortBanks(banks, accounts), [banks, accounts]);
 
   function openNewBank() {
     setEditingBank(null);
@@ -177,7 +163,9 @@ export default function Accounts() {
             <div className="acct-bank-head" style={{ justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span className="chip" style={{ background: bank.color_hex }} />
-                <span className="name">{bank.name}</span>
+                <span className="name acct-bank-link" onClick={() => navigate(`/contas/${bank.id}`)}>
+                  {bank.name}
+                </span>
                 {creditCard?.credit_card && cardInvoices.length > 0 && (
                   <div className="period" style={{ padding: '3px 8px', fontSize: 11.5 }}>
                     <button
@@ -214,12 +202,6 @@ export default function Accounts() {
                   </div>
                 )}
               </div>
-              <div className="acct-bank-actions">
-              {(checking || creditCard) && (
-                <button type="button" className="acct-action" onClick={() => setLedgerBankId(bank.id)}>
-                  Extrato e lançamentos
-                </button>
-              )}
               <button
                 title="Editar banco"
                 onClick={() => openEditBank(bank)}
@@ -246,18 +228,17 @@ export default function Accounts() {
               >
                 <IconPencil style={{ width: 15, height: 15 }} />
               </button>
-              </div>
             </div>
             <div className={`acct-types n${typeCount}`}>
               {checking && (
-              <div className="acct-type-card">
+              <div className="acct-type-card clickable" onClick={() => navigate(`/contas/${bank.id}?tab=extrato`)}>
                 <div className="t-label">Conta corrente</div>
                 <div className="t-val num">{fmt(checking.balance, checking.currency)}</div>
                 <div className="t-sub">disponível</div>
               </div>
               )}
               {creditCard?.credit_card && (
-              <div className="acct-type-card">
+              <div className="acct-type-card clickable" onClick={() => navigate(`/contas/${bank.id}?tab=cartao`)}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <div className="t-label">Cartão de crédito</div>
                   {viewedInvoice && viewedInvoice.outstanding_amount > 0 && (
@@ -274,7 +255,10 @@ export default function Accounts() {
                         cursor: 'pointer',
                         whiteSpace: 'nowrap',
                       }}
-                      onClick={() => setPayingCard({ card: creditCard.credit_card, invoice: viewedInvoice, bankName: bank.name, bankId: bank.id })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPayingCard({ card: creditCard.credit_card, invoice: viewedInvoice, bankName: bank.name, bankId: bank.id });
+                      }}
                     >
                       Pagar fatura
                     </button>
@@ -314,7 +298,7 @@ export default function Accounts() {
               </div>
               )}
               {investment && (
-              <div className="acct-type-card">
+              <div className="acct-type-card clickable" onClick={() => navigate(`/contas/${bank.id}?tab=inv`)}>
                 <div className="t-label">Investimento</div>
                 {assetsLoading ? (
                   <>
@@ -339,45 +323,6 @@ export default function Accounts() {
           </div>
         );
       })}
-
-      <AccountLedgerDrawer
-        open={!!ledgerBank}
-        bank={ledgerBank}
-        checking={ledgerChecking}
-        creditCard={ledgerCreditCard}
-        expenseCategories={expenseCategories}
-        incomeCategories={incomeCategories}
-        refreshKey={ledgerRefreshKey}
-        onClose={() => setLedgerBankId(null)}
-        onChanged={() => {
-          reloadBanks();
-          reloadAccounts();
-        }}
-        onEdit={setEditingTx}
-      />
-
-      <TransactionModal
-        open={!!editingTx}
-        transaction={editingTx}
-        checkingAccounts={checkingAccountsList}
-        creditCardAccounts={creditCardAccounts}
-        investmentAccounts={investmentAccounts}
-        expenseCategories={expenseCategories}
-        incomeCategories={incomeCategories}
-        onClose={() => setEditingTx(null)}
-        onCreated={() => {
-          setEditingTx(null);
-          setLedgerRefreshKey((k) => k + 1);
-          reloadBanks();
-          reloadAccounts();
-        }}
-        onDeleted={() => {
-          setEditingTx(null);
-          setLedgerRefreshKey((k) => k + 1);
-          reloadBanks();
-          reloadAccounts();
-        }}
-      />
 
       <BankConfigModal
         open={modalOpen}
