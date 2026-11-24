@@ -1,8 +1,10 @@
 import { getDefaultCurrency } from '../state/currentUserCurrency';
 import { currencySymbol } from './currency';
+import { valuesHidden } from './privacy';
 
 export function fmt(value, currency) {
   const v = Number(value) || 0;
+  if (valuesHidden()) return `${currencySymbol(currency || getDefaultCurrency())} ••••`;
   const s = Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const symbol = currencySymbol(currency || getDefaultCurrency());
   return (v < 0 ? `− ${symbol} ` : `${symbol} `) + s;

@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import QuickAddTransaction from './QuickAddTransaction';
 import { IconMenu } from './icons';
+import { subscribePrivacy, valuesHidden } from '../utils/privacy';
 
 export default function AppLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const location = useLocation();
+  // fmt() le o modo privacidade direto; remontar a tela faz todos os valores se atualizarem.
+  const hidden = useSyncExternalStore(subscribePrivacy, valuesHidden);
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -32,8 +35,8 @@ export default function AppLayout() {
         <IconMenu />
       </button>
       {mobileNavOpen && <div className="mobile-nav-overlay" onClick={() => setMobileNavOpen(false)} />}
-      <Sidebar onClose={() => setMobileNavOpen(false)} />
-      <main>
+      <Sidebar key={`s${hidden}`} onClose={() => setMobileNavOpen(false)} />
+      <main key={`m${hidden}`}>
         <Outlet />
       </main>
       <QuickAddTransaction />

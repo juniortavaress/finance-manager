@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { getThemePref, setThemePref } from '../../utils/theme';
+import { setValuesHidden, subscribePrivacy, valuesHidden } from '../../utils/privacy';
 
 const THEMES = [
   { key: 'claro', label: 'Claro', preview: '' },
@@ -9,6 +10,7 @@ const THEMES = [
 
 export default function PreferencesSection() {
   const [theme, setTheme] = useState(getThemePref);
+  const hidden = useSyncExternalStore(subscribePrivacy, valuesHidden);
 
   function chooseTheme(key) {
     setTheme(key);
@@ -41,6 +43,25 @@ export default function PreferencesSection() {
               {label}
             </button>
           ))}
+        </div>
+      </div>
+
+      <h3 className="set-subtitle">Privacidade</h3>
+      <div className="set-card">
+        <div className="set-row">
+          <div>
+            <div className="set-row-title">Ocultar valores</div>
+            <div className="set-row-sub">Troca os valores em dinheiro por •••• em todas as telas. Útil em público.</div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={hidden}
+            className={`set-switch${hidden ? ' on' : ''}`}
+            onClick={() => setValuesHidden(!hidden)}
+          >
+            <span />
+          </button>
         </div>
       </div>
     </>
