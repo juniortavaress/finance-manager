@@ -46,6 +46,9 @@ def login_required(fn):
         if user is None or user.deleted_at is not None:
             raise ApiError("Usuário não encontrado", 401)
 
+        if user.tokens_valid_after is not None and payload.get("iat", 0) < int(user.tokens_valid_after.timestamp()):
+            raise ApiError("Sessão encerrada, faça login novamente", 401)
+
         g.current_user = user
         _sync_installments_throttled(user.id)
         commit_if_dirty()

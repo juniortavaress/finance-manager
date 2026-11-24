@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { setToken } from '../../api/client';
 import { authApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 
@@ -22,8 +23,9 @@ function PasswordCard() {
 
     setSaving(true);
     try {
-      await authApi.changePassword({ current_password: current, new_password: next });
-      showSuccess('Senha alterada com sucesso.');
+      const data = await authApi.changePassword({ current_password: current, new_password: next });
+      if (data?.token) setToken(data.token);
+      showSuccess('Senha alterada com sucesso. Os outros dispositivos foram desconectados.');
       setCurrent('');
       setNext('');
       setConfirm('');
@@ -72,6 +74,40 @@ function PasswordCard() {
         </button>
       </div>
     </form>
+  );
+}
+
+function SessionsCard() {
+  const { showSuccess, showError } = useToast();
+  const [working, setWorking] = useState(false);
+
+  async function handleLogoutAll() {
+    setWorking(true);
+    try {
+      const data = await authApi.logoutAll();
+      if (data?.token) setToken(data.token);
+      showSuccess('Todos os outros dispositivos foram desconectados.');
+    } catch (err) {
+      showError(err.message || 'Não foi possível encerrar as sessões.');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  return (
+    <div className="set-card">
+      <div className="set-row">
+        <div>
+          <div className="set-row-title">Sair dos outros dispositivos</div>
+          <div className="set-row-sub">
+            Desconecta o Atmos em todos os outros celulares e computadores. Você continua conectado aqui.
+          </div>
+        </div>
+        <button type="button" className="set-btn" onClick={handleLogoutAll} disabled={working}>
+          {working ? 'Encerrando...' : 'Desconectar'}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -157,6 +193,9 @@ export default function SecuritySection() {
 
       <h3 className="set-subtitle">Senha</h3>
       <PasswordCard />
+
+      <h3 className="set-subtitle">Sessões</h3>
+      <SessionsCard />
 
       <h3 className="set-subtitle">Zona de perigo</h3>
       <DeleteAccountCard />

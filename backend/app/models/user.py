@@ -13,6 +13,8 @@ class User(BaseModel):
     avatar_url = db.Column(db.Text, nullable=True)
     currency_default = db.Column(db.Text, nullable=False, default="BRL")
     deleted_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Tokens emitidos antes deste instante deixam de valer (sair de todos os dispositivos).
+    tokens_valid_after = db.Column(db.DateTime(timezone=True), nullable=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
 
     def to_dict(self):

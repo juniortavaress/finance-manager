@@ -6,6 +6,7 @@ export const authApi = {
   me: () => api.get('/auth/me'),
   updateMe: (data) => api.patch('/auth/me', data),
   deleteAccount: (password) => api.delete('/auth/me', { password }),
+  logoutAll: () => api.post('/auth/logout-all'),
   changePassword: (data) => api.patch('/auth/password', data),
 };
 

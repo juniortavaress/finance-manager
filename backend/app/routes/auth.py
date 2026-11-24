@@ -116,9 +116,20 @@ def change_password():
         raise ApiError("A nova senha deve ser diferente da atual", 400)
 
     user.password_hash = hash_password(new)
+    # Trocar a senha derruba as outras sessoes; a atual segue com um token novo.
+    user.tokens_valid_after = dt.datetime.now(dt.timezone.utc)
     db.session.commit()
     reset(f"password:{user.id}")
-    return {"ok": True}
+    return {"ok": True, "token": issue_token(user)}
+
+
+@auth_bp.post("/logout-all")
+@login_required
+def logout_all():
+    user = g.current_user
+    user.tokens_valid_after = dt.datetime.now(dt.timezone.utc)
+    db.session.commit()
+    return {"ok": True, "token": issue_token(user)}
 
 
 @auth_bp.delete("/me")
