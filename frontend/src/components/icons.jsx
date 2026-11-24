@@ -228,3 +228,9 @@ export const IconDownload = (props) => (
     <path d="M5 19h14" />
   </svg>
 );
+
+export const IconPlus = (props) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" {...props}>
+    <path d="M12 4.5v15M4.5 12h15" />
+  </svg>
+);
