@@ -229,7 +229,7 @@ def export_transactions():
         )
 
     # BOM para o Excel abrir os acentos corretamente.
-    body = "﻿" + out.getvalue()
+    body = "\ufeff" + out.getvalue()
     filename = f"atmos-transacoes-{dt.date.today().isoformat()}.csv"
     return Response(
         body,
