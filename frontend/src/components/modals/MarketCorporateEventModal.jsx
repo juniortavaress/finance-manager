@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { marketDataApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import ModalShell from './ModalShell';
+import { useFormError } from '../../hooks/useFormError';
 
 /**
  * Modal para registrar um evento societario GLOBAL de mercado (desdobramento/
@@ -19,7 +20,7 @@ export default function MarketCorporateEventModal({ open, onClose, onSaved }) {
   const [splitRatio, setSplitRatio] = useState('');
   const [mergerRate, setMergerRate] = useState('');
   const [note, setNote] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   const isMerger = type === 'merger';
@@ -88,7 +89,6 @@ export default function MarketCorporateEventModal({ open, onClose, onSaved }) {
           </button>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
             <label>Tipo de evento</label>

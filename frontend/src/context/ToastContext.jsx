@@ -8,6 +8,7 @@ const AUTO_DISMISS_MS = 4000;
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const nextId = useRef(0);
+  const lastShown = useRef({});
 
   const dismiss = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -15,6 +16,11 @@ export function ToastProvider({ children }) {
 
   const push = useCallback(
     (type, message) => {
+      // Mensagem igual em sequencia (ex.: erro mostrado por dois caminhos) aparece uma vez so.
+      const now = Date.now();
+      const key = `${type}:${message}`;
+      if (now - (lastShown.current[key] || 0) < 1000) return;
+      lastShown.current[key] = now;
       const id = nextId.current++;
       setToasts((prev) => [...prev, { id, type, message }]);
       setTimeout(() => dismiss(id), AUTO_DISMISS_MS);

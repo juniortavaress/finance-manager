@@ -7,6 +7,7 @@ import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
 import { localIsoDate } from '../../utils/date';
+import { useFormError } from '../../hooks/useFormError';
 
 function todayIso() {
   return localIsoDate();
@@ -37,7 +38,7 @@ export default function RecurringModal({
   const [endDate, setEndDate] = useState('');
   const [autoDebit, setAutoDebit] = useState(true);
   const [editScope, setEditScope] = useState('current_and_future');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -188,7 +189,6 @@ export default function RecurringModal({
           </div>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
             <div className="seg">

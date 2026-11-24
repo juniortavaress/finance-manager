@@ -3,6 +3,7 @@ import { useNavigate, useLocation, Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { IconEye, IconEyeOff } from '../components/icons';
+import { useFormError } from '../hooks/useFormError';
 
 const REMEMBERED_EMAIL_KEY = 'cofre_remembered_email';
 
@@ -15,7 +16,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(() => !!localStorage.getItem(REMEMBERED_EMAIL_KEY));
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   if (!loading && isAuthenticated) {
@@ -64,7 +65,6 @@ export default function Login() {
         <div className="login-title">Entrar</div>
         <div className="login-subtitle">Acesse sua conta para continuar</div>
 
-        {error && <div className="login-error">{error}</div>}
 
         <form className="login-form" onSubmit={handleSubmit}>
           <div className="field">

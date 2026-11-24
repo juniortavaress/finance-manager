@@ -5,6 +5,7 @@ import { useToast } from '../../context/ToastContext';
 import { IconTrash } from '../icons';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { useFormError } from '../../hooks/useFormError';
 
 const TYPE_OPTIONS = [
   { value: 'renda_fixa', label: 'Renda fixa' },
@@ -54,7 +55,7 @@ export default function NewAssetModal({
   const [fixedIncomeIndexer, setFixedIncomeIndexer] = useState(INDEXER_OPTIONS[0]);
   const [fixedIncomeRatePct, setFixedIncomeRatePct] = useState('');
   const [maturityDate, setMaturityDate] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -199,7 +200,6 @@ export default function NewAssetModal({
           </div>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
             <label>Banco / corretora</label>

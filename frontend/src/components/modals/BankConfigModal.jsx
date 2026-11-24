@@ -7,6 +7,7 @@ import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
 import { localIsoDate } from '../../utils/date';
+import { useFormError } from '../../hooks/useFormError';
 
 const COLOR_OPTIONS = [
   '#0F5C5C',
@@ -61,7 +62,7 @@ export default function BankConfigModal({
   const [creditLimit, setCreditLimit] = useState('');
   const [closingDay, setClosingDay] = useState('5');
   const [dueDay, setDueDay] = useState('15');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
   const [verifyingKind, setVerifyingKind] = useState(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -282,7 +283,6 @@ export default function BankConfigModal({
           </div>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="bank-cfg-top">
             <div className="field">

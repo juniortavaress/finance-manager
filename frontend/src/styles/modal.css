@@ -324,15 +324,6 @@
   color: #fff;
 }
 
-.form-error-banner {
-  background: var(--brick-soft);
-  color: var(--brick);
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  margin-bottom: 16px;
-}
-
 .modal.modal-wide {
   max-width: 640px;
 }

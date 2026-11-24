@@ -3,12 +3,13 @@ import { creditCardsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
+import { useFormError } from '../../hooks/useFormError';
 
 export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, bankName, bankId, checkingAccounts = [] }) {
   const { showSuccess, showError } = useToast();
 
   const [accountId, setAccountId] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -52,7 +53,6 @@ export default function PayInvoiceModal({ open, onClose, onPaid, card, invoice, 
           </button>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', marginBottom: 14 }}>
             Fatura {bankName} — saldo em aberto: <strong>{fmt(outstanding)}</strong>. O valor será debitado da conta

@@ -6,6 +6,7 @@ import { IconTrash } from '../icons';
 import CurrencyInput from '../CurrencyInput';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
+import { useFormError } from '../../hooks/useFormError';
 
 const ICON_OPTIONS = [
   '🛒', '🏠', '🚗', '💻', '🍽️', '➕', '🎬', '💰', '💼', '✨', '📁', '🐾', '👕', '🎓', '🌍', '✈️', '🎁', '⚽',
@@ -26,7 +27,7 @@ export default function CategoryConfigModal({ open, onClose, onSaved, category, 
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
   const [kind, setKind] = useState('expense');
   const [budgetAmount, setBudgetAmount] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [checkingUsage, setCheckingUsage] = useState(false);
@@ -125,7 +126,6 @@ export default function CategoryConfigModal({ open, onClose, onSaved, category, 
           </div>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
             <div className="seg">

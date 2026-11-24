@@ -8,6 +8,7 @@ import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
 import { localIsoDate } from '../../utils/date';
+import { useFormError } from '../../hooks/useFormError';
 
 const INSTALLMENT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 const INSTALLMENT_CUSTOM = 'custom';
@@ -47,7 +48,7 @@ export default function TransactionModal({
   const [recorrente, setRecorrente] = useState(false);
   const [autoDebit, setAutoDebit] = useState(true);
   const [endDate, setEndDate] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -241,7 +242,6 @@ export default function TransactionModal({
           </div>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           {!isEditing && !installmentOnly && (
             <div className="field">

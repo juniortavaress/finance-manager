@@ -4,12 +4,13 @@ import { useToast } from '../../context/ToastContext';
 import { maskToNumber } from '../../utils/currency';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
+import { useFormError } from '../../hooks/useFormError';
 
 export default function AdvanceInstallmentModal({ open, onClose, onDone, plan, scheduledCount }) {
   const { showSuccess, showError } = useToast();
   const [count, setCount] = useState(1);
   const [totalAmount, setTotalAmount] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -53,7 +54,6 @@ export default function AdvanceInstallmentModal({ open, onClose, onDone, plan, s
           </button>
         </div>
         <form className="modal-body" onSubmit={handleAdvance}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', marginBottom: 14 }}>{plan?.description}</p>
 

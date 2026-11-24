@@ -6,6 +6,7 @@ import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
 import { planAllocations, totalOfOrigins } from '../../utils/settlement';
 import { localIsoDate } from '../../utils/date';
+import { useFormError } from '../../hooks/useFormError';
 
 function todayIso() {
   return localIsoDate();
@@ -42,7 +43,7 @@ export default function SettleUpModal({
   const [date, setDate] = useState(todayIso());
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -117,7 +118,6 @@ export default function SettleUpModal({
           </span>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field-row">
             <div className="field">

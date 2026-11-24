@@ -11,6 +11,7 @@ import PreferencesSection from '../components/settings/PreferencesSection';
 import SecuritySection from '../components/settings/SecuritySection';
 import { CURRENCY_OPTIONS } from '../utils/currency';
 import MarketCorporateEventModal from '../components/modals/MarketCorporateEventModal';
+import { useFormError } from '../hooks/useFormError';
 
 const EVENT_TYPE_LABELS = {
   split: 'Desdobramento/Grupamento',
@@ -32,7 +33,7 @@ function ProfileSection({ user }) {
   const { showSuccess, showError } = useToast();
   const [name, setName] = useState(user?.name || '');
   const [currencyDefault, setCurrencyDefault] = useState(user?.currency_default || 'BRL');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -83,7 +84,6 @@ function ProfileSection({ user }) {
       </div>
 
       <form className="set-card set-form" onSubmit={handleSave}>
-        {error && <div className="form-error-banner">{error}</div>}
 
         <div className="set-field">
           <div className="set-field-label">

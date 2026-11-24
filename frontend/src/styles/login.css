@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ink);
+  background: var(--dark);
   padding: 20px;
 }
 
@@ -117,15 +117,6 @@
 .login-submit:disabled {
   opacity: 0.65;
   cursor: not-allowed;
-}
-
-.login-error {
-  background: var(--brick-soft);
-  color: var(--brick);
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-size: 12.5px;
-  margin-bottom: 18px;
 }
 
 .login-hint {

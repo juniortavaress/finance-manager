@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useFormError } from '../hooks/useFormError';
 
 export default function Register() {
   const { register, isAuthenticated, loading } = useAuth();
@@ -11,7 +12,7 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   if (!loading && isAuthenticated) {
@@ -61,7 +62,6 @@ export default function Register() {
         <div className="login-title">Criar conta</div>
         <div className="login-subtitle">Comece a organizar suas finanças</div>
 
-        {error && <div className="login-error">{error}</div>}
 
         <form className="login-form" onSubmit={handleSubmit}>
           <div className="field">

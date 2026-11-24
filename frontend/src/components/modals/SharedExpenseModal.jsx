@@ -10,6 +10,7 @@ import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
 import { localIsoDate } from '../../utils/date';
+import { useFormError } from '../../hooks/useFormError';
 
 function todayIso() {
   return localIsoDate();
@@ -52,7 +53,7 @@ export default function SharedExpenseModal({
   const [customValues, setCustomValues] = useState({});
   const [payerAccountId, setPayerAccountId] = useState('');
   const [payerCategoryId, setPayerCategoryId] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -253,7 +254,6 @@ export default function SharedExpenseModal({
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body modal-body-scroll">
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
             <label>Descrição</label>

@@ -6,6 +6,7 @@ import { fmt } from '../../utils/format';
 import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
 import { localIsoDate } from '../../utils/date';
+import { useFormError } from '../../hooks/useFormError';
 
 function todayIso() {
   return localIsoDate();
@@ -22,7 +23,7 @@ export default function TransferModal({ open, onClose, onCreated, checkingAccoun
   const [lastEditedField, setLastEditedField] = useState('rate');
   const [date, setDate] = useState(todayIso());
   const [description, setDescription] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   const allAccounts = [...checkingAccounts, ...investmentAccounts];
@@ -42,6 +43,13 @@ export default function TransferModal({ open, onClose, onCreated, checkingAccoun
     setDate(todayIso());
     setDescription('');
     setError('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (open && allAccounts.length < 2) {
+      showError('Você precisa de pelo menos duas contas (corrente ou investimento) para transferir dinheiro.');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -138,12 +146,6 @@ export default function TransferModal({ open, onClose, onCreated, checkingAccoun
           </button>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
-          {allAccounts.length < 2 && (
-            <div className="form-error-banner">
-              Você precisa de pelo menos duas contas (corrente ou investimento) para transferir dinheiro.
-            </div>
-          )}
 
           <div className="field">
             <label>De</label>

@@ -7,6 +7,7 @@ import ModalShell from './ModalShell';
 import CurrencyInput from '../CurrencyInput';
 import { IconTrash } from '../icons';
 import { localIsoDate } from '../../utils/date';
+import { useFormError } from '../../hooks/useFormError';
 
 function todayIso() {
   return localIsoDate();
@@ -49,7 +50,7 @@ export default function FixedIncomeTradeModal({
   const [ratePct, setRatePct] = useState('');
   const [redeemAll, setRedeemAll] = useState(false);
   const [preview, setPreview] = useState(null);
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
   // Enquanto o usuario nao mexer no valor, "resgatar tudo" acompanha o saldo
   // estimado (que muda com a data).
@@ -200,7 +201,6 @@ export default function FixedIncomeTradeModal({
           </div>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
             <label>Data do {isSell ? 'resgate' : 'aporte'}</label>

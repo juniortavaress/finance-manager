@@ -9,6 +9,7 @@ import FixedIncomeTradeModal from './FixedIncomeTradeModal';
 import CurrencyInput from '../CurrencyInput';
 import { IconTrash } from '../icons';
 import { localIsoDate } from '../../utils/date';
+import { useFormError } from '../../hooks/useFormError';
 
 function todayIso() {
   return localIsoDate();
@@ -45,7 +46,7 @@ function UnitsTradeModal({
   const [totalAmount, setTotalAmount] = useState('');
   const [noteId, setNoteId] = useState('');
   const [fixedIncomeRatePct, setFixedIncomeRatePct] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   const isFixedIncomeBuy =
@@ -179,7 +180,6 @@ function UnitsTradeModal({
           </div>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
             <label>Nº da nota (opcional)</label>

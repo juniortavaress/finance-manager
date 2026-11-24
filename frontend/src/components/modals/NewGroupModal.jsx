@@ -3,6 +3,7 @@ import { groupsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import ModalShell from './ModalShell';
 import ParticipantPicker from '../ParticipantPicker';
+import { useFormError } from '../../hooks/useFormError';
 
 const ICON_OPTIONS = [
   '👥', '🎉', '🏖️', '🛍️', '🏕️', '💍', '🛒', '🏠', '🚗', '💻', '🍽️', '➕', '🎬', '💰', '💼', '✨', '📁',
@@ -21,7 +22,7 @@ export default function NewGroupModal({ open, onClose, onSaved, onCreated, group
   const [icon, setIcon] = useState(ICON_OPTIONS[0]);
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
   const [memberIds, setMemberIds] = useState([]);
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -76,7 +77,6 @@ export default function NewGroupModal({ open, onClose, onSaved, onCreated, group
           </span>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <div className="field">
             <label>Nome do grupo</label>

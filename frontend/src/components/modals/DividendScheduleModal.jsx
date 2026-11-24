@@ -8,6 +8,7 @@ import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import CurrencyInput from '../CurrencyInput';
 import BrokerAssetPicker from '../BrokerAssetPicker';
+import { useFormError } from '../../hooks/useFormError';
 
 const KIND_OPTIONS = [
   { value: 'dividendo', label: 'Dividendo' },
@@ -47,7 +48,7 @@ export default function DividendScheduleModal({
   const [fixedAmount, setFixedAmount] = useState('');
   const [frequency, setFrequency] = useState('monthly');
   const [dayOfMonth, setDayOfMonth] = useState('15');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -145,7 +146,6 @@ export default function DividendScheduleModal({
           </div>
         </div>
         <form className="modal-body" onSubmit={handleSubmit}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <BrokerAssetPicker
             assets={assets}

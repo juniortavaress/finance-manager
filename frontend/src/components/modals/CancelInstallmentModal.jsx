@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { installmentsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import ModalShell from './ModalShell';
+import { useFormError } from '../../hooks/useFormError';
 
 export default function CancelInstallmentModal({ open, onClose, onDone, plan, scheduledTxs }) {
   const { showSuccess, showError } = useToast();
   const [fromNumber, setFromNumber] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -47,7 +48,6 @@ export default function CancelInstallmentModal({ open, onClose, onDone, plan, sc
           </button>
         </div>
         <form className="modal-body" onSubmit={handleCancel}>
-          {error && <div className="form-error-banner">{error}</div>}
 
           <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', marginBottom: 14 }}>{plan?.description}</p>
 
