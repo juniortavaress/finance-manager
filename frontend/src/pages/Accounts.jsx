@@ -12,12 +12,9 @@ import PayInvoiceModal from '../components/modals/PayInvoiceModal';
 import TransferModal from '../components/modals/TransferModal';
 import TransactionModal from '../components/modals/TransactionModal';
 import AccountLedgerDrawer from '../components/AccountLedgerDrawer';
-import InvoiceHistoryChart from '../components/charts/InvoiceHistoryChart';
 import Skeleton from '../components/Skeleton';
 import { IconPencil, IconSwap } from '../components/icons';
 import { localIsoDate } from '../utils/date';
-
-const FALLBACK_COLOR = '#0F5C5C';
 
 function todayIso() {
   return localIsoDate();
@@ -30,7 +27,6 @@ export default function Accounts() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState(null);
   const [payingCard, setPayingCard] = useState(null);
-  const [highlightedCardId, setHighlightedCardId] = useState(null);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [ledgerBankId, setLedgerBankId] = useState(null);
   const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0);
@@ -130,39 +126,6 @@ export default function Accounts() {
     return invoices[idx] || null;
   }
 
-  function toggleHighlight(cardId) {
-    setHighlightedCardId((prev) => (prev === cardId ? null : cardId));
-  }
-
-  function colorForAccount(account) {
-    return banks.find((b) => b.id === account.bank_id)?.color_hex || FALLBACK_COLOR;
-  }
-
-  // Pivo: agrupa por mes, uma barra por cartao dentro de cada grupo.
-  const monthGroups = useMemo(() => {
-    const months = new Set();
-    Object.values(invoicesByCard).forEach((invoices) => {
-      invoices.forEach((inv) => months.add(inv.reference_month));
-    });
-    const sortedMonths = [...months].sort();
-
-    return sortedMonths.map((referenceMonth) => ({
-      referenceMonth,
-      bars: creditCardAccounts.map((account) => {
-        const invoice = (invoicesByCard[account.credit_card.id] || []).find(
-          (i) => i.reference_month === referenceMonth
-        );
-        return { account, invoice, amount: invoice?.total_amount || 0 };
-      }),
-    }));
-  }, [creditCardAccounts, invoicesByCard]);
-
-  // Enquanto os dados globais ainda nao chegaram, nao da pra saber se existe
-  // algum cartao de credito (o card so' deve aparecer se houver fatura pra
-  // mostrar) - assume que pode haver, pra reservar o espaco com skeleton em
-  // vez do card aparecer do nada depois e empurrar o resto da tela pra baixo.
-  const showInvoiceHistoryCard = !loaded || invoicesLoading ? true : monthGroups.length > 0;
-
   return (
     <div className="screen active">
       <div className="topbar">
@@ -177,34 +140,6 @@ export default function Accounts() {
           </div>
         </div>
       </div>
-
-      {showInvoiceHistoryCard && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <h3>Histórico de faturas por mês</h3>
-          {!loaded || invoicesLoading ? (
-            <Skeleton width="100%" height={180} radius={8} />
-          ) : (
-            <>
-              <InvoiceHistoryChart
-                monthGroups={monthGroups}
-                creditCardAccounts={creditCardAccounts}
-                colorForAccount={colorForAccount}
-                highlightedCardId={highlightedCardId}
-                onToggleHighlight={toggleHighlight}
-              />
-
-              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--line)' }}>
-                {creditCardAccounts.map((account) => (
-                  <div key={account.credit_card.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--ink-soft)' }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 3, background: colorForAccount(account), display: 'inline-block' }} />
-                    {account.name}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       {!loaded &&
         [0, 1].map((i) => (
