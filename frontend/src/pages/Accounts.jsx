@@ -9,11 +9,10 @@ import { expenseCategories as filterExpense, incomeCategories as filterIncome } 
 import { fmt, monthLabel } from '../utils/format';
 import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
-import TransferModal from '../components/modals/TransferModal';
 import TransactionModal from '../components/modals/TransactionModal';
 import AccountLedgerDrawer from '../components/AccountLedgerDrawer';
 import Skeleton from '../components/Skeleton';
-import { IconPencil, IconSwap } from '../components/icons';
+import { IconPencil } from '../components/icons';
 import { localIsoDate } from '../utils/date';
 
 function todayIso() {
@@ -27,7 +26,6 @@ export default function Accounts() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState(null);
   const [payingCard, setPayingCard] = useState(null);
-  const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [ledgerBankId, setLedgerBankId] = useState(null);
   const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0);
   const [editingTx, setEditingTx] = useState(null);
@@ -41,9 +39,10 @@ export default function Accounts() {
   const creditCardAccounts = useMemo(() => accounts.filter((a) => a.type === 'credit_card' && a.credit_card), [accounts]);
   const investmentAccounts = useMemo(() => accounts.filter((a) => !!a.investment_account), [accounts]);
   const checkingAccountsList = useMemo(() => filterChecking(accounts), [accounts]);
-  const { data: assetsData, loading: assetsLoading, reload: reloadAssets } = useFetch(
+  const { data: assetsData, loading: assetsLoading } = useFetch(
     (signal) => investmentsApi.listAssets(false, signal),
-    []
+    [],
+    { cacheKey: 'accounts.assets' }
   );
   const investedByAccountId = useMemo(() => {
     const map = {};
@@ -55,6 +54,11 @@ export default function Accounts() {
     });
     return map;
   }, [assetsData, investmentAccounts]);
+
+  const sortedBanks = useMemo(() => {
+    const typeCount = (bankId) => accounts.filter((a) => a.bank_id === bankId).length;
+    return [...banks].sort((a, b) => typeCount(a.id) - typeCount(b.id) || a.name.localeCompare(b.name, 'pt-BR'));
+  }, [banks, accounts]);
 
   function openNewBank() {
     setEditingBank(null);
@@ -130,14 +134,8 @@ export default function Accounts() {
     <div className="screen active">
       <div className="topbar">
         <h1>Contas &amp; Bancos</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div className="period" onClick={() => setTransferModalOpen(true)}>
-            <IconSwap style={{ width: 13, height: 13, marginRight: 5, verticalAlign: -2 }} />
-            transferir
-          </div>
-          <div className="period" onClick={openNewBank}>
-            + novo banco
-          </div>
+        <div className="period" onClick={openNewBank}>
+          + novo banco
         </div>
       </div>
 
@@ -164,7 +162,7 @@ export default function Accounts() {
 
       {loaded && banks.length === 0 && <div className="empty-state">Nenhum banco cadastrado ainda.</div>}
 
-      {loaded && banks.map((bank) => {
+      {loaded && sortedBanks.map((bank) => {
         const bankAccounts = accounts.filter((a) => a.bank_id === bank.id);
         const checking = bankAccounts.find((a) => a.type === 'checking');
         const creditCard = bankAccounts.find((a) => a.type === 'credit_card');
@@ -172,6 +170,7 @@ export default function Accounts() {
         const cardInvoices = creditCard?.credit_card ? invoicesByCard[creditCard.credit_card.id] || [] : [];
         const cardInvoiceIdx = creditCard?.credit_card ? invoiceIndexByCard[creditCard.credit_card.id] ?? 0 : 0;
         const viewedInvoice = creditCard?.credit_card ? selectedInvoice(creditCard.credit_card.id) : null;
+        const typeCount = [checking, creditCard, investment].filter(Boolean).length;
 
         return (
           <div className="acct-block" key={bank.id}>
@@ -249,12 +248,15 @@ export default function Accounts() {
               </button>
               </div>
             </div>
-            <div className="acct-types">
+            <div className={`acct-types n${typeCount}`}>
+              {checking && (
               <div className="acct-type-card">
                 <div className="t-label">Conta corrente</div>
-                <div className="t-val num">{checking ? fmt(checking.balance, checking.currency) : '—'}</div>
+                <div className="t-val num">{fmt(checking.balance, checking.currency)}</div>
                 <div className="t-sub">disponível</div>
               </div>
+              )}
+              {creditCard?.credit_card && (
               <div className="acct-type-card">
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                   <div className="t-label">Cartão de crédito</div>
@@ -306,13 +308,15 @@ export default function Accounts() {
                 ) : (
                   <>
                     <div className="t-val num">—</div>
-                    <div className="t-sub">sem cartão</div>
+                    <div className="t-sub">sem faturas</div>
                   </>
                 )}
               </div>
+              )}
+              {investment && (
               <div className="acct-type-card">
                 <div className="t-label">Investimento</div>
-                {investment && assetsLoading ? (
+                {assetsLoading ? (
                   <>
                     <Skeleton width={90} height={17} style={{ marginBottom: 5 }} />
                     <Skeleton width={110} height={11} />
@@ -320,18 +324,17 @@ export default function Accounts() {
                 ) : (
                   <>
                     <div className="t-val num">
-                      {investment
-                        ? fmt(investment.balance + (investedByAccountId[investment.id] || 0), investment.currency)
-                        : '—'}
+                      {fmt(investment.balance + (investedByAccountId[investment.id] || 0), investment.currency)}
                     </div>
                     <div className="t-sub">
-                      {investment && investment.balance > 0
+                      {investment.balance > 0
                         ? `${fmt(investment.balance, investment.currency)} não alocado`
                         : 'saldo aplicado'}
                     </div>
                   </>
                 )}
               </div>
+              )}
             </div>
           </div>
         );
@@ -405,18 +408,6 @@ export default function Accounts() {
         }}
       />
 
-      <TransferModal
-        open={transferModalOpen}
-        checkingAccounts={checkingAccountsList}
-        investmentAccounts={investmentAccounts}
-        onClose={() => setTransferModalOpen(false)}
-        onCreated={() => {
-          setTransferModalOpen(false);
-          reloadBanks();
-          reloadAccounts();
-          reloadAssets();
-        }}
-      />
     </div>
   );
 }

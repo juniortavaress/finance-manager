@@ -502,3 +502,10 @@
 .acct-action:hover {
   border-color: var(--teal);
 }
+
+.acct-types.n1 {
+  grid-template-columns: 1fr;
+}
+.acct-types.n2 {
+  grid-template-columns: repeat(2, 1fr);
+}
