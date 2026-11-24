@@ -49,6 +49,16 @@ def create_app():
     CORS(app, origins=_cors_origins(), max_age=7200)
 
     @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault("Cache-Control", "no-store")
+        if not _is_debug():
+            response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return response
+
+    @app.after_request
     def compress_json(response):
         # gzip nas respostas JSON (o /investments/summary passa de 50 KB):
         # 5-8x menos bytes, o que pesa no celular/rede movel.
