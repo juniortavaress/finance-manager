@@ -5,6 +5,7 @@ from app.errors import ApiError
 from app.extensions import db
 from app.models import User
 from app.rate_limit import hit, reset
+from app.validation import clean_https_url
 from app.services.auth_service import hash_password, issue_token, verify_password
 
 auth_bp = Blueprint("auth", __name__)
@@ -84,7 +85,7 @@ def update_me():
             raise ApiError("Informe seu nome", 400)
         user.name = name
     if "avatar_url" in data:
-        user.avatar_url = (data["avatar_url"] or "").strip() or None
+        user.avatar_url = clean_https_url(data["avatar_url"], "Foto")
     if "currency_default" in data:
         currency = (data["currency_default"] or "").strip() or "BRL"
         user.currency_default = currency

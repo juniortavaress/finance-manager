@@ -18,6 +18,7 @@ from app.models import (
     Transaction,
 )
 from app.models.transaction import TRANSACTION_STATUSES
+from app.validation import like_pattern
 from app.services.finance_service import (
     add_months,
     apply_transaction_side_effects,
@@ -73,7 +74,7 @@ def _parse_filters():
     if status in ("confirmed", "scheduled"):
         filters.append(Transaction.status == status)
     if search:
-        filters.append(Transaction.description.ilike(f"%{search}%"))
+        filters.append(Transaction.description.ilike(like_pattern(search), escape="\\"))
     if date_from:
         filters.append(Transaction.date >= dt.date.fromisoformat(date_from))
     if date_to:

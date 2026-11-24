@@ -1,3 +1,5 @@
+from decimal import InvalidOperation
+
 from flask import current_app, jsonify
 
 
@@ -18,6 +20,11 @@ def register_error_handlers(app):
     @app.errorhandler(ApiError)
     def handle_api_error(err):
         return jsonify(err.to_dict()), err.status_code
+
+    @app.errorhandler(ValueError)
+    @app.errorhandler(InvalidOperation)
+    def handle_invalid_input(err):
+        return jsonify({"error": "Dados inválidos na requisição"}), 400
 
     @app.errorhandler(404)
     def handle_404(err):

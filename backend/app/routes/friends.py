@@ -7,6 +7,7 @@ from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
 from app.models import Friendship, SharedExpense, Settlement, User
+from app.validation import like_pattern
 from app.services.split_service import compute_friend_total_balance
 
 friends_bp = Blueprint("friends", __name__)
@@ -50,7 +51,7 @@ def search_users():
         User.query.filter(
             User.deleted_at.is_(None),
             User.id.notin_(excluded_ids),
-            or_(User.name.ilike(f"%{q}%"), User.email.ilike(f"%{q}%")),
+            or_(User.name.ilike(like_pattern(q), escape="\\"), User.email.ilike(like_pattern(q), escape="\\")),
         )
         .limit(20)
         .all()

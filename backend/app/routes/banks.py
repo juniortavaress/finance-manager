@@ -4,6 +4,7 @@ from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
 from app.models import Account, Bank, RecurringTransaction, Transaction
+from app.validation import clean_hex_color, clean_https_url
 
 banks_bp = Blueprint("banks", __name__)
 
@@ -44,8 +45,8 @@ def create_bank():
     bank = Bank(
         user_id=g.current_user.id,
         name=name,
-        color_hex=data.get("color_hex") or "#0F5C5C",
-        logo_url=data.get("logo_url"),
+        color_hex=clean_hex_color(data.get("color_hex") or "#0F5C5C"),
+        logo_url=clean_https_url(data.get("logo_url"), "Logo"),
     )
     db.session.add(bank)
     db.session.commit()
@@ -60,9 +61,17 @@ def update_bank(bank_id):
         raise ApiError("Banco não encontrado", 404)
 
     data = request.get_json(silent=True) or {}
-    for field in ("name", "color_hex", "logo_url", "archived"):
-        if field in data:
-            setattr(bank, field, data[field])
+    if "name" in data:
+        name = (data["name"] or "").strip()
+        if not name:
+            raise ApiError("Nome do banco é obrigatório", 400)
+        bank.name = name
+    if "color_hex" in data:
+        bank.color_hex = clean_hex_color(data["color_hex"])
+    if "logo_url" in data:
+        bank.logo_url = clean_https_url(data["logo_url"], "Logo")
+    if "archived" in data:
+        bank.archived = bool(data["archived"])
     db.session.commit()
     return {"bank": bank.to_dict()}
 
