@@ -5,6 +5,7 @@ export const authApi = {
   register: (data) => api.post('/auth/register', data),
   me: () => api.get('/auth/me'),
   updateMe: (data) => api.patch('/auth/me', data),
+  changePassword: (data) => api.patch('/auth/password', data),
 };
 
 export const banksApi = {

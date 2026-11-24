@@ -92,3 +92,28 @@ def update_me():
 
     db.session.commit()
     return {"user": user.to_dict()}
+
+
+@auth_bp.patch("/password")
+@login_required
+def change_password():
+    data = request.get_json(silent=True) or {}
+    user = g.current_user
+    current = data.get("current_password") or ""
+    new = data.get("new_password") or ""
+
+    hit(f"password:{user.id}", LOGIN_MAX_ATTEMPTS, RATE_WINDOW_SECONDS)
+
+    if not verify_password(current, user.password_hash):
+        raise ApiError("Senha atual incorreta", 400)
+    if len(new) < MIN_PASSWORD_LENGTH:
+        raise ApiError(f"A nova senha deve ter pelo menos {MIN_PASSWORD_LENGTH} caracteres", 400)
+    if len(new.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        raise ApiError("A nova senha é muito longa", 400)
+    if new == current:
+        raise ApiError("A nova senha deve ser diferente da atual", 400)
+
+    user.password_hash = hash_password(new)
+    db.session.commit()
+    reset(f"password:{user.id}")
+    return {"ok": True}

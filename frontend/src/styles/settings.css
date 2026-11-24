@@ -236,6 +236,22 @@
 .set-form .form-error-banner {
   margin-top: 14px;
 }
+.set-subtitle {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-faint);
+  font-weight: 500;
+  margin: 22px 0 10px;
+}
+.set-subtitle:first-of-type {
+  margin-top: 0;
+}
+.set-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 14px 0 12px;
+}
 .set-savebar {
   position: sticky;
   bottom: 12px;
