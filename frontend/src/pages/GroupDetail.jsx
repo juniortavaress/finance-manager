@@ -88,9 +88,6 @@ export default function GroupDetail() {
   if (!group) {
     return (
       <div className="screen">
-        <div className="back-link" onClick={() => navigate('/amigos/grupos')}>
-          ← Voltar pra Grupos
-        </div>
       </div>
     );
   }
@@ -144,9 +141,6 @@ export default function GroupDetail() {
 
   return (
     <div className="screen">
-      <div className="back-link" onClick={() => navigate('/amigos/grupos')}>
-        ← Voltar pra Grupos
-      </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
         <button
           type="button"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { friendsApi } from '../api/resources';
@@ -39,7 +39,6 @@ function initials(name) {
 
 export default function FriendDetail() {
   const { friendUserId } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { showError } = useToast();
   const { friends, reload: reloadFriends } = useFriends();
@@ -121,9 +120,6 @@ export default function FriendDetail() {
   if (!friend) {
     return (
       <div className="screen">
-        <div className="back-link" onClick={() => navigate('/amigos/lista')}>
-          ← Voltar pra Amigos
-        </div>
         <div className="empty-hint">Amigo não encontrado.</div>
       </div>
     );
@@ -141,9 +137,6 @@ export default function FriendDetail() {
 
   return (
     <div className="screen">
-      <div className="back-link" onClick={() => navigate('/amigos/lista')}>
-        ← Voltar pra Amigos
-      </div>
       <div className="topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
           <div className="friend-avatar">{initials(friend.name)}</div>

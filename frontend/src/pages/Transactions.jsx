@@ -127,26 +127,6 @@ export default function Transactions() {
   const entradas = txData?.sum_income || 0;
   const saidas = txData?.sum_expense || 0;
 
-  const hasActiveFilters = !!(
-    search ||
-    bankFilter ||
-    accountTypeFilter ||
-    categoryFilter ||
-    typeFilter ||
-    dateFrom ||
-    dateTo
-  );
-
-  function clearFilters() {
-    setSearch('');
-    setBankFilter('');
-    setAccountTypeFilter('');
-    setCategoryFilter('');
-    setTypeFilter('');
-    setDateFrom('');
-    setDateTo('');
-  }
-
   return (
     <div className="screen active">
       <div className="topbar">
@@ -191,25 +171,6 @@ export default function Transactions() {
             <IconChevronDown
               style={{ width: 12, height: 12, transition: 'transform 0.15s ease', transform: filtersOpen ? 'rotate(180deg)' : 'none' }}
             />
-          </button>
-          <button
-            type="button"
-            onClick={clearFilters}
-            disabled={!hasActiveFilters}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              background: 'none',
-              border: 'none',
-              fontSize: 12,
-              fontWeight: 500,
-              color: hasActiveFilters ? 'var(--teal)' : 'var(--ink-faint)',
-              cursor: hasActiveFilters ? 'pointer' : 'default',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            ✕ Limpar
           </button>
         </div>
 

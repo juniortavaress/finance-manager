@@ -2,16 +2,6 @@
 .screen {
   width: 100%;
 }
-.back-link {
-  font-size: 12.5px;
-  color: var(--ink-soft);
-  cursor: pointer;
-  margin-bottom: 14px;
-  display: inline-block;
-}
-.back-link:hover {
-  color: var(--teal);
-}
 .empty-hint {
   padding: 16px 4px;
   font-size: 12.5px;
