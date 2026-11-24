@@ -99,11 +99,14 @@ export default function Sidebar({ onClose }) {
   useEffect(() => onInstallAvailabilityChange(setInstallable), []);
 
   async function handleInstall() {
-    if (installable) {
+    // Le o estado atual do convite (nao o do render), que pode ter chegado depois.
+    if (installable || canInstall()) {
       await promptInstall();
       return;
     }
-    showInfo('No navegador: menu ⋮ → "Instalar aplicativo". No iPhone: Compartilhar → "Adicionar à Tela de Início".');
+    showInfo(
+      'Se o Atmos já está instalado, abra-o pelo ícone do app. Senão, no navegador: menu ⋮ → "Instalar aplicativo". No iPhone: Compartilhar → "Adicionar à Tela de Início".'
+    );
   }
 
   function handleLogout() {
