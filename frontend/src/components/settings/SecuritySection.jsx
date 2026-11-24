@@ -3,7 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { setToken } from '../../api/client';
 import { authApi } from '../../api/resources';
+import { useFetch } from '../../hooks/useFetch';
+import { IconMonitor, IconPhone } from '../icons';
 import { useToast } from '../../context/ToastContext';
+import { useFormError } from '../../hooks/useFormError';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -12,7 +15,7 @@ function PasswordCard() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
+  const [, setError] = useFormError();
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e) {
@@ -42,7 +45,6 @@ function PasswordCard() {
 
   return (
     <form className="set-card set-form" onSubmit={handleSubmit}>
-      {error && <div className="form-error-banner">{error}</div>}
 
       <div className="set-field">
         <div className="set-field-label">
@@ -77,36 +79,91 @@ function PasswordCard() {
   );
 }
 
+function formatLastUse(iso) {
+  const date = new Date(iso);
+  const minutes = Math.round((Date.now() - date.getTime()) / 60000);
+  if (minutes < 2) return 'agora';
+  if (minutes < 60) return `há ${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `há ${hours} h`;
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 function SessionsCard() {
   const { showSuccess, showError } = useToast();
-  const [working, setWorking] = useState(false);
+  const { data, loading, reload } = useFetch((signal) => authApi.sessions(signal), []);
+  const [working, setWorking] = useState('');
+  const sessions = data?.sessions || [];
+  const others = sessions.filter((s) => !s.current).length;
+
+  async function handleRevoke(id) {
+    setWorking(id);
+    try {
+      await authApi.revokeSession(id);
+      showSuccess('Dispositivo desconectado.');
+      reload();
+    } catch (err) {
+      showError(err.message || 'Não foi possível desconectar o dispositivo.');
+    } finally {
+      setWorking('');
+    }
+  }
 
   async function handleLogoutAll() {
-    setWorking(true);
+    setWorking('all');
     try {
-      const data = await authApi.logoutAll();
-      if (data?.token) setToken(data.token);
+      const result = await authApi.logoutAll();
+      if (result?.token) setToken(result.token);
       showSuccess('Todos os outros dispositivos foram desconectados.');
+      reload();
     } catch (err) {
       showError(err.message || 'Não foi possível encerrar as sessões.');
     } finally {
-      setWorking(false);
+      setWorking('');
     }
   }
 
   return (
     <div className="set-card">
-      <div className="set-row">
-        <div>
-          <div className="set-row-title">Sair dos outros dispositivos</div>
-          <div className="set-row-sub">
-            Desconecta o Atmos em todos os outros celulares e computadores. Você continua conectado aqui.
+      {loading && sessions.length === 0 && <div className="set-empty">Carregando dispositivos...</div>}
+      {sessions.map((s) => {
+        const Icon = /iOS|Android/.test(s.device) ? IconPhone : IconMonitor;
+        return (
+          <div className="set-row" key={s.id}>
+            <div className="set-row-main">
+              <span className="set-device-icon">
+                <Icon />
+              </span>
+              <div>
+                <div className="set-row-title">
+                  {s.device}
+                  {s.current && <span className="set-pill set-pill-ok">Este dispositivo</span>}
+                </div>
+                <div className="set-row-sub">
+                  {s.current ? 'Ativo agora' : `Último acesso ${formatLastUse(s.last_used_at)}`}
+                  {s.ip_address ? ` · IP ${s.ip_address}` : ''}
+                </div>
+              </div>
+            </div>
+            {!s.current && (
+              <button type="button" className="set-btn" onClick={() => handleRevoke(s.id)} disabled={!!working}>
+                {working === s.id ? 'Encerrando...' : 'Desconectar'}
+              </button>
+            )}
           </div>
+        );
+      })}
+      {others > 0 && (
+        <div className="set-row">
+          <div>
+            <div className="set-row-title">Sair de todos os outros</div>
+            <div className="set-row-sub">Desconecta todos os dispositivos acima, menos este.</div>
+          </div>
+          <button type="button" className="set-btn" onClick={handleLogoutAll} disabled={!!working}>
+            {working === 'all' ? 'Encerrando...' : 'Desconectar todos'}
+          </button>
         </div>
-        <button type="button" className="set-btn" onClick={handleLogoutAll} disabled={working}>
-          {working ? 'Encerrando...' : 'Desconectar'}
-        </button>
-      </div>
+      )}
     </div>
   );
 }
@@ -139,7 +196,7 @@ function DeleteAccountCard() {
         <div>
           <div className="set-row-title">Excluir minha conta</div>
           <div className="set-row-sub">
-            Você perde o acesso ao Atmos e não consegue mais entrar. Essa ação não pode ser desfeita por aqui.
+            Você perde o acesso ao Atmos e não consegue mais entrar.
           </div>
         </div>
         {!open && (
@@ -197,7 +254,7 @@ export default function SecuritySection() {
       <h3 className="set-subtitle">Sessões</h3>
       <SessionsCard />
 
-      <h3 className="set-subtitle">Zona de perigo</h3>
+      <h3 className="set-subtitle">Encerrar conta</h3>
       <DeleteAccountCard />
     </>
   );

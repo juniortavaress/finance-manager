@@ -1,14 +1,15 @@
 import datetime as dt
+import uuid
 
 from flask import Blueprint, g, request
 
 from app.auth_decorator import login_required
 from app.errors import ApiError
 from app.extensions import db
-from app.models import User
+from app.models import AuthSession, User
 from app.rate_limit import hit, reset
 from app.validation import clean_https_url
-from app.services.auth_service import hash_password, issue_token, verify_password
+from app.services.auth_service import describe_device, hash_password, issue_token, start_session, verify_password
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -44,7 +45,7 @@ def register():
     db.session.add(user)
     db.session.commit()
 
-    token = issue_token(user)
+    token = start_session(user, request)
     return {"token": token, "user": user.to_dict()}, 201
 
 
@@ -65,7 +66,7 @@ def login():
         raise ApiError("Email ou senha inválidos", 401)
 
     reset(rate_key)
-    token = issue_token(user)
+    token = start_session(user, request)
     return {"token": token, "user": user.to_dict()}
 
 
@@ -117,19 +118,79 @@ def change_password():
 
     user.password_hash = hash_password(new)
     # Trocar a senha derruba as outras sessoes; a atual segue com um token novo.
-    user.tokens_valid_after = dt.datetime.now(dt.timezone.utc)
-    db.session.commit()
+    token = _revoke_other_sessions(user)
     reset(f"password:{user.id}")
-    return {"ok": True, "token": issue_token(user)}
+    return {"ok": True, "token": token}
+
+
+def _revoke_other_sessions(user):
+    """Encerra todos os outros dispositivos e devolve um token novo para o atual."""
+    # tokens_valid_after cobre tokens antigos, emitidos antes de existir a lista de sessoes.
+    user.tokens_valid_after = dt.datetime.now(dt.timezone.utc)
+    current_id = g.current_session_id
+    others = AuthSession.query.filter(AuthSession.user_id == user.id)
+    if current_id:
+        others = others.filter(AuthSession.id != current_id)
+    others.delete(synchronize_session=False)
+    db.session.commit()
+    if current_id:
+        return issue_token(user, current_id)
+    return start_session(user, request)
 
 
 @auth_bp.post("/logout-all")
 @login_required
 def logout_all():
-    user = g.current_user
-    user.tokens_valid_after = dt.datetime.now(dt.timezone.utc)
+    return {"ok": True, "token": _revoke_other_sessions(g.current_user)}
+
+
+@auth_bp.post("/logout")
+@login_required
+def logout():
+    if g.current_session_id:
+        AuthSession.query.filter_by(id=g.current_session_id, user_id=g.current_user.id).delete()
+        db.session.commit()
+    return {"ok": True}
+
+
+@auth_bp.get("/sessions")
+@login_required
+def list_sessions():
+    now = dt.datetime.now(dt.timezone.utc)
+    sessions = (
+        AuthSession.query.filter(AuthSession.user_id == g.current_user.id, AuthSession.expires_at >= now)
+        .order_by(AuthSession.last_used_at.desc().nullslast(), AuthSession.created_at.desc())
+        .all()
+    )
+    return {
+        "sessions": [
+            {
+                "id": str(s.id),
+                "device": describe_device(s.user_agent),
+                "ip_address": s.ip_address,
+                "created_at": s.created_at.isoformat(),
+                "last_used_at": (s.last_used_at or s.created_at).isoformat(),
+                "current": s.id == g.current_session_id,
+            }
+            for s in sessions
+        ]
+    }
+
+
+@auth_bp.delete("/sessions/<session_id>")
+@login_required
+def revoke_session(session_id):
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        raise ApiError("Sessão não encontrada", 404)
+    if sid == g.current_session_id:
+        raise ApiError("Para sair deste dispositivo, use o botão Sair do menu", 400)
+    deleted = AuthSession.query.filter_by(id=sid, user_id=g.current_user.id).delete()
     db.session.commit()
-    return {"ok": True, "token": issue_token(user)}
+    if not deleted:
+        raise ApiError("Sessão não encontrada", 404)
+    return {"ok": True}
 
 
 @auth_bp.delete("/me")
@@ -144,6 +205,7 @@ def delete_me():
         raise ApiError("Senha incorreta", 400)
 
     user.deleted_at = dt.datetime.now(dt.timezone.utc)
+    AuthSession.query.filter_by(user_id=user.id).delete()
     user.email = f"excluido-{user.id}@atmos.invalid"
     db.session.commit()
     return {"ok": True}

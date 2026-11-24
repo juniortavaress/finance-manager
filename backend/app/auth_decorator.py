@@ -1,4 +1,6 @@
+import datetime as dt
 import time
+import uuid
 from functools import wraps
 
 import jwt
@@ -6,7 +8,7 @@ from flask import g, request
 
 from app.errors import ApiError
 from app.extensions import commit_if_dirty
-from app.models import User
+from app.models import AuthSession, User
 from app.services.auth_service import decode_token
 from app.services.finance_service import sync_due_installments
 
@@ -16,6 +18,9 @@ from app.services.finance_service import sync_due_installments
 # por minuto (por processo).
 _SYNC_INTERVAL_SECONDS = 60
 _last_sync_by_user = {}
+
+# O ultimo acesso de cada dispositivo so e atualizado a cada alguns minutos.
+_LAST_USED_INTERVAL = dt.timedelta(minutes=5)
 
 
 def _sync_installments_throttled(user_id):
@@ -48,6 +53,20 @@ def login_required(fn):
 
         if user.tokens_valid_after is not None and payload.get("iat", 0) < int(user.tokens_valid_after.timestamp()):
             raise ApiError("Sessão encerrada, faça login novamente", 401)
+
+        g.current_session_id = None
+        sid = payload.get("sid")
+        if sid:
+            try:
+                session = AuthSession.query.filter_by(id=uuid.UUID(sid), user_id=user.id).first()
+            except ValueError:
+                session = None
+            now = dt.datetime.now(dt.timezone.utc)
+            if session is None or session.expires_at < now:
+                raise ApiError("Sessão encerrada, faça login novamente", 401)
+            if session.last_used_at is None or now - session.last_used_at > _LAST_USED_INTERVAL:
+                session.last_used_at = now
+            g.current_session_id = session.id
 
         g.current_user = user
         _sync_installments_throttled(user.id)

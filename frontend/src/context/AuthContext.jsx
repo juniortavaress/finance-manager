@@ -51,6 +51,8 @@ export function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    // Avisa o servidor para encerrar esta sessao; se falhar, o logout local segue igual.
+    authApi.logout().catch(() => {});
     clearFetchCache();
     setToken(null);
     setUser(null);

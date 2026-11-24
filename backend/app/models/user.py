@@ -32,10 +32,11 @@ class AuthSession(BaseModel):
     __tablename__ = "auth_sessions"
 
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False, index=True)
-    refresh_token_hash = db.Column(db.Text, nullable=False)
+    refresh_token_hash = db.Column(db.Text, nullable=True)
     user_agent = db.Column(db.Text, nullable=True)
     ip_address = db.Column(db.Text, nullable=True)
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    last_used_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
 
 class PasswordResetToken(BaseModel):

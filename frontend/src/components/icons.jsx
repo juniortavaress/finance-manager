@@ -161,6 +161,20 @@ export const IconSliders = (props) => (
   </svg>
 );
 
+export const IconMonitor = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <rect x="3" y="4" width="18" height="12" rx="2" />
+    <path d="M8 20h8M12 16v4" />
+  </svg>
+);
+
+export const IconPhone = (props) => (
+  <svg viewBox="0 0 24 24" {...base} {...props}>
+    <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
+    <path d="M11 18.5h2" />
+  </svg>
+);
+
 export const IconChevronDown = (props) => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
     <path d="M6 9l6 6 6-6" />
