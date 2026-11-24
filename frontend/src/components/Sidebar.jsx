@@ -6,6 +6,7 @@ import { useBanks } from '../hooks/resources/useBanks';
 import { useAccounts } from '../hooks/resources/useAccounts';
 import { checkingAccounts, sortBanks } from '../utils/accounts';
 import { fmt } from '../utils/format';
+import BankLogo from './BankLogo';
 import { canInstall, isStandalone, onInstallAvailabilityChange, promptInstall } from '../pwa';
 import {
   IconDashboard,
@@ -161,7 +162,7 @@ export default function Sidebar({ onClose }) {
                           to={`/contas/${bank.id}`}
                           className={({ isActive }) => `navitem navitem-sub${isActive ? ' active' : ''}`}
                         >
-                          <span className="navitem-chip" style={{ background: bank.color_hex }} />
+                          <BankLogo bank={bank} size={18} className="navitem-logo" />
                           {bank.name}
                           {checking && <span className="navitem-balance num">{fmt(checking.balance, checking.currency)}</span>}
                         </NavLink>

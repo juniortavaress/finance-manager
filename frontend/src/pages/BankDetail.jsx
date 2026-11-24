@@ -15,6 +15,7 @@ import { fmt, monthLabelFull } from '../utils/format';
 import { localIsoDate } from '../utils/date';
 import { notifyDataChanged } from '../utils/dataChanged';
 import AssetTradeFlow from '../components/AssetTradeFlow';
+import BankLogo from '../components/BankLogo';
 import BankCardTab from '../components/bank/BankCardTab';
 import BankInvestmentsTab from '../components/bank/BankInvestmentsTab';
 import BankTransactionsTab from '../components/bank/BankTransactionsTab';
@@ -123,9 +124,7 @@ export default function BankDetail() {
     <div className="screen active">
       <div className="topbar">
         <div className="bank-title">
-          <div className="bank-logo" style={{ background: bank.color_hex }}>
-            {bank.name[0]}
-          </div>
+          <BankLogo bank={bank} />
           <div>
             <h1>{bank.name}</h1>
             <div className="bank-sub">

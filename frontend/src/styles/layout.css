@@ -123,6 +123,17 @@ nav {
   border-radius: 3px;
   flex-shrink: 0;
 }
+.navitem-logo,
+.acct-logo {
+  border-radius: 5px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+  overflow: hidden;
+}
 .navitem-balance {
   margin-left: auto;
   font-size: 11px;

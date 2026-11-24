@@ -6,6 +6,7 @@ import { useBanks } from '../hooks/resources/useBanks';
 import { useAccounts } from '../hooks/resources/useAccounts';
 import { checkingAccounts as filterChecking, sortBanks } from '../utils/accounts';
 import { fmt, monthLabel } from '../utils/format';
+import BankLogo from '../components/BankLogo';
 import BankConfigModal from '../components/modals/BankConfigModal';
 import PayInvoiceModal from '../components/modals/PayInvoiceModal';
 import Skeleton from '../components/Skeleton';
@@ -162,7 +163,7 @@ export default function Accounts() {
           <div className="acct-block" key={bank.id}>
             <div className="acct-bank-head" style={{ justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="chip" style={{ background: bank.color_hex }} />
+                <BankLogo bank={bank} size={24} className="acct-logo" />
                 <span className="name acct-bank-link" onClick={() => navigate(`/contas/${bank.id}`)}>
                   {bank.name}
                 </span>
