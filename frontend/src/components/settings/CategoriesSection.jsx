@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
-import { dashboardApi } from '../api/resources';
-import { useFetch } from '../hooks/useFetch';
-import { useCategories } from '../hooks/resources/useCategories';
-import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../utils/categories';
-import { fmt } from '../utils/format';
-import { IconPencil } from '../components/icons';
-import CategoryConfigModal from '../components/modals/CategoryConfigModal';
-import Skeleton from '../components/Skeleton';
+import { dashboardApi } from '../../api/resources';
+import { useFetch } from '../../hooks/useFetch';
+import { useCategories } from '../../hooks/resources/useCategories';
+import { expenseCategories as filterExpense, incomeCategories as filterIncome } from '../../utils/categories';
+import { fmt } from '../../utils/format';
+import { IconPencil } from '../icons';
+import CategoryConfigModal from '../modals/CategoryConfigModal';
+import Skeleton from '../Skeleton';
 
 function CategoryGrid({ title, items, totalsById, totalsLoading, onEdit }) {
   return (
@@ -67,7 +67,7 @@ function CategoryGrid({ title, items, totalsById, totalsLoading, onEdit }) {
   );
 }
 
-export default function Categories() {
+export default function CategoriesSection() {
   const { categories, reload: reloadCategories } = useCategories();
   const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
   const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
@@ -101,16 +101,15 @@ export default function Categories() {
   }
 
   return (
-    <div className="screen active">
-      <div className="topbar">
-        <h1>Categorias</h1>
-        <div
-          className="period"
-          style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
-          onClick={openNewCategory}
-        >
-          + categoria
+    <>
+      <div className="set-section-head">
+        <div>
+          <h2>Categorias</h2>
+          <p>Organize suas receitas e despesas. O valor mostrado é o total do mês atual.</p>
         </div>
+        <button type="button" className="set-btn set-btn-primary" onClick={openNewCategory}>
+          + Nova categoria
+        </button>
       </div>
 
       <CategoryGrid
@@ -140,6 +139,6 @@ export default function Categories() {
           reloadCategories();
         }}
       />
-    </div>
+    </>
   );
 }

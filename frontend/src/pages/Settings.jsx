@@ -1,38 +1,194 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useBanks } from '../hooks/resources/useBanks';
-import { useAccounts } from '../hooks/resources/useAccounts';
 import { useFetch } from '../hooks/useFetch';
 import { useToast } from '../context/ToastContext';
 import { marketDataApi } from '../api/resources';
-import { IconPencil, IconTrash } from '../components/icons';
-import EditProfileModal from '../components/modals/EditProfileModal';
+import { IconGrid, IconTrash, IconUser, IconTrendUp } from '../components/icons';
+import CategoriesSection from '../components/settings/CategoriesSection';
+import { CURRENCY_OPTIONS } from '../utils/currency';
 import MarketCorporateEventModal from '../components/modals/MarketCorporateEventModal';
-import { canInstall, isStandalone, onInstallAvailabilityChange, promptInstall } from '../pwa';
 
 const EVENT_TYPE_LABELS = {
   split: 'Desdobramento/Grupamento',
   merger: 'Incorporação',
 };
 
+function initials(name) {
+  if (!name) return '?';
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join('');
+}
+
+function ProfileSection({ user }) {
+  const { updateUser } = useAuth();
+  const { showSuccess, showError } = useToast();
+  const [name, setName] = useState(user?.name || '');
+  const [currencyDefault, setCurrencyDefault] = useState(user?.currency_default || 'BRL');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setName(user?.name || '');
+    setCurrencyDefault(user?.currency_default || 'BRL');
+  }, [user]);
+
+  const dirty = name.trim() !== (user?.name || '') || currencyDefault !== (user?.currency_default || 'BRL');
+
+  function discard() {
+    setName(user?.name || '');
+    setCurrencyDefault(user?.currency_default || 'BRL');
+    setError('');
+  }
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setError('');
+    if (!name.trim()) return setError('Informe seu nome.');
+    setSaving(true);
+    try {
+      await updateUser({ name: name.trim(), currency_default: currencyDefault });
+      showSuccess('Perfil atualizado com sucesso.');
+    } catch (err) {
+      const message = err.message || 'Não foi possível atualizar o perfil.';
+      setError(message);
+      showError(message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="set-section-head">
+        <div>
+          <h2>Perfil</h2>
+          <p>Seus dados de acesso e preferências da conta.</p>
+        </div>
+      </div>
+
+      <div className="set-card set-profile">
+        <div className="set-avatar">{initials(name || user?.name)}</div>
+        <div className="set-profile-info">
+          <div className="set-profile-name">{name || user?.name}</div>
+          <div className="set-profile-email">{user?.email}</div>
+        </div>
+      </div>
+
+      <form className="set-card set-form" onSubmit={handleSave}>
+        {error && <div className="form-error-banner">{error}</div>}
+
+        <div className="set-field">
+          <div className="set-field-label">
+            <label htmlFor="set-name">Nome</label>
+            <span>Como você aparece para amigos e grupos.</span>
+          </div>
+          <input id="set-name" type="text" value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+
+        <div className="set-field">
+          <div className="set-field-label">
+            <label htmlFor="set-email">E-mail</label>
+            <span>Usado para entrar. Não pode ser alterado.</span>
+          </div>
+          <input id="set-email" type="text" value={user?.email || ''} disabled />
+        </div>
+
+        <div className="set-field">
+          <div className="set-field-label">
+            <label htmlFor="set-currency">Moeda padrão</label>
+            <span>
+              Troca só o símbolo de exibição, sem converter valores. Contas com moeda própria mantêm a delas.
+            </span>
+          </div>
+          <select id="set-currency" value={currencyDefault} onChange={(e) => setCurrencyDefault(e.target.value)}>
+            {CURRENCY_OPTIONS.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {dirty && (
+          <div className="set-savebar">
+            <span>Você tem alterações não salvas.</span>
+            <div>
+              <button type="button" className="set-btn" onClick={discard} disabled={saving}>
+                Descartar
+              </button>
+              <button type="submit" className="set-btn set-btn-primary" disabled={saving}>
+                {saving ? 'Salvando...' : 'Salvar alterações'}
+              </button>
+            </div>
+          </div>
+        )}
+      </form>
+    </>
+  );
+}
+
+function MarketSection({ events, onNew, onRemove }) {
+  return (
+    <>
+      <div className="set-section-head">
+        <div>
+          <h2>Eventos societários</h2>
+          <p>Desdobramentos, grupamentos e incorporações aplicados às posições do mercado.</p>
+        </div>
+        <button type="button" className="set-btn set-btn-primary" onClick={onNew}>
+          + Novo evento
+        </button>
+      </div>
+
+      <div className="set-card set-list">
+        {events.length === 0 && <div className="set-empty">Nenhum evento registrado ainda.</div>}
+        {events.map((ev) => (
+          <div className="set-row" key={ev.id}>
+            <div>
+              <div className="set-row-title">
+                {EVENT_TYPE_LABELS[ev.type]} — {ev.target_code}
+                {ev.source_code ? ` (origem: ${ev.source_code})` : ''}
+              </div>
+              <div className="set-row-sub">
+                {ev.date} · proporção {ev.ratio}
+                {ev.note ? ` · ${ev.note}` : ''}
+              </div>
+            </div>
+            <button type="button" title="Remover" className="set-icon-btn" onClick={() => onRemove(ev.id)}>
+              <IconTrash style={{ width: 14, height: 14 }} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export default function Settings() {
   const { user } = useAuth();
-  const { banks } = useBanks();
-  const { accounts } = useAccounts();
   const { showSuccess, showError } = useToast();
-  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [eventModalOpen, setEventModalOpen] = useState(false);
 
-  const [installable, setInstallable] = useState(canInstall());
-  useEffect(() => onInstallAvailabilityChange(setInstallable), []);
-
-  const cardAccounts = accounts.filter((a) => a.type === 'credit_card');
-
-  const {
-    data: eventsData,
-    reload: reloadEvents,
-  } = useFetch((signal) => (user?.is_admin ? marketDataApi.listCorporateEvents(signal) : Promise.resolve(null)), [user?.is_admin]);
+  const { data: eventsData, reload: reloadEvents } = useFetch(
+    (signal) => (user?.is_admin ? marketDataApi.listCorporateEvents(signal) : Promise.resolve(null)),
+    [user?.is_admin]
+  );
   const events = eventsData?.market_corporate_events || [];
+
+  const sections = [
+    { key: 'perfil', label: 'Perfil', icon: IconUser },
+    { key: 'categorias', label: 'Categorias', icon: IconGrid },
+    user?.is_admin && { key: 'mercado', label: 'Eventos societários', icon: IconTrendUp },
+  ].filter(Boolean);
+
+  const requested = searchParams.get('secao');
+  const active = sections.some((s) => s.key === requested) ? requested : sections[0].key;
 
   async function handleRemoveEvent(id) {
     try {
@@ -49,141 +205,31 @@ export default function Settings() {
       <div className="topbar">
         <h1>Configurações</h1>
       </div>
-      <div className="grid grid-2">
-        <div className="card">
-          <h3>
-            Perfil
-            <button
-              type="button"
-              title="Editar perfil"
-              onClick={() => setEditModalOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 26,
-                height: 26,
-                borderRadius: 7,
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--ink-faint)',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'var(--bg)';
-                e.currentTarget.style.color = 'var(--teal)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent';
-                e.currentTarget.style.color = 'var(--ink-faint)';
-              }}
-            >
-              <IconPencil style={{ width: 13, height: 13 }} />
-            </button>
-          </h3>
-          <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 6 }}>
-            <b style={{ color: 'var(--ink)' }}>{user?.name}</b>
-          </p>
-          <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>{user?.email}</p>
-          <p style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 10 }}>
-            Moeda padrão: {user?.currency_default}
-          </p>
-        </div>
-        <div className="card">
-          <h3>Bancos e contas</h3>
-          <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 10 }}>
-            {banks.length} banco(s) cadastrado(s), {cardAccounts.length} cartão(ões) de crédito.
-          </p>
-          {banks.map((b) => (
-            <div className="bank-row" key={b.id}>
-              <div className="bank-id">
-                <span className="bank-chip" style={{ background: b.color_hex }} />
-                <div className="bank-name">{b.name}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      <div className="grid grid-2" style={{ marginTop: 20 }}>
-        <div className="card">
-          <h3>Aplicativo</h3>
-          {isStandalone() ? (
-            <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>Você já está usando o Atmos como aplicativo instalado.</p>
-          ) : installable ? (
-            <>
-              <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 10 }}>
-                Instale o Atmos no seu dispositivo para abrir em tela cheia, direto da tela inicial.
-              </p>
-              <button type="button" className="btn btn-primary" onClick={promptInstall}>
-                Instalar aplicativo
-              </button>
-            </>
-          ) : (
-            <p style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-              Para instalar, use o menu do navegador: <b>Instalar aplicativo</b> (Chrome/Edge) ou{' '}
-              <b>Compartilhar → Adicionar à Tela de Início</b> (iPhone).
-            </p>
+      <div className="set-layout">
+        <nav className="set-nav" aria-label="Seções de configurações">
+          {sections.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              className={`set-nav-item${active === key ? ' active' : ''}`}
+              onClick={() => setSearchParams({ secao: key }, { replace: true })}
+            >
+              <Icon />
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="set-content">
+          {active === 'perfil' && <ProfileSection user={user} />}
+          {active === 'categorias' && <CategoriesSection />}
+          {active === 'mercado' && user?.is_admin && (
+            <MarketSection events={events} onNew={() => setEventModalOpen(true)} onRemove={handleRemoveEvent} />
           )}
         </div>
       </div>
 
-      {user?.is_admin && (
-        <div className="grid grid-2" style={{ marginTop: 20 }}>
-          <div className="card">
-            <h3>
-              Eventos societários (mercado)
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ marginLeft: 12, padding: '4px 12px', fontSize: 12 }}
-                onClick={() => setEventModalOpen(true)}
-              >
-                Novo evento
-              </button>
-            </h3>
-          
-            {events.length === 0 && (
-              <p style={{ fontSize: 13, color: 'var(--ink-faint)' }}>Nenhum evento registrado ainda.</p>
-            )}
-            {events.map((ev) => (
-              <div className="bank-row" key={ev.id}>
-                <div className="bank-id">
-                  <div className="bank-name">
-                    {EVENT_TYPE_LABELS[ev.type]} — {ev.target_code}
-                    {ev.source_code ? ` (origem: ${ev.source_code})` : ''}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>
-                    {ev.date} · proporção {ev.ratio}
-                    {ev.note ? ` · ${ev.note}` : ''}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  title="Remover"
-                  onClick={() => handleRemoveEvent(ev.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 26,
-                    height: 26,
-                    borderRadius: 7,
-                    border: 'none',
-                    background: 'transparent',
-                    color: 'var(--ink-faint)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <IconTrash style={{ width: 13, height: 13 }} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <EditProfileModal open={editModalOpen} onClose={() => setEditModalOpen(false)} />
       {user?.is_admin && (
         <MarketCorporateEventModal
           open={eventModalOpen}

@@ -11,6 +11,7 @@ import './styles/loading.css';
 import './styles/toast.css';
 import './styles/friends.css';
 import './styles/investments.css';
+import './styles/settings.css';
 import App from './App.jsx';
 import { registerPwa } from './pwa';
 

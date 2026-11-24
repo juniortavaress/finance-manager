@@ -14,7 +14,6 @@ import {
   IconSwap,
   IconInstallments,
   IconRepeat,
-  IconGrid,
   IconTrendUp,
   IconWallet,
   IconCoin,
@@ -66,7 +65,6 @@ const NAV_GROUPS = [
   {
     label: 'Ajustes',
     items: [
-      { to: '/categorias', label: 'Categorias', icon: IconGrid },
       { install: true },
       { to: '/configuracoes', label: 'Configurações', icon: IconGear },
     ],
@@ -193,14 +191,6 @@ export default function Sidebar({ onClose }) {
           <IconChevronDown className="chev" />
         </button>
         <div className={`user-menu${menuOpen ? ' open' : ''}`}>
-          <NavLink to="/configuracoes" className="user-menu-item" onClick={() => setMenuOpen(false)}>
-            <IconUser />
-            Meu perfil
-          </NavLink>
-          <NavLink to="/configuracoes" className="user-menu-item" onClick={() => setMenuOpen(false)}>
-            <IconGear />
-            Configurações
-          </NavLink>
           <button className="user-menu-item" onClick={handleLogout}>
             <IconLogout />
             Sair

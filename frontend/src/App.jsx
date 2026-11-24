@@ -13,7 +13,6 @@ const BankDetail = lazy(() => import('./pages/BankDetail'));
 const Transactions = lazy(() => import('./pages/Transactions'));
 const RecurringTransactions = lazy(() => import('./pages/RecurringTransactions'));
 const Installments = lazy(() => import('./pages/Installments'));
-const Categories = lazy(() => import('./pages/Categories'));
 const Investments = lazy(() => import('./pages/Investments'));
 const Portfolio = lazy(() => import('./pages/Portfolio'));
 const AssetTrades = lazy(() => import('./pages/AssetTrades'));
@@ -51,7 +50,7 @@ export default function App() {
               <Route path="recorrentes" element={<RecurringTransactions />} />
               <Route path="parcelas" element={<Installments />} />
               <Route path="lembretes" element={<Navigate to="/recorrentes" replace />} />
-              <Route path="categorias" element={<Categories />} />
+              <Route path="categorias" element={<Navigate to="/configuracoes?secao=categorias" replace />} />
               <Route path="amigos" element={<Friends />} />
               <Route path="amigos/lista" element={<FriendsList />} />
               <Route path="amigos/grupos" element={<Groups />} />
