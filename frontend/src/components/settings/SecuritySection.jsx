@@ -126,6 +126,7 @@ function SessionsCard() {
   return (
     <div className="set-card">
       {loading && sessions.length === 0 && <div className="set-empty">Carregando dispositivos...</div>}
+      {!loading && sessions.length === 0 && <div className="set-empty">Nenhum dispositivo registrado.</div>}
       {sessions.map((s) => {
         const Icon = /iOS|Android/.test(s.device) ? IconPhone : IconMonitor;
         return (

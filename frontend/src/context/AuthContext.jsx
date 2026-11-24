@@ -23,7 +23,10 @@ export function AuthProvider({ children }) {
     }
     authApi
       .me()
-      .then((data) => applyUser(data.user))
+      .then((data) => {
+        if (data.token) setToken(data.token);
+        applyUser(data.user);
+      })
       .catch(() => setToken(null))
       .finally(() => setLoading(false));
   }, []);

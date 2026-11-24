@@ -73,7 +73,12 @@ def login():
 @auth_bp.get("/me")
 @login_required
 def me():
-    return {"user": g.current_user.to_dict()}
+    data = {"user": g.current_user.to_dict()}
+    if g.current_session_id is None:
+        # Login feito antes da lista de dispositivos existir: registra este
+        # aparelho agora e entrega um token ligado a ele.
+        data["token"] = start_session(g.current_user, request)
+    return data
 
 
 @auth_bp.patch("/me")
