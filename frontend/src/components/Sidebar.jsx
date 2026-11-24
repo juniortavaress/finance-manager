@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useBanks } from '../hooks/resources/useBanks';
+import { useAccounts } from '../hooks/resources/useAccounts';
+import { checkingAccounts, sortBanks } from '../utils/accounts';
+import { fmt } from '../utils/format';
 import { canInstall, isStandalone, onInstallAvailabilityChange, promptInstall } from '../pwa';
 import {
   IconDashboard,
@@ -28,7 +32,7 @@ const NAV_GROUPS = [
     label: 'Visão geral',
     items: [
       { to: '/', label: 'Dashboard', icon: IconDashboard, end: true },
-      { to: '/contas', label: 'Contas & Bancos', icon: IconBank },
+      { to: '/contas', label: 'Contas & Bancos', icon: IconBank, end: true, banks: true },
     ],
   },
   {
@@ -81,7 +85,12 @@ export default function Sidebar({ onClose }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { showInfo } = useToast();
+  const { banks } = useBanks();
+  const { accounts } = useAccounts();
+  const showBanks = pathname.startsWith('/contas');
+  const sortedBanks = useMemo(() => sortBanks(banks, accounts), [banks, accounts]);
   const [installable, setInstallable] = useState(canInstall());
   useEffect(() => onInstallAvailabilityChange(setInstallable), []);
 
@@ -121,7 +130,7 @@ export default function Sidebar({ onClose }) {
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
             <div className="navgroup-label">{group.label}</div>
-            {group.items.map(({ to, label, icon: Icon, end, disabled }) =>
+            {group.items.map(({ to, label, icon: Icon, end, disabled, banks: hasBanks }) =>
               disabled ? (
                 <div
                   key={to}
@@ -133,15 +142,32 @@ export default function Sidebar({ onClose }) {
                   <span className="navitem-soon">em breve</span>
                 </div>
               ) : (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={end}
-                  className={({ isActive }) => `navitem${isActive ? ' active' : ''}`}
-                >
-                  <Icon />
-                  {label}
-                </NavLink>
+                <Fragment key={to}>
+                  <NavLink
+                    to={to}
+                    end={end}
+                    className={({ isActive }) => `navitem${isActive ? ' active' : ''}`}
+                  >
+                    <Icon />
+                    {label}
+                  </NavLink>
+                  {hasBanks &&
+                    showBanks &&
+                    sortedBanks.map((bank) => {
+                      const checking = checkingAccounts(accounts).find((a) => a.bank_id === bank.id);
+                      return (
+                        <NavLink
+                          key={bank.id}
+                          to={`/contas/${bank.id}`}
+                          className={({ isActive }) => `navitem navitem-sub${isActive ? ' active' : ''}`}
+                        >
+                          <span className="navitem-chip" style={{ background: bank.color_hex }} />
+                          {bank.name}
+                          {checking && <span className="navitem-balance num">{fmt(checking.balance, checking.currency)}</span>}
+                        </NavLink>
+                      );
+                    })}
+                </Fragment>
               )
             )}
             {group.label === 'Outros' && !isStandalone() && (

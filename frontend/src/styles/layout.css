@@ -113,6 +113,24 @@ nav {
   background: transparent;
   color: rgba(238, 242, 240, 0.72);
 }
+.navitem-sub {
+  padding: 7px 12px 7px 26px;
+  font-size: 13px;
+}
+.navitem-chip {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.navitem-balance {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0.6;
+}
+.navitem-sub.active .navitem-balance {
+  opacity: 0.8;
+}
 .navitem-soon {
   margin-left: auto;
   font-family: 'IBM Plex Mono', monospace;
