@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, downloadFile } from './client';
 
 export const authApi = {
   login: (email, password) => api.post('/auth/login', { email, password }),
@@ -34,6 +34,7 @@ export const categoriesApi = {
 
 export const transactionsApi = {
   list: (params, signal) => api.get('/transactions/', params, signal),
+  exportCsv: (params) => downloadFile('/transactions/export', params),
   create: (data) => api.post('/transactions/', data),
   update: (id, data) => api.patch(`/transactions/${id}`, data),
   remove: (id) => api.delete(`/transactions/${id}`),

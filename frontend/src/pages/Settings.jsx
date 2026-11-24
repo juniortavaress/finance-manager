@@ -4,8 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { useFetch } from '../hooks/useFetch';
 import { useToast } from '../context/ToastContext';
 import { marketDataApi } from '../api/resources';
-import { IconGrid, IconLock, IconSliders, IconTrash, IconUser, IconTrendUp } from '../components/icons';
+import { IconGrid, IconDownload, IconLock, IconSliders, IconTrash, IconUser, IconTrendUp } from '../components/icons';
 import CategoriesSection from '../components/settings/CategoriesSection';
+import DataSection from '../components/settings/DataSection';
 import PreferencesSection from '../components/settings/PreferencesSection';
 import SecuritySection from '../components/settings/SecuritySection';
 import { CURRENCY_OPTIONS } from '../utils/currency';
@@ -187,6 +188,7 @@ export default function Settings() {
     { key: 'perfil', label: 'Perfil', icon: IconUser },
     { key: 'categorias', label: 'Categorias', icon: IconGrid },
     { key: 'preferencias', label: 'Preferências', icon: IconSliders },
+    { key: 'dados', label: 'Meus dados', icon: IconDownload },
     { key: 'seguranca', label: 'Segurança', icon: IconLock },
     user?.is_admin && { key: 'mercado', label: 'Eventos societários', icon: IconTrendUp },
   ].filter(Boolean);
@@ -229,6 +231,7 @@ export default function Settings() {
           {active === 'perfil' && <ProfileSection user={user} />}
           {active === 'categorias' && <CategoriesSection />}
           {active === 'preferencias' && <PreferencesSection />}
+          {active === 'dados' && <DataSection />}
           {active === 'seguranca' && <SecuritySection />}
           {active === 'mercado' && user?.is_admin && (
             <MarketSection events={events} onNew={() => setEventModalOpen(true)} onRemove={handleRemoveEvent} />

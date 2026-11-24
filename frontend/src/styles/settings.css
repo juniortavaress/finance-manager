@@ -284,6 +284,13 @@
 .set-choice-preview.auto b {
   background: linear-gradient(105deg, #f1f3ef 50%, #0f1716 50%);
 }
+.set-date-range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
 .set-subtitle {
   font-size: 12px;
   text-transform: uppercase;

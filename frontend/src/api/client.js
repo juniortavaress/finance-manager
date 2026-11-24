@@ -61,6 +61,39 @@ async function request(path, { method = 'GET', body, params, signal } = {}) {
   return data;
 }
 
+// Baixa um arquivo autenticado (o token vai no header, entao nao da para usar um link simples).
+export async function downloadFile(path, params) {
+  let url = `${API_URL}${path}`;
+  if (params) {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+    if (query) url += `?${query}`;
+  }
+  let res;
+  try {
+    res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+  } catch {
+    throw new ApiError('Não foi possível conectar ao servidor. Verifique sua conexão.', 0);
+  }
+  if (!res.ok) {
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    throw new ApiError(data?.error || 'Não foi possível gerar o arquivo.', res.status);
+  }
+  const filename = /filename="?([^"]+)"?/.exec(res.headers.get('Content-Disposition') || '')?.[1] || 'atmos.csv';
+  const href = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(href);
+}
+
 export const api = {
   get: (path, params, signal) => request(path, { method: 'GET', params, signal }),
   post: (path, body, signal) => request(path, { method: 'POST', body, signal }),
