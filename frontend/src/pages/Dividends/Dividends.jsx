@@ -7,17 +7,19 @@ import { investmentAccounts as filterInvestment } from '../../utils/accounts';
 import { fmt, monthLabelFull } from '../../utils/format';
 import { localIsoDate } from '../../utils/date';
 import {
-  amountBrl,
+  bankCurrency,
   blurAfterPointer,
   comparePeriod,
+  displayValue,
   formatPercent,
   groupByPeriod,
+  inCurrency,
   lastTwelveMonthsStart,
   payersByAsset,
   periodShortLabel,
   periodTitle,
   previousMonthKey,
-  sumBrl,
+  sumValues,
   variation,
 } from './utils/dividends';
 import DividendScheduleModal from './components/DividendScheduleModal';
@@ -129,6 +131,7 @@ export default function Dividends() {
     return map;
   }, [accounts, banksById]);
   const bankOf = useCallback((asset) => bankByAccountId.get(asset?.investment_account_id), [bankByAccountId]);
+  const currencyOfBank = useCallback((bankId) => bankCurrency(filterInvestment(accounts), bankId), [accounts]);
 
   // So' aparecem nos filtros os bancos que ja pagaram algum provento.
   const payingBanks = useMemo(() => {
@@ -143,10 +146,14 @@ export default function Dividends() {
   const [selectedBankId, setSelectedBankId] = useState('');
   // Um banco que deixou de ter recebimentos (exclusao) volta para "todos".
   const bankFilter = payingBanks.some((b) => b.id === selectedBankId) ? selectedBankId : '';
-  const dividends = useMemo(
-    () => (bankFilter ? allDividends.filter((d) => bankOf(d.asset)?.id === bankFilter) : allDividends),
-    [allDividends, bankFilter, bankOf]
-  );
+  // "Todos os bancos" soma em BRL; a tela de um banco usa a moeda dele.
+  const currency = bankFilter ? currencyOfBank(bankFilter) : 'BRL';
+  const money = (value) => fmt(value, currency);
+  const dividends = useMemo(() => {
+    if (!bankFilter) return allDividends;
+    const ofBank = allDividends.filter((d) => bankOf(d.asset)?.id === bankFilter);
+    return inCurrency(ofBank, currency);
+  }, [allDividends, bankFilter, bankOf, currency]);
   const visibleSchedules = useMemo(
     () => (bankFilter ? schedules.filter((s) => s.bank_id === bankFilter) : schedules),
     [schedules, bankFilter]
@@ -167,14 +174,14 @@ export default function Dividends() {
           const bank = bankOf(d.asset);
           const id = bank?.id || 'sem-banco';
           const part = byBank.get(id) || { id, name: bank?.name || '', color: bank?.color_hex || 'var(--teal)', value: 0 };
-          part.value += amountBrl(d);
+          part.value += displayValue(d);
           byBank.set(id, part);
         });
         return {
           key,
           label: periodShortLabel(key),
           fullLabel: periodTitle(key),
-          total: sumBrl(items),
+          total: sumValues(items),
           // De cima para baixo na barra, em ordem alfabetica inversa.
           parts: [...byBank.values()].sort((a, b) => b.name.localeCompare(a.name, 'pt-BR')),
         };
@@ -189,12 +196,12 @@ export default function Dividends() {
   const previousMonth = previousMonthKey(currentMonth);
   const windowStart = lastTwelveMonthsStart(today);
 
-  const monthTotal = sumBrl(dividends.filter((d) => d.date.startsWith(currentMonth)));
-  const previousMonthTotal = sumBrl(dividends.filter((d) => d.date.startsWith(previousMonth)));
-  const yearTotal = sumBrl(dividends.filter((d) => d.date.startsWith(currentYear)));
+  const monthTotal = sumValues(dividends.filter((d) => d.date.startsWith(currentMonth)));
+  const previousMonthTotal = sumValues(dividends.filter((d) => d.date.startsWith(previousMonth)));
+  const yearTotal = sumValues(dividends.filter((d) => d.date.startsWith(currentYear)));
   const yearComparison = comparePeriod(dividends, currentYear, today);
   const recent = dividends.filter((d) => d.date >= windowStart && d.date <= today);
-  const recentTotal = sumBrl(recent);
+  const recentTotal = sumValues(recent);
 
   const quotesByCurrency = useMemo(
     () => Object.fromEntries((quotesData?.quotes || []).map((q) => [q.currency, q.brl_rate])),
@@ -203,11 +210,16 @@ export default function Dividends() {
   const pending = visibleSchedules.filter(
     (s) => s.active && s.next_due_date.startsWith(currentMonth) && s.next_due_date >= today
   );
-  const pendingTotal = pending.reduce((total, s) => {
-    const currency = s.asset?.currency || assets.find((a) => a.id === s.asset_id)?.currency;
-    const rate = currency && currency !== 'BRL' ? quotesByCurrency[currency] : null;
-    return total + (s.expected_amount || 0) * (rate || 1);
-  }, 0);
+  // Valor previsto de um recorrente na moeda da tela. Pagamento futuro usa a
+  // cotacao atual; sem cotacao, aparece na moeda original, nunca rotulado errado.
+  function scheduleAmount(schedule) {
+    const original = assets.find((a) => a.id === schedule.asset_id)?.currency || currencyOfBank(schedule.bank_id);
+    const value = schedule.expected_amount || 0;
+    if (original === currency) return { value, currency };
+    const rate = quotesByCurrency[original];
+    return rate ? { value: value * rate, currency: 'BRL' } : { value, currency: original };
+  }
+  const pendingTotal = pending.reduce((total, s) => total + scheduleAmount(s).value, 0);
 
   const positionByAssetId = useMemo(
     () => new Map((summaryData?.assets || []).map((a) => [a.id, a.position])),
@@ -266,7 +278,7 @@ export default function Dividends() {
       <div className="grid grid-4" style={{ marginBottom: 20 }}>
         <StatCard
           label={`Recebido em ${monthLabelFull(monthNumber).toLowerCase()}`}
-          value={fmt(monthTotal)}
+          value={money(monthTotal)}
           stripe="#0F5C5C"
           loading={loadingDividends}
           {...deltaProps(
@@ -276,7 +288,7 @@ export default function Dividends() {
         />
         <StatCard
           label={`Recebido em ${currentYear}`}
-          value={fmt(yearTotal)}
+          value={money(yearTotal)}
           stripe="#C0912F"
           loading={loadingDividends}
           onExpand={yearTotal > 0 ? () => setPeriodKey(currentYear) : undefined}
@@ -284,14 +296,14 @@ export default function Dividends() {
         />
         <StatCard
           label="Média mensal (12 meses)"
-          value={fmt(recentTotal / 12)}
-          detail={`${fmt(recentTotal)} no período`}
+          value={money(recentTotal / 12)}
+          detail={`${money(recentTotal)} no período`}
           stripe="#3D7A8C"
           loading={loadingDividends}
         />
         <StatCard
           label="A cair ainda este mês"
-          value={fmt(pendingTotal)}
+          value={money(pendingTotal)}
           detail={`${pending.length} ${pending.length === 1 ? 'pagamento previsto' : 'pagamentos previstos'}`}
           stripe="#A6432C"
           loading={schedulesLoading && !schedulesData}
@@ -316,7 +328,12 @@ export default function Dividends() {
           ) : chartPeriods.length === 0 ? (
             <div className="empty-state">Nenhum recebimento registrado ainda.</div>
           ) : (
-            <DividendsHistoryChart key={granularity} periods={chartPeriods} onBarClick={setPeriodKey} />
+            <DividendsHistoryChart
+              key={granularity}
+              periods={chartPeriods}
+              currency={currency}
+              onBarClick={setPeriodKey}
+            />
           )}
         </div>
       </section>
@@ -326,9 +343,16 @@ export default function Dividends() {
           schedules={visibleSchedules}
           loading={schedulesLoading && !schedulesData}
           banksById={banksById}
+          amountOf={scheduleAmount}
           onSelect={openSchedule}
         />
-        <TopPayersCard payers={payers} loading={loadingDividends} yieldLoading={summaryLoading} bankOf={bankOf} />
+        <TopPayersCard
+          payers={payers}
+          currency={currency}
+          loading={loadingDividends}
+          yieldLoading={summaryLoading}
+          bankOf={bankOf}
+        />
       </div>
 
       {periodKey && (
@@ -342,6 +366,7 @@ export default function Dividends() {
           dividends={allDividends}
           pageBankId={bankFilter}
           bankOf={bankOf}
+          currencyOfBank={currencyOfBank}
           onEdit={openDividend}
         />
       )}

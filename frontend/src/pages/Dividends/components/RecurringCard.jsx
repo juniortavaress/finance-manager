@@ -3,7 +3,7 @@ import { FREQUENCY_LABELS, assetLabel, blurAfterPointer } from '../utils/dividen
 import Skeleton from '../../../components/Skeleton';
 
 /** Proventos recorrentes em ordem alfabetica, com a data do proximo pagamento. */
-export default function RecurringCard({ schedules, loading, banksById, onSelect }) {
+export default function RecurringCard({ schedules, loading, banksById, amountOf, onSelect }) {
   const sorted = [...schedules].sort((a, b) => assetLabel(a.asset).localeCompare(assetLabel(b.asset), 'pt-BR'));
 
   return (
@@ -24,6 +24,7 @@ export default function RecurringCard({ schedules, loading, banksById, onSelect 
         {!loading &&
           sorted.map((s) => {
             const bank = banksById.get(s.bank_id);
+            const amount = amountOf(s);
             return (
               <button
                 type="button"
@@ -47,7 +48,7 @@ export default function RecurringCard({ schedules, loading, banksById, onSelect 
                       .join(' · ')}
                   </span>
                 </span>
-                <span className="num">{fmt(s.expected_amount, s.asset?.currency)}</span>
+                <span className="num">{fmt(amount.value, amount.currency)}</span>
               </button>
             );
           })}

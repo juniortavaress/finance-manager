@@ -19,7 +19,7 @@ function barLabel(value) {
  * dividida pelas cores dos bancos. `periods` vem pronto de quem chama:
  * [{ key, label, fullLabel, total, parts: [{ id, color, value }] }].
  */
-export default function DividendsHistoryChart({ periods, onBarClick }) {
+export default function DividendsHistoryChart({ periods, currency, onBarClick }) {
   const max = Math.max(...periods.map((p) => p.total), 1);
   const width = Math.max(periods.length * COL_WIDTH, MIN_WIDTH);
 
@@ -31,8 +31,8 @@ export default function DividendsHistoryChart({ periods, onBarClick }) {
             type="button"
             key={p.key}
             className="dv-bar"
-            title={`${p.fullLabel}: ${fmt(p.total)}`}
-            aria-label={`${p.fullLabel}: ${fmt(p.total)}`}
+            title={`${p.fullLabel}: ${fmt(p.total, currency)}`}
+            aria-label={`${p.fullLabel}: ${fmt(p.total, currency)}`}
             onClick={(e) => {
               blurAfterPointer(e);
               onBarClick(p.key);

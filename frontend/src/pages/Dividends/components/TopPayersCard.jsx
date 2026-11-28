@@ -35,7 +35,7 @@ function InfoTip({ children }) {
  * Ranking dos ativos que mais pagaram nos ultimos 12 meses, por valor recebido
  * ou por yield sobre o preco medio pago.
  */
-export default function TopPayersCard({ payers, loading, yieldLoading, bankOf }) {
+export default function TopPayersCard({ payers, currency, loading, yieldLoading, bankOf }) {
   const [metric, setMetric] = useState('value');
   const byYield = metric === 'yield';
 
@@ -94,9 +94,9 @@ export default function TopPayersCard({ payers, loading, yieldLoading, bankOf })
                     {label}
                     {isRepeated(label) && <small>{bank?.name}</small>}
                   </span>
-                  <span className="num dv-meta">{byYield ? fmt(p.value) : yieldText(p)}</span>
+                  <span className="num dv-meta">{byYield ? fmt(p.value, currency) : yieldText(p)}</span>
                   <strong className="num" style={{ minWidth: 92, textAlign: 'right', fontSize: 14 }}>
-                    {byYield ? yieldText(p) : fmt(p.value)}
+                    {byYield ? yieldText(p) : fmt(p.value, currency)}
                   </strong>
                 </div>
                 <div className="dv-track">

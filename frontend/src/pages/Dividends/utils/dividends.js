@@ -35,10 +35,26 @@ export function blurAfterPointer(event) {
   if (event.detail > 0) event.currentTarget.blur();
 }
 
-// Valor convertido para BRL (so' difere do original em contas em moeda estrangeira).
-export const amountBrl = (dividend) => dividend.amount_brl ?? dividend.amount;
+// Valor do recebimento na moeda da tela: BRL (convertido) por padrao, ou a
+// moeda original quando a tela e' so' de um banco estrangeiro (ver inCurrency).
+export const displayValue = (dividend) => dividend.display ?? dividend.amount_brl ?? dividend.amount;
 
-export const sumBrl = (dividends) => dividends.reduce((total, d) => total + amountBrl(d), 0);
+export const sumValues = (dividends) => dividends.reduce((total, d) => total + displayValue(d), 0);
+
+/** Prepara os recebimentos de UM banco para exibicao na moeda dele. */
+export function inCurrency(dividends, currency) {
+  if (currency === 'BRL') return dividends;
+  return dividends.map((d) => ({ ...d, display: d.amount }));
+}
+
+/**
+ * Moeda em que a tela de um banco e' exibida: a das contas de investimento
+ * dele. Com contas em moedas diferentes, e' BRL.
+ */
+export function bankCurrency(investmentAccounts, bankId) {
+  const currencies = new Set(investmentAccounts.filter((a) => a.bank_id === bankId).map((a) => a.currency));
+  return currencies.size === 1 ? [...currencies][0] : 'BRL';
+}
 
 // Chave do periodo de um recebimento: 'AAAA-MM' (mensal) ou 'AAAA' (anual).
 // O mes mantem o zero a esquerda para a ordenacao por texto ser cronologica.
@@ -95,7 +111,7 @@ export function comparePeriod(dividends, key, todayIso) {
   const month = todayIso.slice(5, 7);
   const base = partial ? previous.items.filter((d) => d.date.slice(5, 7) <= month) : previous.items;
   const current = periods.find((p) => p.key === key)?.items || [];
-  const pct = variation(sumBrl(current), sumBrl(base));
+  const pct = variation(sumValues(current), sumValues(base));
   if (pct === null) return null;
 
   const interval = partial && month !== '01' ? `jan–${monthLabel(Number(month)).toLowerCase()} ` : '';
@@ -136,7 +152,7 @@ export function payersByAsset(dividends, positionByAssetId, { history, schedules
       entry = { assetId: d.asset_id, asset: d.asset, value: 0, perShare: 0, paidMonths: new Set() };
       map.set(d.asset_id, entry);
     }
-    entry.value += amountBrl(d);
+    entry.value += displayValue(d);
     if (d.quantity_snapshot > 0) {
       entry.perShare += d.amount / d.quantity_snapshot;
       entry.paidMonths.add(d.date.slice(0, 7));

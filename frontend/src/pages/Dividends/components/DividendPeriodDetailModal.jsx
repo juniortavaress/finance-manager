@@ -4,14 +4,15 @@ import { localIsoDate } from '../../../utils/date';
 import {
   ASSET_TYPE_LABELS,
   KIND_LABELS,
-  amountBrl,
   assetLabel,
   comparePeriod,
+  displayValue,
   formatPercent,
   groupByPeriod,
+  inCurrency,
   periodKeyOf,
   periodTitle,
-  sumBrl,
+  sumValues,
 } from '../utils/dividends';
 import { CloseButton } from './icons';
 import ModalShell from '../../../components/modals/ModalShell';
@@ -32,6 +33,7 @@ export default function DividendPeriodDetailModal({
   dividends,
   pageBankId,
   bankOf,
+  currencyOfBank,
   onEdit,
 }) {
   const [bankId, setBankId] = useState(pageBankId);
@@ -41,23 +43,31 @@ export default function DividendPeriodDetailModal({
   if (!open) return null;
 
   const yearly = periodKey.length === 4;
-  const filtered = bankId ? dividends.filter((d) => bankOf(d.asset)?.id === bankId) : dividends;
+  // Com um banco escolhido os valores aparecem na moeda dele; "Por banco"
+  // compara todos, entao fica sempre em BRL.
+  const currency = bankId ? currencyOfBank(bankId) : 'BRL';
+  const filtered = bankId
+    ? inCurrency(
+        dividends.filter((d) => bankOf(d.asset)?.id === bankId),
+        currency
+      )
+    : dividends;
   const periodAll = dividends.filter((d) => periodKeyOf(d, yearly) === periodKey);
   const items = filtered.filter((d) => periodKeyOf(d, yearly) === periodKey);
-  const total = sumBrl(items);
+  const total = sumValues(items);
   const comparison = comparePeriod(filtered, periodKey, localIsoDate());
 
   const keys = groupByPeriod(dividends, yearly).map((p) => p.key);
   const previousKey = keys.filter((k) => k < periodKey).pop();
   const nextKey = keys.find((k) => k > periodKey);
 
-  const totalAll = sumBrl(periodAll);
+  const totalAll = sumValues(periodAll);
   const bankMap = new Map();
   periodAll.forEach((d) => {
     const bank = bankOf(d.asset);
     if (!bank) return;
     const entry = bankMap.get(bank.id) || { bank, value: 0 };
-    entry.value += amountBrl(d);
+    entry.value += displayValue(d);
     bankMap.set(bank.id, entry);
   });
   const banks = [...bankMap.values()].sort((a, b) => a.bank.name.localeCompare(b.bank.name, 'pt-BR'));
@@ -67,7 +77,7 @@ export default function DividendPeriodDetailModal({
   const assetMap = new Map();
   items.forEach((d) => {
     const entry = assetMap.get(d.asset_id) || { id: d.asset_id, asset: d.asset, value: 0, receipts: [] };
-    entry.value += amountBrl(d);
+    entry.value += displayValue(d);
     entry.receipts.push(d);
     assetMap.set(d.asset_id, entry);
   });
@@ -124,7 +134,7 @@ export default function DividendPeriodDetailModal({
             <span className="dv-meta">
               {bankId ? `Total recebido em ${selectedBank?.name || 'banco filtrado'}` : 'Total recebido (todos os bancos)'}
             </span>
-            <strong className="num">{fmt(total)}</strong>
+            <strong className="num">{fmt(total, currency)}</strong>
             <div className="dv-compare">
               {comparison ? (
                 <>
@@ -168,7 +178,7 @@ export default function DividendPeriodDetailModal({
                       <span className="dv-swatch" style={{ background: bank.color_hex }} />
                       <span className="dv-bank-name">{bank.name}</span>
                       <span className="dv-meta">{formatPercent(share)}</span>
-                      <strong className="num">{fmt(value)}</strong>
+                      <strong className="num">{fmt(value, 'BRL')}</strong>
                     </span>
                     <span className="dv-track">
                       <div style={{ width: `${share}%`, background: bank.color_hex }} />
@@ -206,7 +216,7 @@ export default function DividendPeriodDetailModal({
                       <span className="dv-meta">{metaFor(row)}</span>
                     </span>
                     <span className="dv-asset-value">
-                      <span className="num">{fmt(row.value)}</span>
+                      <span className="num">{fmt(row.value, currency)}</span>
                       <small>{formatPercent(total ? (row.value / total) * 100 : 0)}</small>
                     </span>
                   </button>
@@ -219,7 +229,7 @@ export default function DividendPeriodDetailModal({
                             {fmtDateFull(d.date)} · {KIND_LABELS[d.kind]}
                           </span>
                         </span>
-                        <span className="num dv-meta">{fmt(d.amount, d.currency)}</span>
+                        <span className="num dv-meta">{fmt(displayValue(d), currency)}</span>
                       </button>
                     ))}
                 </div>
