@@ -1,9 +1,11 @@
 import { fmt, monthLabel } from '../../../utils/format';
 import { FREQUENCY_LABELS, assetLabel, blurAfterPointer } from '../utils/dividends';
 import Skeleton from '../../../components/Skeleton';
+import { IconRepeat } from '../../../components/icons';
+import EmptyState from './EmptyState';
 
 /** Proventos recorrentes em ordem alfabetica, com a data do proximo pagamento. */
-export default function RecurringCard({ schedules, loading, banksById, amountOf, onSelect }) {
+export default function RecurringCard({ schedules, loading, banksById, amountOf, onSelect, onCreate }) {
   const sorted = [...schedules].sort((a, b) => assetLabel(a.asset).localeCompare(assetLabel(b.asset), 'pt-BR'));
 
   return (
@@ -19,7 +21,7 @@ export default function RecurringCard({ schedules, loading, banksById, amountOf,
             </div>
           ))}
         {!loading && sorted.length === 0 && (
-          <div className="empty-state">Nenhum provento recorrente cadastrado ainda.</div>
+          <EmptyState icon={IconRepeat} title="Nenhum recorrente ainda" actionLabel="+ cadastrar recorrente" onAction={onCreate} />
         )}
         {!loading &&
           sorted.map((s) => {

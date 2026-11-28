@@ -248,6 +248,57 @@
   display: none;
 }
 
+/* estado vazio, centralizado no card */
+.dv-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 24px;
+  text-align: center;
+}
+.dv-empty-icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+  border-radius: 50%;
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.dv-empty-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.dv-empty strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.dv-empty-action {
+  min-height: 42px;
+  display: flex;
+  align-items: flex-end;
+}
+.dv-empty button {
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dv-empty button:hover {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
 .dv-recurring {
   display: flex;
   align-items: center;

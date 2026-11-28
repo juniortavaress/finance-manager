@@ -345,6 +345,7 @@ export default function Dividends() {
           banksById={banksById}
           amountOf={scheduleAmount}
           onSelect={openSchedule}
+          onCreate={() => openSchedule(null)}
         />
         <TopPayersCard
           payers={payers}

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { fmt } from '../../../utils/format';
 import { assetLabel, formatPercent } from '../utils/dividends';
 import Skeleton from '../../../components/Skeleton';
+import { IconCoin } from '../../../components/icons';
+import EmptyState from './EmptyState';
 
 function InfoTip({ children }) {
   const [open, setOpen] = useState(false);
@@ -81,7 +83,7 @@ export default function TopPayersCard({ payers, currency, loading, yieldLoading,
             </div>
           ))}
         {!loading && sorted.length === 0 && (
-          <div className="empty-state">Nenhum recebimento nos últimos 12 meses.</div>
+          <EmptyState icon={IconCoin} title="Nenhum pagador nos últimos 12 meses" />
         )}
         {!loading &&
           sorted.map((p) => {
