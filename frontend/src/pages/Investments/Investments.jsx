@@ -1,0 +1,699 @@
+import { useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { investmentsApi, dividendsApi } from '../../api/resources';
+import { useFetch } from '../../hooks/useFetch';
+import { useBanks } from '../../hooks/resources/useBanks';
+import { useAccounts } from '../../hooks/resources/useAccounts';
+import { investmentAccounts as filterInvestment } from '../../utils/accounts';
+import { fmt, monthLabelFull } from '../../utils/format';
+import { deriveBankSummary } from './utils/investmentSummary';
+import { isValueBasedFixedIncome } from '../../utils/fixedIncome';
+import Skeleton from '../../components/Skeleton';
+import InvestmentRentabilityDrilldownModal from './components/InvestmentRentabilityDrilldownModal';
+import InvestmentBreakdownDrilldownModal from './components/InvestmentBreakdownDrilldownModal';
+import InvestmentTypeBreakdownDrilldownModal from './components/InvestmentTypeBreakdownDrilldownModal';
+import DividendsDrilldownModal from './components/DividendsDrilldownModal';
+import ProfitEvolutionChart from './components/ProfitEvolutionChart';
+import InfoTooltip from '../../components/InfoTooltip';
+import { IconChevronDown } from '../../components/icons';
+
+const KIND_LABELS = {
+  dividendo: 'Dividendo',
+  rendimento: 'Rendimento (FII)',
+  jcp: 'JCP',
+  cupom: 'Cupom',
+  bonificacao: 'Bonificação',
+  outro: 'Outro',
+};
+
+const FREQUENCY_LABELS = {
+  monthly: 'Mensal',
+  quarterly: 'Trimestral',
+  semiannual: 'Semestral',
+  yearly: 'Anual',
+};
+
+const TYPE_LABELS = {
+  renda_fixa: 'Renda fixa',
+  acoes: 'Ações',
+  fii: 'FII',
+  fundos: 'Fundos',
+  etf: 'ETF',
+  cripto: 'Cripto',
+  outro: 'Outro',
+  internacional: 'Internacional',
+};
+const TYPE_COLORS = {
+  renda_fixa: '#0F5C5C',
+  acoes: '#C0912F',
+  fii: '#3D7A8C',
+  fundos: '#7A4FE0',
+  etf: '#2E7D5B',
+  cripto: '#A6432C',
+  outro: '#8B9A97',
+  internacional: '#4A5FBF',
+};
+
+const EMPTY_LIST = [];
+
+export default function Investments() {
+  const navigate = useNavigate();
+  const { banks } = useBanks();
+  const { accounts } = useAccounts();
+  const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);
+  const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
+  const [bankFilter, setBankFilter] = useState('');
+  // Busca sempre o consolidado ("todas as corretoras") uma única vez; o filtro
+  // de corretora só recorta esses dados em memória, sem nova ida ao backend.
+  const { data: summaryAll, loading: summaryLoading } = useFetch(
+    (signal) => investmentsApi.summary(undefined, signal),
+    [],
+    { cacheKey: 'investments.summary' }
+  );
+  const { data: dividendsAll, loading: dividendsLoading } = useFetch(
+    (signal) => dividendsApi.summary(undefined, signal),
+    [],
+    { cacheKey: 'dividends.summary' }
+  );
+  const summaryData = useMemo(() => deriveBankSummary(summaryAll, bankFilter), [summaryAll, bankFilter]);
+  const dividendsData = useMemo(
+    () => (bankFilter ? dividendsAll?.by_bank?.[bankFilter] || { has_dividends: false, by_month: [], by_year: [] } : dividendsAll),
+    [dividendsAll, bankFilter]
+  );
+  const { data: schedulesData } = useFetch(() => dividendsApi.listSchedules(), [], {
+    cacheKey: 'dividends.schedules',
+  });
+  const { data: profitData, loading: profitLoading } = useFetch(
+    (signal) => investmentsApi.profitEvolution(signal),
+    [],
+    { cacheKey: 'investments.profit' }
+  );
+  const [drilldown, setDrilldown] = useState(null);
+
+  const assets = summaryData?.assets || EMPTY_LIST;
+  const unallocatedByBank = summaryData?.unallocated_by_bank || [];
+  const totalUnallocated = summaryData?.total_unallocated || 0;
+  const hasDividends = dividendsData?.has_dividends || false;
+  const schedules = schedulesData?.dividend_schedules || EMPTY_LIST;
+  const totalInvested = summaryData?.total_invested || 0;
+
+  const activeAssets = useMemo(() => assets.filter((a) => a.position.quantity > 0), [assets]);
+
+  const profitEvolutionRaw = profitData?.evolution || EMPTY_LIST;
+
+  const dividendsByMonth = useMemo(
+    () => (dividendsData?.by_month || []).map((p) => ({ label: `${monthLabelFull(p.month)} ${p.year}`, value: p.total })),
+    [dividendsData]
+  );
+
+  const dividendsByYear = useMemo(
+    () => (dividendsData?.by_year || []).map((p) => ({ label: String(p.year), value: p.total })),
+    [dividendsData]
+  );
+
+  const upcomingDividends = useMemo(() => {
+    const today = new Date();
+    const currentKey = `${today.getFullYear()}-${today.getMonth() + 1}`;
+    const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+    const nextKey = `${nextMonthDate.getFullYear()}-${nextMonthDate.getMonth() + 1}`;
+
+    const rows = schedules
+      .filter((s) => s.active && (!bankFilter || s.bank_id === bankFilter))
+      .map((s) => {
+        const dueDate = new Date(`${s.next_due_date}T00:00:00`);
+        return { schedule: s, asset: s.asset, value: s.expected_amount || 0, dueDate, key: `${dueDate.getFullYear()}-${dueDate.getMonth() + 1}` };
+      })
+      .filter((r) => r.value > 0);
+
+    const thisMonth = rows.filter((r) => r.key === currentKey);
+    const list = thisMonth.length > 0 ? thisMonth : rows.filter((r) => r.key === nextKey);
+
+    return list.sort((a, b) => a.dueDate - b.dueDate);
+  }, [schedules, bankFilter]);
+
+  const totalCurrent = activeAssets.reduce(
+    (s, a) => s + (a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount),
+    0
+  );
+  // O grafico de lucro vem de outra chamada (e de um cache no servidor), buscada
+  // em outro instante que os cards - com as cotacoes mudando, os dois podiam
+  // mostrar valores diferentes. O ultimo ponto (mes atual) e' sempre derivado
+  // dos proprios cards: valor atual + caixa - aportes.
+  const profitEvolution = useMemo(() => {
+    if (bankFilter || !summaryAll || profitEvolutionRaw.length === 0) return profitEvolutionRaw;
+    const last = profitEvolutionRaw[profitEvolutionRaw.length - 1];
+    const now = new Date();
+    if (last.year !== now.getFullYear() || last.month !== now.getMonth() + 1) return profitEvolutionRaw;
+    const patched = {
+      ...last,
+      current: totalCurrent,
+      cash: totalUnallocated,
+      contributed: totalInvested,
+      profit: totalCurrent + totalUnallocated - totalInvested,
+    };
+    return [...profitEvolutionRaw.slice(0, -1), patched];
+  }, [profitEvolutionRaw, summaryAll, bankFilter, totalCurrent, totalUnallocated, totalInvested]);
+
+  const totalDividends = activeAssets.reduce((s, a) => s + (a.position.dividends_total || 0), 0);
+  const totalDividendsAllTime = assets.reduce((s, a) => s + (a.position.dividends_total || 0), 0);
+  const allocatedCostBasis =
+    summaryData?.total_allocated_cost != null
+      ? summaryData.total_allocated_cost
+      : activeAssets.reduce((s, a) => s + a.position.invested_amount, 0);
+  const rentabilidade =
+    summaryData?.rentability_total != null
+      ? summaryData.rentability_total
+      : allocatedCostBasis > 0
+      ? ((totalCurrent + totalDividends - allocatedCostBasis) / allocatedCostBasis) * 100
+      : 0;
+
+  const byType = useMemo(() => {
+    const map = {};
+    activeAssets.forEach((a) => {
+      const value = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
+      const key = !bankFilter && a.currency && a.currency !== 'BRL' ? 'internacional' : a.type;
+      map[key] = (map[key] || 0) + value;
+    });
+    return Object.entries(map)
+      .map(([type, total]) => ({ type, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [activeAssets, bankFilter]);
+  const typeMax = Math.max(1, ...byType.map((t) => t.total));
+  const typeSum = byType.reduce((s, t) => s + t.total, 0) || 1;
+
+  const assetsByType = useMemo(() => {
+    const map = {};
+    activeAssets.forEach((a) => {
+      const value = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
+      const key = !bankFilter && a.currency && a.currency !== 'BRL' ? 'internacional' : a.type;
+      map[key] = map[key] || [];
+      map[key].push({ label: a.code || a.name, value, color: TYPE_COLORS[a.type] });
+    });
+    Object.keys(map).forEach((key) => {
+      const groupTotal = map[key].reduce((s, r) => s + r.value, 0) || 1;
+      map[key] = map[key]
+        .map((r) => ({ ...r, pct: (r.value / groupTotal) * 100 }))
+        .sort((a, b) => b.value - a.value);
+    });
+    return map;
+  }, [activeAssets, bankFilter]);
+
+  const byBank = useMemo(() => {
+    const map = {};
+    activeAssets.forEach((a) => {
+      const value = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
+      const original = a.position.current_amount_original != null
+        ? a.position.current_amount_original
+        : a.position.invested_amount_original;
+      map[a.bank_id] = map[a.bank_id] || {
+        bank_id: a.bank_id,
+        name: a.bank_name,
+        color: a.bank_color,
+        total: 0,
+        originalTotal: a.currency !== 'BRL' ? 0 : null,
+        currency: a.currency,
+      };
+      map[a.bank_id].total += value;
+      if (map[a.bank_id].originalTotal != null) map[a.bank_id].originalTotal += original != null ? original : value;
+    });
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [activeAssets]);
+  const bankMax = Math.max(1, ...byBank.map((b) => b.total));
+  const bankSum = byBank.reduce((s, b) => s + b.total, 0) || 1;
+
+  const investedByBank = useMemo(() => {
+    const map = {};
+    activeAssets.forEach((a) => {
+      map[a.bank_id] = map[a.bank_id] || {
+        bank_id: a.bank_id,
+        name: a.bank_name,
+        color: a.bank_color,
+        total: 0,
+        originalTotal: a.currency !== 'BRL' ? 0 : null,
+        currency: a.currency,
+      };
+      map[a.bank_id].total += a.position.invested_amount;
+      if (map[a.bank_id].originalTotal != null) {
+        map[a.bank_id].originalTotal += a.position.invested_amount_original != null
+          ? a.position.invested_amount_original
+          : a.position.invested_amount;
+      }
+    });
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  }, [activeAssets]);
+
+  const contributionsByBank = summaryData?.invested_by_bank || [];
+
+  const bankOptions = useMemo(() => {
+    const seen = new Map();
+    investmentAccounts.forEach((a) => {
+      const bank = bankById(a.bank_id);
+      if (bank && !seen.has(bank.id)) seen.set(bank.id, bank.name);
+    });
+    return [...seen.entries()];
+  }, [investmentAccounts, bankById]);
+
+  // Com uma corretora filtrada os valores ficam na moeda dela (ex: US$ na
+  // Nomad); no consolidado, tudo já vem convertido para BRL.
+  const displayCurrency = bankFilter
+    ? investmentAccounts.find((a) => a.bank_id === bankFilter)?.currency || 'BRL'
+    : 'BRL';
+  const money = (value) => fmt(value, displayCurrency);
+
+  const topPositions = useMemo(
+    () =>
+      [...activeAssets]
+        .sort((a, b) => {
+          const va = a.position.current_amount != null ? a.position.current_amount : a.position.invested_amount;
+          const vb = b.position.current_amount != null ? b.position.current_amount : b.position.invested_amount;
+          return vb - va;
+        })
+        .slice(0, 5),
+    [activeAssets]
+  );
+
+  return (
+    <div className="screen active">
+      <div className="topbar">
+        <h1>
+          Investimentos{' '}
+          <span style={{ fontSize: 12, color: 'var(--ink-faint)', fontFamily: "'IBM Plex Sans'", fontWeight: 400 }}>
+            — visão geral
+          </span>
+        </h1>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div className="filter-select">
+            <select value={bankFilter} onChange={(e) => setBankFilter(e.target.value)}>
+              <option value="">Todas as corretoras</option>
+              {bankOptions.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-4" style={{ marginBottom: 20 }}>
+        <div className="card stat-card" style={{ '--stripe': '#3D7A8C' }}>
+          <div className="label">Aportes</div>
+          {summaryLoading ? (
+            <>
+              <Skeleton width={110} height={24} style={{ marginBottom: 6 }} />
+              <Skeleton width={160} height={12} />
+            </>
+          ) : (
+            <>
+              <div className="value num">{money(totalInvested)}</div>
+              <div className="delta">dinheiro que saiu do banco pra carteira</div>
+            </>
+          )}
+          {contributionsByBank.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver por corretora"
+              onClick={() => setDrilldown({ kind: 'contributions' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
+        </div>
+        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
+          <div className="label">Valor investido</div>
+          {summaryLoading ? (
+            <>
+              <Skeleton width={110} height={24} style={{ marginBottom: 6 }} />
+              <Skeleton width={140} height={12} />
+            </>
+          ) : (
+            <>
+              <div className="value num">{money(allocatedCostBasis)}</div>
+              <div className="delta">custo das posições atuais</div>
+            </>
+          )}
+          {investedByBank.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver por corretora"
+              onClick={() => setDrilldown({ kind: 'invested' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
+        </div>
+        <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
+          <div className="label">Valor atual investido</div>
+          {summaryLoading ? (
+            <Skeleton width={110} height={24} />
+          ) : (
+            <div className="value num">{money(totalCurrent)}</div>
+          )}
+          {byBank.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver por corretora"
+              onClick={() => setDrilldown({ kind: 'current' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
+        </div>
+        <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
+          <div className="label">Dividendos</div>
+          {summaryLoading || dividendsLoading ? (
+            <Skeleton width={110} height={24} />
+          ) : (
+            <div className="value num">{money(totalDividendsAllTime)}</div>
+          )}
+          {hasDividends && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver mês a mês / anual"
+              onClick={() => setDrilldown({ kind: 'dividends' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
+        </div>
+        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
+          <div className="label">Rentabilidade</div>
+          {summaryLoading ? (
+            <Skeleton width={80} height={24} />
+          ) : (
+            <div className="value num">
+              {activeAssets.length ? `${rentabilidade >= 0 ? '+' : ''}${rentabilidade.toFixed(1)}%` : '—'}
+            </div>
+          )}
+          {activeAssets.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver detalhes"
+              onClick={() => setDrilldown({ kind: 'rentability' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
+        </div>
+        <div className="card stat-card" style={{ '--stripe': '#8B9A97' }}>
+          <div className="label">Caixa disponível</div>
+          {summaryLoading ? (
+            <Skeleton width={110} height={24} />
+          ) : (
+            <div className="value num">{money(totalUnallocated)}</div>
+          )}
+          {unallocatedByBank.length > 0 && (
+            <button
+              type="button"
+              className="stat-card-expand"
+              title="Ver por corretora"
+              onClick={() => setDrilldown({ kind: 'unallocated' })}
+            >
+              <IconChevronDown style={{ transform: 'rotate(-90deg)' }} />
+            </button>
+          )}
+        </div>
+      </div>
+
+
+      <div className="grid grid-2" style={{ marginBottom: 20 }}>
+        <div className="card">
+          <h3>Distribuição por tipo</h3>
+          {summaryLoading &&
+            [0, 1, 2].map((i) => (
+              <div className="hbar-row" key={i}>
+                <div className="hbar-top">
+                  <Skeleton width={90} height={12} />
+                  <Skeleton width={60} height={12} />
+                </div>
+                <Skeleton width="100%" height={8} radius={5} />
+              </div>
+            ))}
+          {!summaryLoading && byType.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
+          {!summaryLoading && byType.map(({ type, total }) => (
+            <div
+              className="hbar-row hbar-row-clickable"
+              key={type}
+              role="button"
+              tabIndex={0}
+              onClick={() => setDrilldown({ kind: 'assetType', type })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') setDrilldown({ kind: 'assetType', type });
+              }}
+            >
+              <div className="hbar-top">
+                <span className="cat">
+                  <span className="catdot" style={{ background: TYPE_COLORS[type] }} />
+                  {TYPE_LABELS[type]}
+                </span>
+                <span className="val num">
+                  {money(total)} · {((total / typeSum) * 100).toFixed(0)}%
+                </span>
+              </div>
+              <div className="hbar-track">
+                <div
+                  className="hbar-fill"
+                  style={{ width: `${(total / typeMax) * 100}%`, background: TYPE_COLORS[type] }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="card">
+          <h3>Distribuição por corretora/banco</h3>
+          {summaryLoading &&
+            [0, 1, 2].map((i) => (
+              <div className="hbar-row" key={i}>
+                <div className="hbar-top">
+                  <Skeleton width={90} height={12} />
+                  <Skeleton width={60} height={12} />
+                </div>
+                <Skeleton width="100%" height={8} radius={5} />
+              </div>
+            ))}
+          {!summaryLoading && byBank.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
+          {!summaryLoading && byBank.map((b) => (
+            <div className="hbar-row" key={b.bank_id}>
+              <div className="hbar-top">
+                <span className="cat">
+                  <span className="catdot" style={{ background: b.color }} />
+                  {b.name}
+                </span>
+                <span className="val num">
+                  {money(b.total)} · {((b.total / bankSum) * 100).toFixed(0)}%
+                </span>
+              </div>
+              <div className="hbar-track">
+                <div className="hbar-fill" style={{ width: `${(b.total / bankMax) * 100}%`, background: b.color }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-2" style={{ marginBottom: 20 }}>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <h3>
+            Evolução do lucro
+            <InfoTooltip text="Lucro = valor atual dos ativos + caixa disponível − aportes. É o que você teria se liquidasse tudo hoje, descontando o que colocou." />
+          </h3>
+          {profitLoading ? (
+            <Skeleton width="100%" height={180} radius={8} />
+          ) : profitEvolution.length < 2 ? (
+            <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              Histórico insuficiente para o gráfico.
+            </div>
+          ) : (
+            <ProfitEvolutionChart periods={profitEvolution} />
+          )}
+        </div>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+          <h3>
+            Próximos dividendos{' '}
+            <span className="action" onClick={() => navigate('/investimentos/dividendos')}>
+              ver todos →
+            </span>
+          </h3>
+          {schedulesData === null ? (
+            <Skeleton width="100%" height={180} radius={8} />
+          ) : upcomingDividends.length === 0 ? (
+            <div className="empty-state" style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              Nenhum provento recorrente ativo.
+            </div>
+          ) : (
+            <div className="list-scroll-hidden" style={{ maxHeight: 168 }}>
+              {upcomingDividends.map((r) => (
+                <div className="tx-row" key={r.schedule.id}>
+                  <div className="tx-left">
+                    <div className="tx-icon" style={{ background: 'var(--gold-soft)', color: 'var(--gold)' }}>
+                      {(r.asset?.code || r.asset?.name || '?').slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="tx-desc">{r.asset?.code || r.asset?.name}</div>
+                      <div className="tx-meta">
+                        {KIND_LABELS[r.schedule.kind] || r.schedule.kind} · {FREQUENCY_LABELS[r.schedule.frequency] || r.schedule.frequency}
+                        {r.schedule.bank_name ? ` · ${r.schedule.bank_name}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div className="tx-val num">{money(r.value)}</div>
+                    <div className="tx-meta">todo dia {r.dueDate.getDate()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>{bankFilter ? `Posições em ${bankOptions.find(([id]) => id === bankFilter)?.[1] || ''}` : 'Maiores posições'}</h3>
+        {summaryLoading &&
+          [0, 1, 2, 3].map((i) => (
+            <div className="tx-row" key={i}>
+              <div className="tx-left">
+                <Skeleton width={34} height={34} radius={9} />
+                <div>
+                  <Skeleton width={130} height={13} style={{ marginBottom: 5 }} />
+                  <Skeleton width={160} height={11} />
+                </div>
+              </div>
+              <Skeleton width={80} height={14} />
+            </div>
+          ))}
+        {!summaryLoading && topPositions.length === 0 && <div className="empty-state">Nenhum ativo com posição.</div>}
+        {!summaryLoading && topPositions.map((asset) => {
+          const pos = asset.position;
+          return (
+            <div className="tx-row" key={asset.id}>
+              <div className="tx-left">
+                <div className="tx-icon" style={{ background: `${TYPE_COLORS[asset.type]}22`, color: TYPE_COLORS[asset.type] }}>
+                  {(asset.code || asset.name).slice(0, 2).toUpperCase()}
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                    <div className="tx-desc" style={{ flexShrink: 0 }}>{asset.code || asset.name}</div>
+                    {asset.code && (
+                      <span
+                        style={{
+                          fontSize: 11.5,
+                          color: 'var(--ink-faint)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          minWidth: 0,
+                        }}
+                      >
+                        {asset.name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="tx-meta">
+                    {asset.bank_name}
+                    {!isValueBasedFixedIncome(asset) && ` · ${pos.quantity} un. · preço médio ${money(pos.avg_unit_price)}`}
+                  </div>
+                </div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div className="tx-val num">{money(pos.current_amount != null ? pos.current_amount : pos.invested_amount)}</div>
+                <div className="tx-meta">investido {money(pos.invested_amount)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <InvestmentRentabilityDrilldownModal
+        open={drilldown?.kind === 'rentability'}
+        onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
+        rentabilityTotal={summaryData?.rentability_total}
+        rentabilityLastMonth={summaryData?.rentability_last_month}
+        rentabilityLastYear={summaryData?.rentability_last_year}
+      />
+
+      <InvestmentBreakdownDrilldownModal
+        open={drilldown?.kind === 'contributions'}
+        onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
+        currency={displayCurrency}
+        title="Aportes por corretora"
+        rows={contributionsByBank.map((b) => ({
+          label: b.bank_name,
+          value: b.value,
+          color: b.bank_color,
+          original: bankFilter ? null : b.value_original,
+          originalCurrency: b.currency,
+        }))}
+      />
+
+      <InvestmentBreakdownDrilldownModal
+        open={drilldown?.kind === 'invested'}
+        onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
+        currency={displayCurrency}
+        title="Valor investido por corretora"
+        rows={investedByBank.map((b) => ({
+          label: b.name,
+          value: b.total,
+          color: b.color,
+          original: bankFilter ? null : b.originalTotal,
+          originalCurrency: b.currency,
+        }))}
+      />
+
+      <InvestmentBreakdownDrilldownModal
+        open={drilldown?.kind === 'unallocated'}
+        onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
+        currency={displayCurrency}
+        title="Caixa disponível por corretora"
+        rows={unallocatedByBank.map((b) => ({
+          label: b.bank_name,
+          value: b.balance,
+          color: b.bank_color,
+          original: bankFilter ? null : b.balance_original,
+          originalCurrency: b.currency,
+        }))}
+      />
+
+      <InvestmentBreakdownDrilldownModal
+        open={drilldown?.kind === 'current'}
+        onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
+        currency={displayCurrency}
+        title="Valor atual por corretora"
+        rows={byBank.map((b) => ({
+          label: b.name,
+          value: b.total,
+          color: b.color,
+          original: bankFilter ? null : b.originalTotal,
+          originalCurrency: b.currency,
+        }))}
+      />
+
+      <InvestmentTypeBreakdownDrilldownModal
+        open={drilldown?.kind === 'assetType'}
+        onClose={() => setDrilldown(null)}
+        loading={summaryLoading}
+        currency={displayCurrency}
+        title={`${TYPE_LABELS[drilldown?.type] || ''} por ativo`}
+        rows={assetsByType[drilldown?.type] || []}
+      />
+
+      <DividendsDrilldownModal
+        open={drilldown?.kind === 'dividends'}
+        onClose={() => setDrilldown(null)}
+        loading={dividendsLoading}
+        byMonth={dividendsByMonth}
+        byYear={dividendsByYear}
+      />
+    </div>
+  );
+}

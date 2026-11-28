@@ -25,13 +25,21 @@ senha: 123456
 ```
 src/
   api/            client HTTP (fetch + JWT) e funcoes por recurso REST
-  context/        AuthContext (sessao) e DataContext (bancos/contas/categorias/cartoes)
-  components/     Sidebar, layout, modais (nova transacao, debito automatico, etc.)
-  pages/          uma pagina por tela (Dashboard, Contas, Transacoes, Parcelas, Cartoes, Categorias, Investimentos, Relatorios, Config)
+  context/        AuthContext (sessao) e ToastContext (avisos)
+  components/     so' o que e' usado pelo layout ou por mais de uma pagina (e o que e' generico)
+  pages/
+    <Pagina>/
+      <Pagina>.jsx  a tela
+      components/   componentes usados so' por ela
+      utils/        utilitarios usados so' por ela (idem hooks/)
   styles/         CSS portado do mock original, dividido por area (layout, cards, listas, modal, login)
-  hooks/          useFetch (fetch + loading + error)
-  utils/          formatacao de moeda e datas
+  hooks/          hooks compartilhados (useFetch, recursos como useBanks)
+  utils/          utilitarios compartilhados (formatacao de moeda e datas etc.)
 ```
+
+Regras: uma pagina nao importa de dentro de outra (se a segunda precisar, o
+arquivo sobe para a pasta compartilhada), e as subpastas de uma pagina so'
+existem quando ha o que colocar nelas.
 
 ## Build de produção
 
