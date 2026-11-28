@@ -1,48 +1,31 @@
 import { useEffect, useState } from 'react';
 import { dividendsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
-import { maskToNumber, numberToMasked } from '../../utils/currency';
-import { IconTrash } from '../icons';
+import { currencySymbol, maskToNumber, numberToMasked } from '../../utils/currency';
+import { getDefaultCurrency } from '../../state/currentUserCurrency';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
-import CurrencyInput from '../CurrencyInput';
-import BrokerAssetPicker from '../BrokerAssetPicker';
+import { AssetSearch, Select } from '../dividends/Dropdowns';
+import { DividendForm, ValueField } from '../dividends/FormParts';
 import { localIsoDate } from '../../utils/date';
 import { useFormError } from '../../hooks/useFormError';
+import { KIND_LABELS, assetLabel } from '../../utils/dividends';
 
-const KIND_OPTIONS = [
-  { value: 'dividendo', label: 'Dividendo' },
-  { value: 'jcp', label: 'JCP' },
-  { value: 'bonificacao', label: 'Bonificação' },
-  { value: 'outro', label: 'Outro' },
-];
-
-function todayIso() {
-  return localIsoDate();
-}
+const KINDS = ['dividendo', 'rendimento', 'jcp', 'bonificacao', 'outro'];
 
 /**
  * Dividendo avulso: um único recebimento, sem gerar uma recorrência
  * cadastrada. Também serve para editar/corrigir um recebimento já existente
  * (avulso ou já materializado de um provento recorrente).
  */
-export default function DividendModal({
-  open,
-  onClose,
-  onSaved,
-  onDeleted,
-  dividend,
-  assets = [],
-  investmentAccounts = [],
-  bankById,
-}) {
+export default function DividendModal({ open, onClose, onSaved, onDeleted, dividend, assets = [], bankOf }) {
   const isEditing = !!dividend;
   const { showSuccess, showError } = useToast();
 
   const [assetId, setAssetId] = useState('');
   const [kind, setKind] = useState('dividendo');
   const [amount, setAmount] = useState('');
-  const [date, setDate] = useState(todayIso());
+  const [date, setDate] = useState(localIsoDate());
   const [, setError] = useFormError();
   const [submitting, setSubmitting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -59,7 +42,7 @@ export default function DividendModal({
       setAssetId('');
       setKind('dividendo');
       setAmount('');
-      setDate(todayIso());
+      setDate(localIsoDate());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEditing, dividend]);
@@ -68,6 +51,10 @@ export default function DividendModal({
 
   const numericAmount = maskToNumber(amount);
   const isFromSchedule = isEditing && !!dividend.schedule_id;
+  const asset = assets.find((a) => a.id === assetId) || dividend?.asset;
+  const currency = asset?.currency || dividend?.currency || getDefaultCurrency();
+  // Um tipo antigo fora da lista continua selecionavel, para editar sem troca-lo.
+  const kinds = KINDS.includes(kind) ? KINDS : [...KINDS, kind];
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -103,71 +90,43 @@ export default function DividendModal({
     onDeleted?.();
   }
 
+  const subtitle = isEditing
+    ? [assetLabel(asset), asset ? bankOf(asset)?.name : null].filter(Boolean).join(' · ')
+    : 'Um recebimento único';
+
   return (
     <ModalShell open={open} onClose={onClose}>
-      <div className="modal">
-        <div className="modal-head">
-          <h2>{isEditing ? 'Editar recebimento' : 'Dividendo avulso'}</h2>
-          <div className="modal-head-actions">
-            {isEditing && (
-              <button type="button" className="modal-delete-trigger" title="Excluir" onClick={() => setDeleteModalOpen(true)}>
-                <IconTrash />
-              </button>
-            )}
-            <button className="modal-close" onClick={onClose}>
-              ✕
-            </button>
-          </div>
-        </div>
-        <form className="modal-body" onSubmit={handleSubmit}>
+      <DividendForm
+        title={isEditing ? 'Editar recebimento' : 'Dividendo avulso'}
+        subtitle={subtitle}
+        onClose={onClose}
+        onDelete={isEditing ? () => setDeleteModalOpen(true) : undefined}
+        onSubmit={handleSubmit}
+        submitting={submitting}
+      >
+        {!isEditing && <AssetSearch assets={assets} value={assetId} onChange={setAssetId} bankOf={bankOf} />}
 
-          <BrokerAssetPicker
-            assets={assets}
-            investmentAccounts={investmentAccounts}
-            bankById={bankById}
-            assetId={assetId}
-            onAssetChange={setAssetId}
-            disabled={isEditing}
+        <div className="dv-grid">
+          <Select
+            label="Tipo"
+            value={kind}
+            onChange={setKind}
+            options={kinds.map((value) => ({ value, label: KIND_LABELS[value] || value }))}
           />
+          <label className="dv-field">
+            <span>Recebido em</span>
+            <input type="date" className="dv-control" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+        </div>
 
-          <div className="field">
-            <label>Tipo de provento</label>
-            <select value={kind} onChange={(e) => setKind(e.target.value)}>
-              {KIND_OPTIONS.map((k) => (
-                <option key={k.value} value={k.value}>
-                  {k.label}
-                </option>
-              ))}
-            </select>
-          </div>
+        <ValueField label="Valor recebido" symbol={currencySymbol(currency)} value={amount} onChange={setAmount} />
 
-          <div className="field-row">
-            <div className="field">
-              <label>Valor recebido</label>
-              <CurrencyInput value={amount} onChange={setAmount} />
-            </div>
-            <div className="field">
-              <label>Data do recebimento</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-          </div>
-
-          {isFromSchedule && (
-            <div className="fatura-note show" style={{ background: 'var(--bg)', color: 'var(--ink-soft)' }}>
-              Este recebimento veio de um provento recorrente. Editar aqui corrige só esta ocorrência.
-            </div>
-          )}
-
-          <div className="modal-actions">
-            <div className="btn btn-ghost" onClick={onClose}>
-              Cancelar
-            </div>
-            <button className="btn btn-primary" type="submit" disabled={submitting}>
-              {submitting ? 'Salvando...' : isEditing ? 'Salvar alterações' : 'Salvar recebimento'}
-            </button>
-          </div>
-        </form>
-      </div>
+        {isFromSchedule && (
+          <p className="dv-hint">
+            Este recebimento veio de um provento recorrente. Editar aqui corrige só esta ocorrência.
+          </p>
+        )}
+      </DividendForm>
 
       {isEditing && (
         <ConfirmDeleteModal

@@ -119,6 +119,27 @@
   line-height: 1;
   background: none;
   border: none;
+  display: inline-block;
+  transition: transform 0.25s ease, color 0.2s ease;
+}
+.modal-close:hover,
+.modal-close:focus-visible {
+  color: var(--ink);
+}
+.modal-close:hover {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .modal-close {
+    transition: none;
+  }
+}
+/* No desktop o modal centraliza sobre o conteudo: a barra lateral fica livre
+   (sem o fundo escuro por cima) e continua utilizavel. */
+@media (min-width: 721px) {
+  .app-shell .modal-overlay {
+    left: 252px;
+  }
 }
 .modal-body {
   padding: 22px 24px;

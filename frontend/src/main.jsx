@@ -12,6 +12,7 @@ import './styles/toast.css';
 import './styles/friends.css';
 import './styles/investments.css';
 import './styles/settings.css';
+import './styles/dividends.css';
 import App from './App.jsx';
 import { registerPwa } from './pwa';
 import { applyTheme, watchSystemTheme } from './utils/theme';

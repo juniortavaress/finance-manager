@@ -1,43 +1,25 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { dividendsApi } from '../../api/resources';
 import { useToast } from '../../context/ToastContext';
 import { fmt } from '../../utils/format';
-import { maskToNumber, numberToMasked } from '../../utils/currency';
-import { IconTrash } from '../icons';
+import { currencySymbol, maskToNumber, numberToMasked } from '../../utils/currency';
+import { getDefaultCurrency } from '../../state/currentUserCurrency';
 import ModalShell from './ModalShell';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
-import CurrencyInput from '../CurrencyInput';
-import BrokerAssetPicker from '../BrokerAssetPicker';
+import { AssetSearch, Select } from '../dividends/Dropdowns';
+import { DividendForm, ValueField } from '../dividends/FormParts';
 import { useFormError } from '../../hooks/useFormError';
+import { FREQUENCY_LABELS, KIND_LABELS, assetLabel } from '../../utils/dividends';
 
-const KIND_OPTIONS = [
-  { value: 'dividendo', label: 'Dividendo' },
-  { value: 'jcp', label: 'JCP' },
-  { value: 'cupom', label: 'Cupom' },
-  { value: 'outro', label: 'Outro' },
-];
-
-const FREQUENCY_OPTIONS = [
-  { value: 'monthly', label: 'Mensal' },
-  { value: 'quarterly', label: 'Trimestral' },
-  { value: 'semiannual', label: 'Semestral' },
-  { value: 'yearly', label: 'Anual' },
-];
+const KINDS = ['dividendo', 'rendimento', 'jcp', 'cupom', 'outro'];
+const FREQUENCY_OPTIONS = Object.entries(FREQUENCY_LABELS).map(([value, label]) => ({ value, label }));
 
 /**
  * Provento recorrente: cadastra a regra (ativo + valor por cota ou fixo +
  * periodicidade). O backend materializa os recebimentos automaticamente na
  * data prevista, usando a posição do ativo naquele momento.
  */
-export default function DividendScheduleModal({
-  open,
-  onClose,
-  onSaved,
-  schedule,
-  assets = [],
-  investmentAccounts = [],
-  bankById,
-}) {
+export default function DividendScheduleModal({ open, onClose, onSaved, schedule, assets = [], bankOf }) {
   const isEditing = !!schedule;
   const { showSuccess, showError } = useToast();
 
@@ -56,11 +38,12 @@ export default function DividendScheduleModal({
     if (!open) return;
     setError('');
     if (isEditing) {
+      const perShare = schedule.calc_mode === 'per_share';
       setAssetId(schedule.asset_id);
       setKind(schedule.kind);
       setCalcMode(schedule.calc_mode);
-      setAmountPerShare(schedule.amount_per_share != null ? numberToMasked(schedule.amount_per_share) : '');
-      setFixedAmount(schedule.fixed_amount != null ? numberToMasked(schedule.fixed_amount) : '');
+      setAmountPerShare(perShare && schedule.amount_per_share != null ? numberToMasked(schedule.amount_per_share) : '');
+      setFixedAmount(!perShare && schedule.fixed_amount != null ? numberToMasked(schedule.fixed_amount) : '');
       setFrequency(schedule.frequency);
       setDayOfMonth(String(schedule.day_of_month));
     } else {
@@ -75,22 +58,49 @@ export default function DividendScheduleModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isEditing, schedule]);
 
-  const selectedAsset = useMemo(() => assets.find((a) => a.id === assetId), [assets, assetId]);
-  const quantity = selectedAsset?.position?.quantity || 0;
-
   if (!open) return null;
 
+  const asset = assets.find((a) => a.id === assetId) || schedule?.asset;
+  const quantity = asset?.position?.quantity || 0;
+  const currency = asset?.currency || getDefaultCurrency();
+  const isPerShare = calcMode === 'per_share';
   const numericPerShare = maskToNumber(amountPerShare);
   const numericFixed = maskToNumber(fixedAmount);
-  const estimatedValue = calcMode === 'per_share' ? numericPerShare * quantity : numericFixed;
+  const value = isPerShare ? numericPerShare : numericFixed;
+  const kinds = KINDS.includes(kind) ? KINDS : [...KINDS, kind];
+
+  let estimate = null;
+  if (quantity > 0 && value > 0) {
+    estimate = isPerShare
+      ? `${fmt(value * quantity, currency)} por pagamento, com ${quantity} cotas`
+      : `${fmt(value / quantity, currency)} por cota, com ${quantity} cotas`;
+  }
+
+  // Ao alternar, o valor do outro modo e' derivado do digitado. O original fica
+  // guardado, para ir e voltar sem perder centavos no arredondamento.
+  function changeMode(next) {
+    if (next === calcMode) return;
+    if (next === 'fixed' && !fixedAmount && numericPerShare && quantity) {
+      setFixedAmount(numberToMasked(numericPerShare * quantity));
+    }
+    if (next === 'per_share' && !amountPerShare && numericFixed && quantity) {
+      setAmountPerShare(numberToMasked(numericFixed / quantity));
+    }
+    setCalcMode(next);
+  }
+
+  function changeValue(masked) {
+    setAmountPerShare(isPerShare ? masked : '');
+    setFixedAmount(isPerShare ? '' : masked);
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
 
     if (!assetId) return setError('Selecione um ativo.');
-    if (calcMode === 'per_share' && numericPerShare <= 0) return setError('Informe o valor por cota.');
-    if (calcMode === 'fixed' && numericFixed <= 0) return setError('Informe o valor fixo.');
+    if (isPerShare && numericPerShare <= 0) return setError('Informe o valor por cota.');
+    if (!isPerShare && numericFixed <= 0) return setError('Informe o valor total.');
     const day = Number(dayOfMonth);
     if (!day || day < 1 || day > 31) return setError('Informe um dia válido (1 a 31).');
 
@@ -100,8 +110,8 @@ export default function DividendScheduleModal({
         asset_id: assetId,
         kind,
         calc_mode: calcMode,
-        amount_per_share: calcMode === 'per_share' ? numericPerShare : undefined,
-        fixed_amount: calcMode === 'fixed' ? numericFixed : undefined,
+        amount_per_share: isPerShare ? numericPerShare : undefined,
+        fixed_amount: isPerShare ? undefined : numericFixed,
         frequency,
         day_of_month: day,
       };
@@ -129,116 +139,63 @@ export default function DividendScheduleModal({
     onSaved?.();
   }
 
+  const subtitle = isEditing
+    ? [assetLabel(asset), asset ? bankOf(asset)?.name : null].filter(Boolean).join(' · ')
+    : 'Se repete automaticamente';
+
   return (
     <ModalShell open={open} onClose={onClose}>
-      <div className="modal">
-        <div className="modal-head">
-          <h2>{isEditing ? 'Editar provento recorrente' : 'Novo provento recorrente'}</h2>
-          <div className="modal-head-actions">
-            {isEditing && (
-              <button type="button" className="modal-delete-trigger" title="Excluir" onClick={() => setDeleteModalOpen(true)}>
-                <IconTrash />
-              </button>
-            )}
-            <button className="modal-close" onClick={onClose}>
-              ✕
-            </button>
-          </div>
-        </div>
-        <form className="modal-body" onSubmit={handleSubmit}>
+      <DividendForm
+        title={isEditing ? 'Editar recorrente' : 'Novo recorrente'}
+        subtitle={subtitle}
+        onClose={onClose}
+        onDelete={isEditing ? () => setDeleteModalOpen(true) : undefined}
+        onSubmit={handleSubmit}
+        submitting={submitting}
+      >
+        {/* O ativo de um recorrente existente nao pode ser trocado. */}
+        {!isEditing && <AssetSearch assets={assets} value={assetId} onChange={setAssetId} bankOf={bankOf} />}
 
-          <BrokerAssetPicker
-            assets={assets}
-            investmentAccounts={investmentAccounts}
-            bankById={bankById}
-            assetId={assetId}
-            onAssetChange={setAssetId}
+        <div className="dv-grid">
+          <Select
+            className="full"
+            label="Tipo"
+            value={kind}
+            onChange={setKind}
+            options={kinds.map((k) => ({ value: k, label: KIND_LABELS[k] || k }))}
           />
-
-          <div className="field">
-            <label>Tipo de provento</label>
-            <select value={kind} onChange={(e) => setKind(e.target.value)}>
-              {KIND_OPTIONS.map((k) => (
-                <option key={k.value} value={k.value}>
-                  {k.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field">
-            <div className="seg">
-              <div
-                className={`seg-opt${calcMode === 'per_share' ? ' active' : ''}`}
-                onClick={() => setCalcMode('per_share')}
-              >
-                Valor por cota
-              </div>
-              <div className={`seg-opt${calcMode === 'fixed' ? ' active' : ''}`} onClick={() => setCalcMode('fixed')}>
-                Valor fixo
-              </div>
-            </div>
-          </div>
-
-          {calcMode === 'per_share' ? (
-            <div className="field-row">
-              <div className="field">
-                <label>Valor por cota</label>
-                <CurrencyInput value={amountPerShare} onChange={setAmountPerShare} />
-              </div>
-              <div className="field">
-                <label>Quantidade de cotas</label>
-                <input type="text" value={quantity} disabled />
-              </div>
-            </div>
-          ) : (
-            <div className="field">
-              <label>Valor fixo</label>
-              <CurrencyInput value={fixedAmount} onChange={setFixedAmount} />
-            </div>
-          )}
-
-          {estimatedValue > 0 && (
-            <div
-              className="fatura-note show"
-              style={{ background: 'var(--teal-soft)', color: 'var(--teal)', marginBottom: 14 }}
-            >
-              Valor estimado: {fmt(estimatedValue)}
-            </div>
-          )}
-
-          <div className="field">
-            <label>Periodicidade</label>
-            <select value={frequency} onChange={(e) => setFrequency(e.target.value)}>
-              {FREQUENCY_OPTIONS.map((f) => (
-                <option key={f.value} value={f.value}>
-                  {f.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field">
-            <label>Dia previsto do pagamento</label>
+          <Select label="Repete" value={frequency} onChange={setFrequency} options={FREQUENCY_OPTIONS} />
+          <label className="dv-field">
+            <span>Dia do pagamento</span>
             <input
               type="text"
               inputMode="numeric"
               pattern="[0-9]*"
+              className="dv-control num"
               value={dayOfMonth}
               onChange={(e) => setDayOfMonth(e.target.value.replace(/\D/g, '').slice(0, 2))}
             />
-          </div>
+          </label>
+        </div>
 
-          <div className="modal-actions">
-            <div className="btn btn-ghost" onClick={onClose}>
-              Cancelar
+        <ValueField
+          label="Valor do provento"
+          symbol={currencySymbol(currency)}
+          value={isPerShare ? amountPerShare : fixedAmount}
+          onChange={changeValue}
+          hint={estimate}
+          toggle={
+            <div className="dv-toggle pill" role="group" aria-label="Forma de cálculo">
+              <button type="button" className={isPerShare ? 'active' : ''} aria-pressed={isPerShare} onClick={() => changeMode('per_share')}>
+                Por cota
+              </button>
+              <button type="button" className={isPerShare ? '' : 'active'} aria-pressed={!isPerShare} onClick={() => changeMode('fixed')}>
+                Total
+              </button>
             </div>
-            <button className="btn btn-primary" type="submit" disabled={submitting}>
-              {submitting ? 'Salvando...' : isEditing ? 'Salvar alterações' : 'Salvar provento'}
-            </button>
-          </div>
-        </form>
-      </div>
+          }
+        />
+      </DividendForm>
 
       {isEditing && (
         <ConfirmDeleteModal

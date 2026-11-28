@@ -4,42 +4,95 @@ import { useFetch } from '../hooks/useFetch';
 import { useBanks } from '../hooks/resources/useBanks';
 import { useAccounts } from '../hooks/resources/useAccounts';
 import { investmentAccounts as filterInvestment } from '../utils/accounts';
-import { fmt, fmtDateShort, monthLabel, monthLabelFull } from '../utils/format';
+import { fmt, monthLabelFull } from '../utils/format';
+import { localIsoDate } from '../utils/date';
+import {
+  amountBrl,
+  blurAfterPointer,
+  comparePeriod,
+  formatPercent,
+  groupByPeriod,
+  lastTwelveMonthsStart,
+  payersByAsset,
+  periodShortLabel,
+  periodTitle,
+  previousMonthKey,
+  sumBrl,
+  variation,
+} from '../utils/dividends';
 import DividendScheduleModal from '../components/modals/DividendScheduleModal';
 import DividendModal from '../components/modals/DividendModal';
 import DividendPeriodDetailModal from '../components/modals/DividendPeriodDetailModal';
 import DividendsHistoryChart from '../components/charts/DividendsHistoryChart';
+import RecurringCard from '../components/dividends/RecurringCard';
+import TopPayersCard from '../components/dividends/TopPayersCard';
+import { ExpandIcon } from '../components/dividends/icons';
 import Skeleton from '../components/Skeleton';
-import LoadMoreButton from '../components/LoadMoreButton';
-import { localIsoDate } from '../utils/date';
-
-const PAGE_SIZE = 15;
-
-const KIND_LABELS = {
-  dividendo: 'Dividendo',
-  rendimento: 'Rendimento (FII)',
-  jcp: 'JCP',
-  cupom: 'Cupom',
-  bonificacao: 'Bonificação',
-  outro: 'Outro',
-};
-
-const FREQUENCY_LABELS = {
-  monthly: 'Mensal',
-  quarterly: 'Trimestral',
-  semiannual: 'Semestral',
-  yearly: 'Anual',
-};
-
-function todayIso() {
-  return localIsoDate();
-}
-
-function initials(text) {
-  return (text || '?').slice(0, 2).toUpperCase();
-}
 
 const EMPTY_LIST = [];
+
+function NewDividendMenu({ onSingle, onRecurring }) {
+  const [open, setOpen] = useState(false);
+
+  function pick(action) {
+    setOpen(false);
+    action();
+  }
+
+  return (
+    <div className="dv-new" onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}>
+      {open && <button type="button" className="dv-backdrop" tabIndex={-1} aria-label="Fechar menu" onClick={() => setOpen(false)} />}
+      <button type="button" className="period" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        + novo provento
+      </button>
+      {open && (
+        <div className="dv-menu">
+          <button type="button" onClick={() => pick(onSingle)}>
+            Dividendo avulso
+            <span>Um recebimento único</span>
+          </button>
+          <button type="button" onClick={() => pick(onRecurring)}>
+            Provento recorrente
+            <span>Se repete automaticamente</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, detail, detailClass = '', stripe, loading, onExpand }) {
+  return (
+    <div className="card stat-card" style={{ '--stripe': stripe }}>
+      <div className="label">{label}</div>
+      {loading ? <Skeleton width={110} height={24} /> : <div className="value num">{value}</div>}
+      {!loading && detail && <div className={`delta ${detailClass}`}>{detail}</div>}
+      {onExpand && (
+        <button
+          type="button"
+          className="dv-expand"
+          onClick={(e) => {
+            blurAfterPointer(e);
+            onExpand();
+          }}
+          aria-label="Ver o ano por banco"
+          title="Ver o ano por banco"
+        >
+          <ExpandIcon />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Linha de variacao dos cards de total (▲ 12,3% vs ...).
+function deltaProps(pct, label) {
+  if (pct === null) return { detail: 'sem base de comparação' };
+  return {
+    detail: `${pct < 0 ? '▼' : '▲'} ${formatPercent(Math.abs(pct))} ${label}`,
+    detailClass: pct < 0 ? 'down' : 'up',
+  };
+}
 
 export default function Dividends() {
   const { data: assetsData, reload: reloadAssets } = useFetch((signal) => investmentsApi.listAssetsLight(signal), []);
@@ -47,353 +100,269 @@ export default function Dividends() {
     () => dividendsApi.listSchedules(),
     []
   );
+  // Preco medio de cada ativo, usado no yield sobre custo (mesmo cache da Visao geral).
+  const { data: summaryData, initialLoading: summaryLoading, reload: reloadSummary } = useFetch(
+    (signal) => investmentsApi.summary(undefined, signal),
+    [],
+    { cacheKey: 'investments.summary' }
+  );
   const { data: quotesData } = useFetch(() => quotesApi.list(), []);
   const { banks, reload: reloadBanks } = useBanks();
   const { accounts, reload: reloadAccounts } = useAccounts();
-  const bankById = useCallback((id) => banks.find((b) => b.id === id), [banks]);
-  const investmentAccounts = useMemo(() => filterInvestment(accounts), [accounts]);
 
-  // Uma UNICA chamada busca todo o historico (sem paginacao no backend) -
-  // alimenta o grafico, os totais do mes/ano e a lista "Historico de
-  // recebimentos" (paginada so' no CLIENTE abaixo). Antes eram 2 chamadas
-  // paralelas quase identicas (uma paginada, uma com limit alto so' pro
-  // grafico) competindo pela mesma conexao de banco ao mesmo tempo que
-  // /dividends/schedules - foi isso que deixou a pagina lenta.
+  // Uma UNICA chamada busca todo o historico (sem paginacao no backend):
+  // alimenta o grafico, os totais, o ranking e o detalhamento.
   const { data: dividendsData, reload: reloadDividends, loading: dividendsLoading } = useFetch(
     () => dividendsApi.list({ limit: 100000 }),
     []
   );
+
   const allDividends = dividendsData?.dividends || EMPTY_LIST;
+  const assets = assetsData?.assets || EMPTY_LIST;
+  const schedules = schedulesData?.dividend_schedules || EMPTY_LIST;
+  const loadingDividends = dividendsLoading && !dividendsData;
 
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const dividendsAccumulated = useMemo(() => allDividends.slice(0, visibleCount), [allDividends, visibleCount]);
-
-  const [chartGranularity, setChartGranularity] = useState('month');
-  const [periodDetail, setPeriodDetail] = useState(null);
-
-  const chartPeriods = useMemo(() => {
-    const rows = allDividends;
+  const banksById = useMemo(() => new Map(banks.map((b) => [b.id, b])), [banks]);
+  const bankByAccountId = useMemo(() => {
     const map = new Map();
-    rows.forEach((d) => {
-      const [year, month] = d.date.split('-').map(Number);
-      // Mes com zero a esquerda: a ordenacao abaixo compara texto, e sem isso
-      // "2026-10" viria antes de "2026-9".
-      const key = chartGranularity === 'month' ? `${year}-${String(month).padStart(2, '0')}` : `${year}`;
-      const label = chartGranularity === 'month' ? monthLabel(month) : String(year);
-      const fullLabel = chartGranularity === 'month' ? `${monthLabelFull(month)} ${year}` : String(year);
-      const amount = d.amount_brl ?? d.amount;
-
-      let period = map.get(key);
-      if (!period) {
-        period = { key, label, fullLabel, total: 0, byAsset: new Map() };
-        map.set(key, period);
-      }
-      period.total += amount;
-
-      const assetKey = d.asset_id;
-      const assetEntry = period.byAsset.get(assetKey) || {
-        assetId: assetKey,
-        code: d.asset?.code,
-        name: d.asset?.name,
-        total: 0,
-      };
-      assetEntry.total += amount;
-      period.byAsset.set(assetKey, assetEntry);
-    });
-
-    return [...map.values()]
-      .map((p) => ({ ...p, byAsset: [...p.byAsset.values()] }))
-      .sort((a, b) => (a.key < b.key ? -1 : 1));
-  }, [allDividends, chartGranularity]);
-
-  const quotesByCurrency = useMemo(() => {
-    const map = {};
-    (quotesData?.quotes || []).forEach((q) => {
-      map[q.currency] = q.brl_rate;
-    });
+    filterInvestment(accounts).forEach((a) => map.set(a.investment_account?.id, banksById.get(a.bank_id)));
     return map;
-  }, [quotesData]);
+  }, [accounts, banksById]);
+  const bankOf = useCallback((asset) => bankByAccountId.get(asset?.investment_account_id), [bankByAccountId]);
 
+  // So' aparecem nos filtros os bancos que ja pagaram algum provento.
+  const payingBanks = useMemo(() => {
+    const map = new Map();
+    allDividends.forEach((d) => {
+      const bank = bankOf(d.asset);
+      if (bank) map.set(bank.id, bank);
+    });
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  }, [allDividends, bankOf]);
+
+  const [selectedBankId, setSelectedBankId] = useState('');
+  // Um banco que deixou de ter recebimentos (exclusao) volta para "todos".
+  const bankFilter = payingBanks.some((b) => b.id === selectedBankId) ? selectedBankId : '';
+  const dividends = useMemo(
+    () => (bankFilter ? allDividends.filter((d) => bankOf(d.asset)?.id === bankFilter) : allDividends),
+    [allDividends, bankFilter, bankOf]
+  );
+  const visibleSchedules = useMemo(
+    () => (bankFilter ? schedules.filter((s) => s.bank_id === bankFilter) : schedules),
+    [schedules, bankFilter]
+  );
+
+  const [granularity, setGranularity] = useState('month');
+  const [periodKey, setPeriodKey] = useState(null);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
   const [dividendModalOpen, setDividendModalOpen] = useState(false);
   const [editingDividend, setEditingDividend] = useState(null);
 
-  const assets = assetsData?.assets || EMPTY_LIST;
-  const schedules = schedulesData?.dividend_schedules || EMPTY_LIST;
-  const dividends = dividendsAccumulated;
+  const chartPeriods = useMemo(
+    () =>
+      groupByPeriod(dividends, granularity === 'year').map(({ key, items }) => {
+        const byBank = new Map();
+        items.forEach((d) => {
+          const bank = bankOf(d.asset);
+          const id = bank?.id || 'sem-banco';
+          const part = byBank.get(id) || { id, name: bank?.name || '', color: bank?.color_hex || 'var(--teal)', value: 0 };
+          part.value += amountBrl(d);
+          byBank.set(id, part);
+        });
+        return {
+          key,
+          label: periodShortLabel(key),
+          fullLabel: periodTitle(key),
+          total: sumBrl(items),
+          // De cima para baixo na barra, em ordem alfabetica inversa.
+          parts: [...byBank.values()].sort((a, b) => b.name.localeCompare(a.name, 'pt-BR')),
+        };
+      }),
+    [dividends, granularity, bankOf]
+  );
+
+  const today = localIsoDate();
+  const currentMonth = today.slice(0, 7);
+  const currentYear = today.slice(0, 4);
+  const monthNumber = Number(today.slice(5, 7));
+  const previousMonth = previousMonthKey(currentMonth);
+  const windowStart = lastTwelveMonthsStart(today);
+
+  const monthTotal = sumBrl(dividends.filter((d) => d.date.startsWith(currentMonth)));
+  const previousMonthTotal = sumBrl(dividends.filter((d) => d.date.startsWith(previousMonth)));
+  const yearTotal = sumBrl(dividends.filter((d) => d.date.startsWith(currentYear)));
+  const yearComparison = comparePeriod(dividends, currentYear, today);
+  const recent = dividends.filter((d) => d.date >= windowStart && d.date <= today);
+  const recentTotal = sumBrl(recent);
+
+  const quotesByCurrency = useMemo(
+    () => Object.fromEntries((quotesData?.quotes || []).map((q) => [q.currency, q.brl_rate])),
+    [quotesData]
+  );
+  const pending = visibleSchedules.filter(
+    (s) => s.active && s.next_due_date.startsWith(currentMonth) && s.next_due_date >= today
+  );
+  const pendingTotal = pending.reduce((total, s) => {
+    const currency = s.asset?.currency || assets.find((a) => a.id === s.asset_id)?.currency;
+    const rate = currency && currency !== 'BRL' ? quotesByCurrency[currency] : null;
+    return total + (s.expected_amount || 0) * (rate || 1);
+  }, 0);
+
+  const positionByAssetId = useMemo(
+    () => new Map((summaryData?.assets || []).map((a) => [a.id, a.position])),
+    [summaryData]
+  );
+  const payers = payersByAsset(recent, positionByAssetId, { history: allDividends, schedules, windowStart });
 
   function reload() {
     reloadAssets();
     reloadSchedules();
+    reloadSummary();
     reloadBanks();
     reloadAccounts();
     reloadDividends();
-    setVisibleCount(PAGE_SIZE);
   }
 
-  function bankNameFor(assetOrSnapshot) {
-    const account = investmentAccounts.find(
-      (a) => a.investment_account?.id === assetOrSnapshot.investment_account_id
-    );
-    const bank = account ? bankById(account.bank_id) : null;
-    return bank?.name || '';
+  function openDividend(dividend) {
+    setEditingDividend(dividend);
+    setDividendModalOpen(true);
   }
 
-  const today = todayIso();
-  const currentMonth = today.slice(0, 7);
+  function openSchedule(schedule) {
+    setEditingSchedule(schedule);
+    setScheduleModalOpen(true);
+  }
 
-  const recebidoMes = dividendsData?.recebido_mes || 0;
-  const recebidoAno = dividendsData?.recebido_ano || 0;
-
-  const aCairMes = useMemo(() => {
-    const todayDay = new Date().getDate();
-    return schedules
-      .filter((s) => s.active && s.next_due_date.slice(0, 7) === currentMonth && Number(s.next_due_date.slice(8, 10)) >= todayDay)
-      .reduce((s, sch) => {
-        const asset = assets.find((a) => a.id === sch.asset_id);
-        const quantity = asset?.position?.quantity || 0;
-        const value = sch.calc_mode === 'fixed' ? sch.fixed_amount || 0 : (sch.amount_per_share || 0) * quantity;
-        const rate = asset?.currency && asset.currency !== 'BRL' ? quotesByCurrency[asset.currency] : null;
-        return s + (rate ? value * rate : value);
-      }, 0);
-  }, [schedules, assets, currentMonth, quotesByCurrency]);
-
-  function scheduleValue(schedule) {
-    const asset = assets.find((a) => a.id === schedule.asset_id);
-    const quantity = asset?.position?.quantity || 0;
-    return schedule.calc_mode === 'fixed' ? schedule.fixed_amount || 0 : (schedule.amount_per_share || 0) * quantity;
+  function closeAndReload(close) {
+    close(false);
+    reload();
   }
 
   return (
     <div className="screen active">
       <div className="topbar">
         <h1>Dividendos &amp; Proventos</h1>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div
-            className="period"
-            onClick={() => {
-              setEditingDividend(null);
-              setDividendModalOpen(true);
-            }}
-          >
-            + dividendo avulso
-          </div>
-          <div
-            className="period"
-            style={{ background: 'var(--teal)', color: '#fff', borderColor: 'var(--teal)' }}
-            onClick={() => {
-              setEditingSchedule(null);
-              setScheduleModalOpen(true);
-            }}
-          >
-            + novo provento recorrente
-          </div>
-        </div>
+        <NewDividendMenu onSingle={() => openDividend(null)} onRecurring={() => openSchedule(null)} />
       </div>
 
-      <div className="grid grid-3" style={{ marginBottom: 20 }}>
-        <div className="card stat-card" style={{ '--stripe': '#0F5C5C' }}>
-          <div className="label">Recebido este mês</div>
-          {dividendsLoading ? (
-            <Skeleton width={110} height={24} />
-          ) : (
-            <div className="value num">{fmt(recebidoMes)}</div>
-          )}
-        </div>
-        <div className="card stat-card" style={{ '--stripe': '#C0912F' }}>
-          <div className="label">Recebido este ano</div>
-          {dividendsLoading ? (
-            <Skeleton width={110} height={24} />
-          ) : (
-            <div className="value num">{fmt(recebidoAno)}</div>
-          )}
-        </div>
-        <div className="card stat-card" style={{ '--stripe': '#A6432C' }}>
-          <div className="label">A cair ainda este mês</div>
-          {schedulesLoading ? <Skeleton width={110} height={24} /> : <div className="value num">{fmt(aCairMes)}</div>}
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>Histórico de dividendos</span>
-          <div className="seg" style={{ maxWidth: 148, padding: 2 }}>
-            <div
-              className={`seg-opt${chartGranularity === 'month' ? ' active' : ''}`}
-              onClick={() => setChartGranularity('month')}
-              style={{ padding: '4px 8px', fontSize: 11.5, fontWeight: 500 }}
+      {payingBanks.length > 1 && (
+        <div className="dv-tabs" role="group" aria-label="Filtrar por banco">
+          {[{ id: '', name: 'Todos os bancos', color_hex: 'var(--ink-faint)' }, ...payingBanks].map((b) => (
+            <button
+              type="button"
+              key={b.id}
+              className={bankFilter === b.id ? 'active' : ''}
+              aria-pressed={bankFilter === b.id}
+              onClick={() => setSelectedBankId(b.id)}
             >
-              Mensal
-            </div>
-            <div
-              className={`seg-opt${chartGranularity === 'year' ? ' active' : ''}`}
-              onClick={() => setChartGranularity('year')}
-              style={{ padding: '4px 8px', fontSize: 11.5, fontWeight: 500 }}
-            >
-              Anual
-            </div>
-          </div>
-        </h3>
-        {dividendsLoading ? (
-          <Skeleton width="100%" height={180} radius={8} />
-        ) : chartPeriods.length === 0 ? (
-          <div className="empty-state">Nenhum recebimento registrado ainda.</div>
-        ) : (
-          <DividendsHistoryChart periods={chartPeriods} onBarClick={setPeriodDetail} />
-        )}
-      </div>
-
-      <div className="card" style={{ marginBottom: 20 }}>
-        <h3>Proventos recorrentes cadastrados</h3>
-        {schedulesLoading &&
-          [0, 1, 2].map((i) => (
-            <div className="div-row" key={i}>
-              <div className="div-left">
-                <Skeleton width={34} height={34} radius={9} />
-                <div>
-                  <Skeleton width={90} height={13} style={{ marginBottom: 5 }} />
-                  <Skeleton width={160} height={11} />
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <Skeleton width={70} height={14} style={{ marginBottom: 5 }} />
-                <Skeleton width={80} height={11} />
-              </div>
-            </div>
+              <span className="dv-swatch" style={{ background: b.color_hex }} />
+              {b.name}
+            </button>
           ))}
-        {!schedulesLoading && schedules.length === 0 && (
-          <div className="empty-state">Nenhum provento recorrente cadastrado ainda.</div>
-        )}
-        {!schedulesLoading && schedules.map((s) => {
-          const asset = assets.find((a) => a.id === s.asset_id) || s.asset;
-          return (
-            <div
-              className="div-row"
-              key={s.id}
-              style={{ cursor: 'pointer', opacity: s.active ? 1 : 0.5 }}
-              onClick={() => {
-                setEditingSchedule(s);
-                setScheduleModalOpen(true);
-              }}
-            >
-              <div className="div-left">
-                <div className="div-icon">{initials(asset?.code || asset?.name)}</div>
-                <div>
-                  <div className="div-desc">{asset?.code || asset?.name}</div>
-                  <div className="div-meta">
-                    {KIND_LABELS[s.kind]} · {FREQUENCY_LABELS[s.frequency]} · {bankNameFor(asset || {})}
-                    {!s.active ? ' · pausado' : ''}
-                  </div>
-                </div>
-              </div>
-              <div className="div-right">
-                <div>
-                  <div className="div-val">{fmt(scheduleValue(s), asset?.currency)}</div>
-                  <div className="div-next">todo dia {s.day_of_month}</div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+        </div>
+      )}
 
-      <div className="card">
-        <h3>Histórico de recebimentos</h3>
-        {dividendsLoading &&
-          dividends.length === 0 &&
-          [0, 1, 2, 3].map((i) => (
-            <div className="div-row" key={i}>
-              <div className="div-left">
-                <Skeleton width={34} height={34} radius={9} />
-                <div>
-                  <Skeleton width={90} height={13} style={{ marginBottom: 5 }} />
-                  <Skeleton width={150} height={11} />
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <Skeleton width={70} height={14} style={{ marginBottom: 5 }} />
-                <Skeleton width={60} height={11} />
-              </div>
-            </div>
-          ))}
-        {!dividendsLoading && dividends.length === 0 && (
-          <div className="empty-state">Nenhum recebimento registrado ainda.</div>
-        )}
-        {dividends.map((d) => {
-          const asset = assets.find((a) => a.id === d.asset_id) || d.asset;
-          return (
-            <div
-              className="div-row"
-              key={d.id}
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                setEditingDividend(d);
-                setDividendModalOpen(true);
-              }}
-            >
-              <div className="div-left">
-                <div className="div-icon" style={{ background: 'var(--teal-soft)', color: 'var(--teal)' }}>
-                  {initials(asset?.code || asset?.name)}
-                </div>
-                <div>
-                  <div className="div-desc">{asset?.code || asset?.name}</div>
-                  <div className="div-meta">
-                    recebido em {fmtDateShort(d.date)} · {KIND_LABELS[d.kind]}
-                  </div>
-                </div>
-              </div>
-              <div className="div-right">
-                <div className="div-val">{fmt(d.amount, d.currency)}</div>
-                {d.currency && d.currency !== 'BRL' && (
-                  <div className="div-next">{fmt(d.amount_brl)}</div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-        <LoadMoreButton
-          shown={dividends.length}
-          total={allDividends.length}
-          loading={false}
-          onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+      <div className="grid grid-4" style={{ marginBottom: 20 }}>
+        <StatCard
+          label={`Recebido em ${monthLabelFull(monthNumber).toLowerCase()}`}
+          value={fmt(monthTotal)}
+          stripe="#0F5C5C"
+          loading={loadingDividends}
+          {...deltaProps(
+            variation(monthTotal, previousMonthTotal),
+            `vs ${monthLabelFull(Number(previousMonth.slice(5))).toLowerCase()}`
+          )}
+        />
+        <StatCard
+          label={`Recebido em ${currentYear}`}
+          value={fmt(yearTotal)}
+          stripe="#C0912F"
+          loading={loadingDividends}
+          onExpand={yearTotal > 0 ? () => setPeriodKey(currentYear) : undefined}
+          {...deltaProps(yearComparison?.pct ?? null, yearComparison?.label)}
+        />
+        <StatCard
+          label="Média mensal (12 meses)"
+          value={fmt(recentTotal / 12)}
+          detail={`${fmt(recentTotal)} no período`}
+          stripe="#3D7A8C"
+          loading={loadingDividends}
+        />
+        <StatCard
+          label="A cair ainda este mês"
+          value={fmt(pendingTotal)}
+          detail={`${pending.length} ${pending.length === 1 ? 'pagamento previsto' : 'pagamentos previstos'}`}
+          stripe="#A6432C"
+          loading={schedulesLoading && !schedulesData}
         />
       </div>
+
+      <section className="card dv-card" style={{ marginBottom: 20 }}>
+        <div className="dv-head">
+          <h2 className="dv-title">Histórico de dividendos</h2>
+          <div className="dv-toggle">
+            <button type="button" className={granularity === 'month' ? 'active' : ''} onClick={() => setGranularity('month')}>
+              Mensal
+            </button>
+            <button type="button" className={granularity === 'year' ? 'active' : ''} onClick={() => setGranularity('year')}>
+              Anual
+            </button>
+          </div>
+        </div>
+        <div className="dv-chart">
+          {loadingDividends ? (
+            <Skeleton width="100%" height={260} radius={8} />
+          ) : chartPeriods.length === 0 ? (
+            <div className="empty-state">Nenhum recebimento registrado ainda.</div>
+          ) : (
+            <DividendsHistoryChart key={granularity} periods={chartPeriods} onBarClick={setPeriodKey} />
+          )}
+        </div>
+      </section>
+
+      <div className="dv-columns">
+        <RecurringCard
+          schedules={visibleSchedules}
+          loading={schedulesLoading && !schedulesData}
+          banksById={banksById}
+          onSelect={openSchedule}
+        />
+        <TopPayersCard payers={payers} loading={loadingDividends} yieldLoading={summaryLoading} bankOf={bankOf} />
+      </div>
+
+      {periodKey && (
+        <DividendPeriodDetailModal
+          // Escondido (sem desmontar) enquanto um recebimento e' editado, para
+          // voltar no mesmo ponto e o ESC nao fechar os dois juntos.
+          open={!dividendModalOpen}
+          periodKey={periodKey}
+          onPeriodChange={setPeriodKey}
+          onClose={() => setPeriodKey(null)}
+          dividends={allDividends}
+          pageBankId={bankFilter}
+          bankOf={bankOf}
+          onEdit={openDividend}
+        />
+      )}
 
       <DividendScheduleModal
         open={scheduleModalOpen}
         schedule={editingSchedule}
         assets={assets}
-        investmentAccounts={investmentAccounts}
-        bankById={bankById}
+        bankOf={bankOf}
         onClose={() => setScheduleModalOpen(false)}
-        onSaved={() => {
-          setScheduleModalOpen(false);
-          reload();
-        }}
+        onSaved={() => closeAndReload(setScheduleModalOpen)}
       />
 
       <DividendModal
         open={dividendModalOpen}
         dividend={editingDividend}
         assets={assets}
-        investmentAccounts={investmentAccounts}
-        bankById={bankById}
+        bankOf={bankOf}
         onClose={() => setDividendModalOpen(false)}
-        onSaved={() => {
-          setDividendModalOpen(false);
-          reload();
-        }}
-        onDeleted={() => {
-          setDividendModalOpen(false);
-          reload();
-        }}
-      />
-
-      <DividendPeriodDetailModal
-        open={!!periodDetail}
-        period={periodDetail}
-        onClose={() => setPeriodDetail(null)}
+        onSaved={() => closeAndReload(setDividendModalOpen)}
+        onDeleted={() => closeAndReload(setDividendModalOpen)}
       />
     </div>
   );

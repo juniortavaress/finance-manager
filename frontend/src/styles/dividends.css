@@ -1,0 +1,854 @@
+/* ---------- DIVIDENDOS: pagina ---------- */
+.dv-new {
+  position: relative;
+}
+.dv-new button.period {
+  font-family: 'IBM Plex Mono', monospace;
+}
+.dv-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  border: none;
+  background: transparent;
+  cursor: default;
+}
+.dv-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 12;
+  min-width: 230px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(28, 43, 41, 0.14);
+}
+.dv-menu button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.dv-menu button span {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+.dv-menu button:hover {
+  background: var(--bg);
+}
+
+.dv-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: -8px 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.dv-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 2px;
+  margin-bottom: -1px;
+  border: none;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dv-tabs button.active {
+  border-bottom-color: var(--teal);
+  color: var(--ink);
+}
+.dv-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.dv-expand {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 14px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-faint);
+  opacity: 0.65;
+  cursor: pointer;
+}
+.dv-expand:hover,
+.dv-expand:focus-visible {
+  opacity: 1;
+}
+
+/* cards com cabecalho (titulo + linha) */
+.card.dv-card {
+  padding: 0;
+}
+.dv-head {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 12px 8px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.dv-title {
+  font-size: 13.5px;
+  line-height: 1;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-soft);
+}
+.dv-title-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+/* Ajuste optico: maiusculas centralizadas pela caixa parecem altas no cabecalho. */
+.dv-head .dv-title,
+.dv-head .dv-tip {
+  position: relative;
+  top: 2px;
+}
+
+.dv-toggle {
+  display: flex;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 2px;
+}
+.dv-toggle button {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dv-toggle button.active {
+  background: var(--surface);
+  color: var(--ink);
+}
+.dv-toggle.pill {
+  border-radius: 999px;
+  padding: 3px;
+}
+.dv-toggle.pill button {
+  border-radius: 999px;
+  height: 28px;
+  padding: 0 14px;
+}
+
+.dv-chart {
+  padding: 20px 22px;
+}
+.dv-bars,
+.dv-bar-labels {
+  display: flex;
+  gap: 6px;
+}
+.dv-bars {
+  height: 250px;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--line);
+}
+.dv-bar {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  cursor: pointer;
+}
+/* So' onde ha mouse: no toque o :hover fica "grudado" na barra tocada. */
+@media (hover: hover) {
+  .dv-bar:hover {
+    background: var(--bg);
+  }
+}
+.dv-bar-total {
+  padding-bottom: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.dv-bar-part {
+  width: 100%;
+  max-width: 34px;
+  flex-shrink: 0;
+}
+.dv-bar-part.top {
+  border-radius: 4px 4px 0 0;
+}
+.dv-bar-labels {
+  margin-top: 6px;
+}
+.dv-bar-labels span {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+}
+
+.dv-columns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 20px;
+}
+.card.dv-column {
+  flex: 1 1 340px;
+  height: 580px;
+  display: flex;
+  flex-direction: column;
+}
+.dv-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.dv-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.dv-recurring {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 13px 6px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.dv-recurring:last-child {
+  border-bottom: none;
+}
+.dv-recurring:hover {
+  background: var(--bg);
+}
+.dv-recurring.paused {
+  opacity: 0.5;
+}
+.dv-date {
+  width: 34px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.dv-date strong {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 21px;
+  line-height: 1;
+}
+.dv-date span {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.dv-stripe {
+  width: 3px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 3px;
+}
+.dv-grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.dv-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dv-meta {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.dv-payer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 0;
+}
+.dv-payer-line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.dv-payer-line .dv-name {
+  flex: 1;
+  min-width: 0;
+}
+.dv-payer-line .dv-name small {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+.dv-track {
+  height: 4px;
+  border-radius: 4px;
+  background: var(--bg);
+}
+.dv-track > div {
+  height: 4px;
+  border-radius: 4px;
+}
+
+/* ajuda (?) */
+.dv-tip {
+  position: relative;
+  display: flex;
+}
+.dv-tip > button {
+  width: 25px;
+  height: 25px;
+  margin: -6px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: help;
+}
+.dv-tip > button span {
+  width: 13px;
+  height: 13px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--ink-faint);
+  font-size: 8.5px;
+  font-weight: 600;
+  line-height: 1;
+}
+.dv-tip-bubble {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  z-index: 3;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: 220px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: var(--dark);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+}
+.dv-tip-bubble::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  transform: translateX(-50%) rotate(45deg);
+  background: var(--dark);
+}
+
+/* ---------- DIVIDENDOS: modais ---------- */
+/* O botao flutuante fica por cima do overlay e tamparia o modal em telas pequenas. */
+.app-shell:has(.dv-modal) .quick-add {
+  display: none;
+}
+.modal-overlay:has(.dv-modal) {
+  padding: 20px;
+  scrollbar-width: none;
+}
+.modal-overlay:has(.dv-modal)::-webkit-scrollbar {
+  display: none;
+}
+
+.dv-icon-btn {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+.dv-icon-btn svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.25s ease;
+}
+.dv-icon-btn:hover:not(:disabled),
+.dv-icon-btn:focus-visible {
+  background: var(--bg);
+  color: var(--ink);
+}
+.dv-icon-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.dv-icon-btn.close:hover svg {
+  transform: rotate(90deg);
+}
+.dv-icon-btn.danger:hover,
+.dv-icon-btn.danger:focus-visible {
+  background: var(--brick-soft);
+  color: var(--brick);
+}
+
+/* detalhamento do periodo */
+.modal.dv-detail {
+  max-width: 560px;
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
+  display: flex;
+  flex-direction: column;
+}
+.dv-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.dv-detail-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dv-detail-nav .dv-icon-btn {
+  font-size: 24px;
+  line-height: 1;
+}
+.dv-detail-nav h2 {
+  min-width: 170px;
+  text-align: center;
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 19px;
+}
+.dv-detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 24px 24px 28px;
+}
+.dv-detail-body::-webkit-scrollbar {
+  display: none;
+}
+.dv-detail-body > * {
+  flex-shrink: 0;
+}
+.dv-total {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dv-total strong {
+  font-size: 30px;
+  font-weight: 600;
+}
+.dv-compare {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+.dv-badge {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--teal-soft);
+  color: var(--teal);
+  font-weight: 600;
+}
+.dv-badge.down {
+  background: var(--brick-soft);
+  color: var(--brick);
+}
+.dv-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dv-section.assets {
+  gap: 14px;
+}
+.dv-section.banks + .dv-section.assets {
+  margin-top: 20px;
+}
+.dv-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.dv-section-head h3 {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-soft);
+}
+.dv-link {
+  min-height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--teal);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dv-bank {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.dv-bank.active {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+.dv-bank-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+}
+.dv-bank-line .dv-bank-name {
+  flex: 1;
+  font-weight: 500;
+}
+.dv-asset-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 2px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.dv-asset-row:hover {
+  background: var(--bg);
+}
+.dv-asset-row.receipt {
+  padding-left: 20px;
+}
+.dv-asset-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 13.5px;
+}
+.dv-asset-value small {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+/* formularios */
+.modal.dv-form {
+  overflow: visible;
+  border-radius: 16px;
+}
+.dv-form-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 24px 28px 4px;
+}
+.dv-form-head h2 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 20px;
+}
+.dv-form-head p {
+  margin-top: 5px;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+}
+.dv-form-actions-top {
+  display: flex;
+  gap: 4px;
+  margin: -4px -8px 0 0;
+}
+.dv-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 28px 28px;
+}
+.dv-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 12px;
+}
+.dv-grid .full {
+  grid-column: 1 / -1;
+}
+.dv-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+.dv-control {
+  height: 46px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13.5px;
+}
+.dv-control:focus,
+.dv-control:focus-within,
+.dv-control.open {
+  outline: none;
+  border-color: var(--teal);
+}
+.dv-control input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+}
+.dv-control input.num {
+  font-family: 'IBM Plex Mono', monospace;
+}
+button.dv-control {
+  position: relative;
+  z-index: 11;
+  justify-content: space-between;
+  padding-right: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+button.dv-control svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--ink-soft);
+  transition: transform 0.2s ease;
+}
+button.dv-control.open svg {
+  transform: rotate(180deg);
+}
+div.dv-control.search {
+  position: relative;
+  z-index: 11;
+}
+.dv-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+.dv-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  max-height: 240px;
+  margin-top: 6px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 18px 44px rgba(28, 43, 41, 0.2);
+}
+.dv-options::-webkit-scrollbar {
+  display: none;
+}
+.dv-option {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.dv-option:hover,
+.dv-option:focus-visible {
+  background: var(--bg);
+}
+.dv-option.selected {
+  background: var(--teal-soft);
+  font-weight: 600;
+}
+.dv-option > span:nth-last-child(1) {
+  margin-left: auto;
+}
+.dv-option .check {
+  color: var(--teal);
+}
+.dv-option-empty {
+  padding: 10px;
+  font-weight: 400;
+}
+
+.dv-value {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dv-value.with-toggle {
+  margin-top: 14px;
+}
+/* O seletor fica fora do fluxo para a altura dele nao afastar o rotulo do campo. */
+.dv-value-label {
+  position: relative;
+  display: flex;
+}
+.dv-value-label .dv-toggle {
+  position: absolute;
+  right: 0;
+  bottom: -2px;
+}
+
+.dv-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 6px;
+}
+.dv-form-footer button {
+  min-height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dv-form-footer button[type='submit'] {
+  padding: 0 28px;
+  background: var(--teal);
+  color: #fff;
+}
+.dv-form-footer button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .dv-form-head {
+    padding: 20px 20px 4px;
+  }
+  .dv-form-body {
+    padding: 18px 20px 22px;
+  }
+  .dv-detail-nav h2 {
+    min-width: 0;
+    font-size: 17px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dv-icon-btn svg,
+  button.dv-control svg {
+    transition: none;
+  }
+}

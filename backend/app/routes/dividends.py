@@ -355,13 +355,23 @@ def update_schedule(schedule_id):
         if data["frequency"] not in DIVIDEND_FREQUENCIES:
             raise ApiError("Periodicidade inválida", 400)
         schedule.frequency = data["frequency"]
+    day_changed = False
     if "day_of_month" in data:
         day_of_month = data["day_of_month"]
         if not day_of_month or not (1 <= int(day_of_month) <= 31):
             raise ApiError("Dia previsto de pagamento inválido", 400)
+        day_changed = int(day_of_month) != schedule.day_of_month
         schedule.day_of_month = int(day_of_month)
     if "active" in data:
         schedule.active = bool(data["active"])
+
+    if day_changed:
+        # A proxima data acompanha o novo dia, no mesmo mes em que ja estava
+        # prevista (as seguintes partem dela). Se essa data ja passou, o
+        # recebimento do mes e' gerado agora, como na criacao.
+        schedule.next_due_date = _due_date_for(schedule.day_of_month, schedule.next_due_date)
+        db.session.flush()
+        _materialize_schedule(schedule, g.current_user.id)
 
     db.session.commit()
 
