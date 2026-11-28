@@ -29,7 +29,8 @@ export default function QuickAddTransaction() {
   const expenseCategories = useMemo(() => filterExpense(categories), [categories]);
   const incomeCategories = useMemo(() => filterIncome(categories), [categories]);
 
-  const hideButton = pathname === '/transacoes';
+  // Transacoes e Dividendos ja tem o proprio botao de adicionar no topo.
+  const hideButton = pathname === '/transacoes' || pathname === '/investimentos/dividendos';
 
   const defaultAccountRef = useMemo(() => {
     const bankId = pathname.match(/^\/contas\/([^/]+)/)?.[1];

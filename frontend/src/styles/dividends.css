@@ -404,10 +404,6 @@
 }
 
 /* ---------- DIVIDENDOS: modais ---------- */
-/* O botao flutuante fica por cima do overlay e tamparia o modal em telas pequenas. */
-.app-shell:has(.dv-modal) .quick-add {
-  display: none;
-}
 .modal-overlay:has(.dv-modal) {
   padding: 20px;
   scrollbar-width: none;
