@@ -76,7 +76,9 @@ export default function Dividends() {
     const map = new Map();
     rows.forEach((d) => {
       const [year, month] = d.date.split('-').map(Number);
-      const key = chartGranularity === 'month' ? `${year}-${month}` : `${year}`;
+      // Mes com zero a esquerda: a ordenacao abaixo compara texto, e sem isso
+      // "2026-10" viria antes de "2026-9".
+      const key = chartGranularity === 'month' ? `${year}-${String(month).padStart(2, '0')}` : `${year}`;
       const label = chartGranularity === 'month' ? monthLabel(month) : String(year);
       const fullLabel = chartGranularity === 'month' ? `${monthLabelFull(month)} ${year}` : String(year);
       const amount = d.amount_brl ?? d.amount;
