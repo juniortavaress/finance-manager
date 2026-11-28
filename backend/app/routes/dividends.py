@@ -5,7 +5,7 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from flask import Blueprint, current_app, g, request
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import contains_eager
+from sqlalchemy.orm import contains_eager, selectinload
 
 from app.auth_decorator import login_required
 from app.errors import ApiError
@@ -14,7 +14,12 @@ from app.models import Account, Asset, Bank, Category, Dividend, DividendSchedul
 from app.models.investment import DIVIDEND_CALC_MODES, DIVIDEND_FREQUENCIES, DIVIDEND_KINDS
 from app.services.finance_service import add_months, recalc_account_balance, safe_day
 from app.services.quotes_service import convert_to_brl, get_brl_rates
-from app.routes.investments import _asset_position, _quantity_as_of, _resolve_market_events_for_account
+from app.routes.investments import (
+    _asset_position,
+    _quantity_as_of,
+    _resolve_market_events_for_account,
+    _resolve_market_events_for_assets,
+)
 
 dividends_bp = Blueprint("dividends", __name__)
 
@@ -467,6 +472,34 @@ def dividends_summary():
     return result
 
 
+def _missing_quantities(dividends, user_id):
+    """Proventos importados nao tem quantity_snapshot, e sem a quantidade nao
+    da' para saber o valor por cota (usado no yield). Calcula a posicao na data
+    de cada um, ja ajustada por splits/fusoes. So' leitura: nada e' gravado."""
+    missing = [d for d in dividends if d.quantity_snapshot is None]
+    if not missing:
+        return {}
+
+    # Todos os ativos do usuario, nao so' os com proventos faltando: numa fusao
+    # o historico vem do ativo de origem.
+    assets = (
+        Asset.query.join(InvestmentAccount, InvestmentAccount.id == Asset.investment_account_id)
+        .join(Account, Account.id == InvestmentAccount.account_id)
+        .filter(Account.user_id == user_id)
+        .options(selectinload(Asset.asset_transactions))
+        .all()
+    )
+    splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id = _resolve_market_events_for_assets(
+        assets
+    )
+    return {
+        d.id: _quantity_as_of(
+            d.asset, d.date, splits_by_asset_id, merges_by_target_asset_id, merge_cutoff_by_asset_id
+        )
+        for d in missing
+    }
+
+
 @dividends_bp.get("/")
 @login_required
 def list_dividends():
@@ -521,9 +554,13 @@ def list_dividends():
         total = base_query.order_by(None).count()
         items = query.offset((page - 1) * page_size).limit(page_size).all()
 
+    quantities = _missing_quantities(items, g.current_user.id)
+
     result = []
     for d in items:
         data = d.to_dict()
+        if d.id in quantities:
+            data["quantity_snapshot"] = float(quantities[d.id])
         data["asset"] = d.asset.to_dict()
         currency = d.asset.investment_account.account.currency
         data["currency"] = currency
